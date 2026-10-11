@@ -1,0 +1,30 @@
+# Line endings are normalised to LF in the repository and on checkout, on every
+# platform. This is not a style preference: development happens on Windows and
+# the application runs in a Linux container, and a shell script checked out with
+# CRLF fails inside that container with `bash: $'\r': command not found` — a
+# confusing failure a long way from its cause. The same applies to the Dockerfile
+# and to anything the container reads.
+* text=auto eol=lf
+
+# Scripts and configuration the Linux container executes or parses.
+*.sh      text eol=lf
+*.py      text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.toml    text eol=lf
+*.ini     text eol=lf
+*.mako    text eol=lf
+*.md      text eol=lf
+Dockerfile text eol=lf
+.env.example text eol=lf
+
+# Generated; keep it out of diffs and reviews, but do commit it.
+uv.lock linguist-generated=true -diff
+
+# Binary, so Git never tries to merge or normalise them.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.ico  binary
+*.pdf  binary
