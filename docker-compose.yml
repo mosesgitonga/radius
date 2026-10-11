@@ -1,0 +1,89 @@
+# Local development stack.
+#
+#   cp .env.example .env
+#   docker compose up --build
+#
+# This file is for development, not production: the API runs with auto-reload
+# over a bind mount, and PostgreSQL and Redis publish ports to the host so that
+# `uv run pytest` and `psql` work from outside the containers. Production
+# deployment notes land in Phase 8.
+
+name: myradius
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    env_file: .env
+    environment:
+      # Collation and encoding are fixed here rather than inherited from the
+      # host locale, so indexes and text ordering behave identically everywhere.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Runs once, on an empty data directory: creates the database the test
+      # suite uses, so a fresh clone can run tests without manual setup.
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  redis:
+    image: redis:7-alpine
+    # Append-only persistence: OTP codes and rate-limit counters surviving a
+    # restart is worth the small write cost, and it matches production.
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      target: dev
+    command: ["bash", "docker/entrypoint.sh", "api-dev"]
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      # Source is mounted so edits reload without a rebuild. The anonymous volume
+      # keeps the host's .venv (built for Windows here) from shadowing anything.
+      - .:/srv/app
+      - /srv/app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      target: dev
+    command: ["bash", "docker/entrypoint.sh", "worker"]
+    env_file: .env
+    volumes:
+      - .:/srv/app
+      - /srv/app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Waits for the API container to have applied migrations before starting.
+      api:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  redis-data:

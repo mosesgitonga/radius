@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # One run per branch: a new push makes the previous run's result irrelevant.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned so a new Python release cannot change CI's answer without a commit.
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  lint:
+    name: Lint and type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: ruff check
+        run: uv run ruff check --output-format=github .
+
+      - name: ruff format
+        run: uv run ruff format --check --diff .
+
+      - name: mypy
+        run: uv run mypy app tests
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # Must be the PostGIS image, not plain postgres: the suite runs real
+        # geography queries rather than mocking them.
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: myradius
+          POSTGRES_PASSWORD: myradius
+          POSTGRES_DB: myradius_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U myradius -d myradius_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://myradius:myradius@localhost:5432/myradius_test
+      TEST_REDIS_URL: redis://localhost:6379/15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run tests
+        run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  migrations:
+    name: Migrations apply and reverse cleanly
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: myradius
+          POSTGRES_PASSWORD: myradius
+          POSTGRES_DB: myradius_migrations
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U myradius -d myradius_migrations"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://myradius:myradius@localhost:5432/myradius_migrations
+      SECRET_KEY: ci-secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # A separate database from the test job, which starts at head: this one has
+      # to begin genuinely empty to prove the first migration stands on its own.
+      - name: Upgrade to head on an empty database
+        run: uv run alembic upgrade head
+
+      - name: Downgrade to base
+        run: uv run alembic downgrade base
+
+      # Catches the classic broken downgrade: one that appears to succeed but
+      # leaves an object behind, so the next upgrade fails on "already exists".
+      - name: Upgrade again, to prove the downgrade left nothing behind
+        run: uv run alembic upgrade head
+
+      - name: Check for model changes with no migration
+        run: |
+          uv run alembic check
+
+  docker:
+    name: Production image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Built but not pushed: this only needs to prove the Dockerfile is valid
+      # and the dependency install works on Linux, where gunicorn is installed.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
