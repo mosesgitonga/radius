@@ -7,7 +7,7 @@ product context. This file tracks what each phase planned, built, and deferred.
 
 ## Phase 0 — Foundation
 
-**Status:** in progress
+**Status:** complete, pending verification of the Docker-dependent checks
 
 ### Plan
 
@@ -97,8 +97,120 @@ apply them to.
 
 ### Built
 
-_Filled in at the end of the phase._
+**Project and tooling.** `uv` project on Python 3.12 (`.python-version`), ruff for lint
+and format, mypy in `strict` mode over `app` and `tests` — both clean. 13 module packages
+scaffolded under `app/modules`, each docstring naming the phase that fills it.
+
+**Configuration.** `app/core/config.py`: env-driven `Settings` with a cached singleton and
+a complete `.env.example`. Refuses to boot in staging or production with the development
+signing key or `DEBUG=true`. Rejects a synchronous database URL at boot rather than at
+first query.
+
+**Database.** Async engine with `pool_pre_ping` and a server-side statement timeout; a
+session dependency that is a unit of work (commit on return, rollback on raise). `Base`
+plus the three mixins every later model reuses: UUID primary key, `timestamptz`
+created/updated, and `deleted_at` soft delete. Constraint naming convention set, without
+which Alembic cannot match up or drop constraints later.
+
+**Migrations.** Alembic configured for async engines with GeoAlchemy2's helpers installed,
+so spatial columns and their PostGIS-managed indexes autogenerate correctly. Sequential
+four-digit revision IDs so migration files sort in apply order. Migration `0001` enables
+`postgis` and `pg_trgm`. Generated migrations are formatted and linted by a post-write hook.
+
+**Cross-cutting core.** One error envelope across app errors, validation errors,
+`HTTPException`, and unhandled exceptions, with `X-Request-ID` attached even on the 500
+path. Pure-ASGI request-context middleware (request ID, client IP, one access line per
+request). Structured JSON logging on the stdlib with root-logger redaction. Redis client.
+Atomic Lua-based rate limiter with per-IP, per-user, and per-key scopes, exposed as a
+dependency factory. Keyset cursor pagination with a `CursorPage[T]` response model.
+
+**Endpoints.** `GET /health` (liveness, no dependency checks) and `GET /ready` (readiness,
+checks PostgreSQL and Redis concurrently, 503 with per-dependency results). Both documented
+with examples; `/v1` router mounted and ready for Phase 1.
+
+**Workers.** arq worker settings, a `with_job_context` decorator that adopts the job ID as
+the request ID, and a heartbeat on the fifteen-minute cadence `cell_activity` will use.
+
+**Testing.** 176 tests. Real PostGIS, per-test transaction rollback isolation, dependency
+override so requests through the ASGI client join the test transaction, Redis on a
+dedicated flushed index. `tests/factories.py` builds coordinates by kilometre offsets from
+Nyeri, Karatina, Nanyuki, Othaya, and DeKUT anchors, checked against PostGIS.
+`tests/test_privacy_schemas.py` scans response schemas for location leaks and includes a
+self-test proving it can fail.
+
+**Local dev and CI.** Compose stack (`api`, `worker`, `postgres`, `redis`) with healthchecks
+and ordered startup; an init script that creates the test database. Multi-stage Dockerfile
+with a shared dependency layer, a dev target with reload, and an unprivileged production
+target running Gunicorn with Uvicorn workers. GitHub Actions with four jobs: lint and
+types, tests, a migration upgrade/downgrade/upgrade cycle on an empty database, and a
+production image build.
+
+**Docs.** `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` (21 decisions with alternatives), and
+`docs/DATA_MAP.md`.
+
+### Verification status
+
+Verified on this machine: ruff clean, mypy clean over `app` and `tests`, the app boots and
+serves `/health`, `/ready`, `/docs`, and `/openapi.json`, the error envelope and request-ID
+header behave as specified, `alembic upgrade head --sql` renders migration 0001 correctly
+offline, both shell scripts pass `bash -n`, and **91 of 176 tests pass** — every test that
+does not need a database.
+
+**Not yet verified:** `docker compose up`, and the 85 tests that need PostGIS or Redis.
+Docker Desktop was not installed on this machine during Phase 0; it is being installed
+separately. Everything needed to run them is committed, and this section will be updated
+once the stack has actually been brought up.
 
 ### Deferred
 
-_Filled in at the end of the phase._
+Deliberately not built, with the phase that will own each. Fuller reasoning in
+`docs/DECISIONS.md`.
+
+- **`Idempotency-Key` handling** — an API convention in the brief, but there are no create
+  endpoints yet to retry. Lands in Phase 2 with the first content `POST`.
+- **Authentication, and `request.state.user_id`** — Phase 1. The rate limiter already reads
+  it and falls back to the client IP.
+- **Radius, H3, and k-anonymity settings** — Phase 1, with the engine that reads them.
+- **`ETag` support** — worthwhile only on resources that rarely change; none exist yet.
+  Phase 1's area list and Phase 4's group metadata are the first candidates.
+- **Model factories** — Phase 1, with the first models. Phase 0 ships the location and
+  phone-number helpers the radius tests will need.
+- **Production deployment notes, backups, metrics, error tracking** — Phase 8, per the brief.
+
+### How to try it
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+- <http://localhost:8000/docs> — interactive API docs
+- <http://localhost:8000/health> — liveness
+- <http://localhost:8000/ready> — readiness, with per-dependency results
+
+To see the error envelope and a request ID:
+
+```bash
+curl -i http://localhost:8000/v1/nope
+```
+
+To watch readiness fail honestly, stop Redis and ask again:
+
+```bash
+docker compose stop redis
+curl -s http://localhost:8000/ready    # 503, checks.redis false
+curl -s http://localhost:8000/health   # still 200
+docker compose start redis
+```
+
+The checks, as CI runs them:
+
+```bash
+uv sync
+uv run ruff check . && uv run ruff format --check .
+uv run mypy app tests
+uv run pytest                 # needs postgres and redis up
+```
+
+`docker compose up postgres redis` is enough for the test suite; the API and worker
+containers are not required.
