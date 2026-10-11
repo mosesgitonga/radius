@@ -70,7 +70,9 @@ becomes a worker job in the phase that owns the data.
 | Deleted account | Purged 30 days after the request, except where law requires otherwise |
 | Soft-deleted user content | 90 days, then purged — kept because moderation needs the evidence |
 | Stories | 24 hours, then purged |
-| Location history | Only the current cell, plus a rolling 14-day activity window for the verified-neighbour badge |
+| Home location | Only the current H3 cell and its centroid. No history: a change overwrites. |
+| Explore-mode location | **Redis only, ~2 hour TTL. Never written to PostgreSQL.** Not in the export, because it is never at rest. |
+| Home-presence history | A 14-bit rolling mask of daily yes/no answers to "was this user in their home area". Not the locations it came from. Self-purging. |
 | Moderation reports and actions | 2 years, as the record of why an account was acted against |
 | Audit log | 2 years |
 | Payment records | 7 years, as tax law requires. **Survives account deletion**, and the deletion flow must say so. |

@@ -92,8 +92,13 @@ apply them to.
 
 ### Open questions
 
-- **Feed anchoring (Phase 1, flagged in the brief).** Home location, current location, or
-  both? Does not block Phase 0; needs an answer before the Phase 1 location model.
+- ~~**Feed anchoring (Phase 1, flagged in the brief).**~~ **Answered:** anchored to home,
+  with "explore here" as a session-only mode. Five supporting rules came with the answer
+  (authored content always carries the author's home area; the explored location lives in
+  Redis for ~2 hours and never in PostgreSQL; visitors are labelled with their home area;
+  home changes are limited to ~once per 14 days; the verified badge stores only a daily
+  yes/no for "was in home area today"). Recorded in full, with its implementation
+  consequences and three open sub-questions, as decision 1.1 in `docs/DECISIONS.md`.
 
 ### Built
 

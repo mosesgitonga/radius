@@ -268,6 +268,80 @@ once rather than per phase. No module has code before its phase.
 
 ---
 
+## Phase 1 — Accounts, consent and location
+
+Decided before the phase: this resolves the open question the brief raised for
+Phase 0 to answer.
+
+### 1.1 The feed is anchored to home, with "explore here" as a temporary mode
+
+**Context.** The brief's open question: is the feed anchored to the user's home
+location, their current location, or both?
+
+**Choice.** Home, with an optional "explore here" mode, plus five supporting rules
+the user added so the model holds together:
+
+1. **Authored content always carries the author's home area**, even while
+   exploring. Nobody can drop posts or listings into a neighbourhood they do not
+   live in.
+2. **Explore mode is session-only.** The explored location lives in Redis with a
+   ~2 hour TTL and is never written to PostgreSQL. Other users only ever see the
+   author's home area.
+3. **Visitors are labelled.** A comment made while exploring still shows the
+   author's home area, so locals can tell they are visiting.
+4. **Home can be changed roughly once every 14 days.** Enough for a DeKUT student
+   moving between campus and home over the holidays; not enough for a spammer to
+   hop between neighbourhoods.
+5. **The verified-neighbour badge stores only a daily yes/no** for "was this user
+   in their home area today", never the location it was derived from.
+
+**Why this is the right shape.** A current-location feed would make the product a
+different thing — a travel app rather than a neighbourhood one — and would let
+anyone spoof their way into any neighbourhood's feed, which is the attack the
+radius system otherwise has no answer to. Anchoring to home also means a viewer's
+feed is stable, which matters on expensive mobile data: the same anchor means the
+same cached radius and no re-fetch because someone walked down the road.
+
+**Why the rules matter more than the choice.** Each one removes something the
+system would otherwise have to defend against or store:
+
+- Rule 1 means content location needs no separate trust model; it inherits the
+  home area, which is already rate-limited by rule 4.
+- Rule 2 is data minimisation in the Data Protection Act sense — the explored
+  location is never at rest in a durable store, so it cannot be exported,
+  breached, or subpoenaed, and it needs no retention job.
+- Rule 5 reduces fourteen days of location history to fourteen bits. That is the
+  difference between holding a movement profile and holding a boolean.
+
+**Implementation consequences for Phase 1.**
+
+- The radius engine takes an **explicit anchor cell** rather than reading the
+  user's row, so the same code serves the home feed and explore mode.
+- Explore locations get the same spoof detection, rate limiting, and redaction as
+  home locations. Being ephemeral does not make them less sensitive in flight.
+- The daily home-presence flags are stored as a small fixed-width bitmask on the
+  user row rather than a row per day: it is cheaper, and it self-purges, so
+  retention needs no job.
+- `is_visiting` is a boolean on authored content, not a location. It reveals only
+  "not currently at home", which is not a position.
+
+**Open sub-questions**, carried into the Phase 1 plan:
+
+- Do exploring users count toward `cell_activity` density in the cell they are
+  exploring? **Recommended: no.** Density should reflect residents. Counting
+  visitors would let a crowd at a market or a campus event shrink every local
+  resident's radius for the afternoon, which is the opposite of what the adaptive
+  radius is for.
+- Does changing home reset the badge's 14-day consistency window?
+  **Recommended: yes**, with vouching by two verified neighbours as the fast path
+  back, since the window measures consistency with a home area that has changed.
+- Do explore days count as "not home" for the badge, or are they excluded?
+  **Recommended: excluded** — neither a yes nor a no. The brief already counts
+  only *active* days, and penalising a deliberate, temporary mode would make the
+  badge measure "did not travel" rather than "lives here".
+
+---
+
 ### Deferred from Phase 0, with the phase that will own it
 
 - **`Idempotency-Key` handling.** An API convention in the brief, but Phase 0 has
