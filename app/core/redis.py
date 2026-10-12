@@ -10,6 +10,8 @@ The arq worker opens its own connection through `arq.create_pool`; it needs an
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable
+from typing import Any, cast
 
 from redis.asyncio import Redis
 
@@ -58,3 +60,24 @@ async def check_redis() -> bool:
         logger.warning("redis_unavailable", exc_info=True)
         return False
     return True
+
+
+# ---------------------------------------------------------------------------
+# Typed command wrappers
+# ---------------------------------------------------------------------------
+# redis-py shares one set of type stubs between its synchronous and asynchronous
+# clients, so several commands are annotated as returning `Awaitable[T] | T`.
+# Awaiting them is correct on the async client but does not type-check. These
+# wrappers put the cast in one reviewed place rather than scattering per-call
+# ignores through the service layer.
+async def hash_get_all(client: Redis, key: str) -> dict[str, str]:
+    return cast("dict[str, str]", await cast("Awaitable[Any]", client.hgetall(key)))
+
+
+async def hash_increment(client: Redis, key: str, field: str, amount: int = 1) -> int:
+    return cast("int", await cast("Awaitable[Any]", client.hincrby(key, field, amount)))
+
+
+async def key_ttl(client: Redis, key: str) -> int:
+    """Remaining lifetime in seconds. Negative when absent or without a TTL."""
+    return cast("int", await cast("Awaitable[Any]", client.ttl(key)))

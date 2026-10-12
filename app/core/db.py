@@ -8,16 +8,19 @@ module — in tests, in Alembic, in a one-off script — does not open sockets.
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
+from typing import Any, cast
 
 from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.sql import Executable
 
 from app.core.config import Settings, get_settings
 
@@ -119,3 +122,19 @@ async def check_database() -> bool:
         logger.warning("database_unavailable", exc_info=True)
         return False
     return True
+
+
+async def execute_dml(
+    session: AsyncSession,
+    statement: Executable,
+    params: Mapping[str, Any] | None = None,
+) -> int:
+    """Run an INSERT, UPDATE, or DELETE and return the rows it affected.
+
+    SQLAlchemy types `execute()` as returning `Result`, but `rowcount` lives on
+    `CursorResult`, which is what a DML statement actually produces. The cast is
+    here, once, rather than as a type-ignore at every retention job that wants to
+    log how much work it did.
+    """
+    result = await session.execute(statement, params)
+    return cast("CursorResult[Any]", result).rowcount

@@ -175,7 +175,7 @@ def resolve_identity(request: Request, scope: Scope) -> str:
 def rate_limit(
     *,
     bucket: str,
-    limit: int,
+    limit: int | Callable[[Settings], int],
     window_seconds: int,
     scope: Scope = "user_or_ip",
     cost: int = 1,
@@ -188,15 +188,21 @@ def rate_limit(
 
     Several can be stacked on one route — a burst limit and a daily cap, say —
     since each counts its own bucket.
+
+    `limit` may be a callable taking settings, so a limit that belongs in
+    configuration is read per request rather than frozen at import time. Without
+    that, changing a cap would need a code change rather than an env var.
     """
 
     async def dependency(request: Request, response: Response) -> None:
+        settings = get_settings()
         limiter = get_rate_limiter()
         identity = resolve_identity(request, scope)
+        effective_limit = limit(settings) if callable(limit) else limit
         result = await limiter.hit(
             bucket,
             identity,
-            limit=limit,
+            limit=effective_limit,
             window_seconds=window_seconds,
             cost=cost,
             fail_open=fail_open,
