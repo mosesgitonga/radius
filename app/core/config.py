@@ -59,6 +59,11 @@ class RadiusRule(BaseModel, frozen=True):
 # Only ever acceptable outside staging and production; the validator below enforces that.
 INSECURE_DEV_SECRET = "dev-secret-not-for-production"  # noqa: S105 — the value IS the guard
 
+# RFC 7518 section 3.2: an HMAC-SHA256 key should be at least as long as the
+# hash output. A shorter key reduces the work needed to forge a token, and
+# PyJWT warns about it rather than refusing, so this is enforced here.
+MIN_SECRET_KEY_BYTES = 32
+
 
 class Settings(BaseSettings):
     """Typed application configuration."""
@@ -269,9 +274,16 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _guard_deployed_environments(self) -> Settings:
         if self.app_env in ("staging", "production"):
-            if self.secret_key.get_secret_value() == INSECURE_DEV_SECRET:
+            secret = self.secret_key.get_secret_value()
+            if secret == INSECURE_DEV_SECRET:
                 raise ValueError(
                     "SECRET_KEY must be set to a unique random value outside local and test"
+                )
+            if len(secret.encode()) < MIN_SECRET_KEY_BYTES:
+                raise ValueError(
+                    f"SECRET_KEY must be at least {MIN_SECRET_KEY_BYTES} bytes; "
+                    "generate one with "
+                    'python -c "import secrets; print(secrets.token_urlsafe(48))"'
                 )
             if self.debug:
                 raise ValueError("DEBUG must be false in staging and production")
