@@ -10,9 +10,18 @@
 
 name: myradius
 
+# Every service restarts unless explicitly stopped. This is not just dev
+# convenience: arq exits when it loses Redis, and without a restart policy the
+# worker stays dead after a Redis bounce while the API carries on looking
+# healthy. From Phase 1 the worker owns the cell_activity refresh the radius
+# engine reads, so a silently dead worker means every radius quietly goes stale.
+# Phase 8 adds alerting on arq's health-check key so this is noticed, not just
+# recovered from.
+
 services:
   postgres:
     image: postgis/postgis:16-3.4
+    restart: unless-stopped
     env_file: .env
     environment:
       # Collation and encoding are fixed here rather than inherited from the
@@ -34,6 +43,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     # Append-only persistence: OTP codes and rate-limit counters surviving a
     # restart is worth the small write cost, and it matches production.
     command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
@@ -51,6 +61,7 @@ services:
     build:
       context: .
       target: dev
+    restart: unless-stopped
     command: ["bash", "docker/entrypoint.sh", "api-dev"]
     env_file: .env
     ports:
@@ -70,6 +81,7 @@ services:
     build:
       context: .
       target: dev
+    restart: unless-stopped
     command: ["bash", "docker/entrypoint.sh", "worker"]
     env_file: .env
     volumes:
