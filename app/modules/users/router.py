@@ -95,6 +95,12 @@ async def get_me(
     "/me",
     response_model=MeOut,
     summary="Update my profile",
+    description=(
+        "Changes the caller's display name. Returns the full profile, so the "
+        "client needs no follow-up request.\n\n"
+        "Audited as a field name only, never the new value: a display name is "
+        "personal data and the audit log is kept for two years."
+    ),
     dependencies=[Depends(user_rate_limit(bucket="profile_update", limit=10, window_seconds=3600))],
 )
 async def update_me(
@@ -258,6 +264,10 @@ async def block_user(payload: BlockCreateIn, user: CurrentUser, session: Session
     "/me/blocks/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Unblock a neighbour",
+    description=(
+        "Makes the two users visible to each other again. Returns 404 if that "
+        "user was not blocked, so a client can tell a no-op from a success."
+    ),
 )
 async def unblock_user(user_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> None:
     await users_service.unblock_user(session, blocker=user, blocked_id=user_id)
