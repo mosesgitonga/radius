@@ -22,6 +22,15 @@ dependencies = [
     # Gunicorn worker class for ASGI. Split out of uvicorn itself, which
     # removed uvicorn.workers in 0.54.
     "uvicorn-worker>=0.3; sys_platform != 'win32'",
+    # H3 hexagonal indexing: every location is stored as a cell, never as a
+    # coordinate, and the radius engine walks H3 rings.
+    "h3>=4.1",
+    # E.164 normalisation and validation of Kenyan mobile numbers.
+    "phonenumbers>=8.13",
+    "pyjwt>=2.9",
+    # Used by the Africa's Talking SMS provider, which calls their REST API
+    # directly rather than pulling in their synchronous SDK. Also the test client.
+    "httpx>=0.28",
 ]
 
 [dependency-groups]
@@ -31,7 +40,6 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
-    "httpx>=0.28",
 ]
 
 [build-system]

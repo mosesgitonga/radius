@@ -243,3 +243,82 @@ uv run pytest                 # needs postgres and redis up
 
 `docker compose up postgres redis` is enough for the test suite; the API and worker
 containers are not required.
+
+---
+
+## Phase 1 — Accounts, consent and location
+
+**Status:** in progress
+
+### Plan
+
+The phase that makes the product's differentiator real. Three things here are load
+bearing and get the most care: the radius engine, the privacy of location, and
+refresh-token handling.
+
+**Dependencies to add** (all named in the brief's stack): `h3` (h3-py v4),
+`phonenumbers`, `PyJWT`. `httpx` moves from the dev group to the main one, because the
+Africa's Talking provider calls their REST API directly rather than pulling in their
+synchronous SDK.
+
+**Providers behind interfaces**
+
+- `SmsProvider`: `ConsoleSmsProvider` (dev and tests, logs the code), and
+  `AfricasTalkingSmsProvider` over their REST API. Tests never reach the network.
+- Selected by config, so switching is an env change.
+
+**Models**
+
+- `users.User` — phone (E.164, unique), display name, 18+ confirmation, phone-verified
+  timestamp, status, home cells at H3 resolutions 9/8/7/6 plus centroid, home-set and
+  home-changed timestamps, `last_active_at`, a 14-bit home-presence mask, and
+  placeholders for the verified badge and rating.
+- `users.Consent` — one row per grant or revocation, with document version and timestamp.
+- `users.Block` — blocker, blocked, unique pair.
+- `auth.DeviceSession` — hashed refresh token, family ID, device metadata, expiry,
+  revocation reason, and a `replaced_by` link so a reused token can be traced to its family.
+- `location.Area` — seeded polygons with a name, kind, parent, town and county.
+- `location.CellActivity` — keyed by `(resolution, h3_cell)` with active and registered
+  counts, so one table serves both the radius engine (res 8) and k-anonymity (res 8/7/6).
+
+**Migration** `0002`, hand-reviewed: GiST indexes on every geography column, B-tree on
+every H3 column, and the composite `(created_at, id)` indexes the paginator needs.
+
+**Endpoints**
+
+- `auth`: OTP request and verify, signup, refresh, logout, logout-all, list sessions.
+- `users`: get and update my profile, public profile, consents, blocks, deletion request
+  and cancellation, data export.
+- `location`: set home location, start and end explore mode, my radius, area lookup.
+
+**The radius engine**
+
+Per res-8 cell, not per user. Expand H3 rings from the viewer's cell, accumulating active
+users until the feature's target is met, convert ring distance to kilometres from real H3
+cell distances, clamp to the feature's bounds. Cached in Redis per `(feature, cell)` with
+20% hysteresis so feeds do not jump between refreshes. `GET /v1/me/radius` rounds to
+0.5 km.
+
+**Privacy**
+
+Raw coordinates are converted to an H3 res-9 cell on arrival and discarded. Area labels
+snap up to the finest parent cell containing at least K registered users (K=10). Distances
+are exposed as buckets only. The privacy schema scanner from Phase 0 guards all of it.
+
+**Workers**
+
+- `refresh_cell_activity` every 15 minutes, taking the heartbeat's slot.
+- `roll_home_presence` daily, writing one bit per user per day.
+- `purge_deleted_accounts` daily, honouring the 30-day grace period.
+
+**Decided ahead of the phase** (recommendations accepted with "continue"):
+
+- Exploring users do **not** count toward `cell_activity` density. Density reflects
+  residents, or a crowd at a market shrinks every local's radius for the afternoon.
+- Changing home **resets** the badge's 14-day consistency window, with vouching as the
+  fast path back.
+- Explore days are **excluded** from the badge count, neither a yes nor a no.
+
+### Open questions
+
+_None blocking. Anything that arises goes to `docs/DECISIONS.md`._
