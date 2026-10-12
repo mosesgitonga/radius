@@ -23,7 +23,13 @@ from app.core.config import get_settings
 from app.core.db import dispose_engine
 from app.core.logging import configure_logging
 from app.core.redis import close_redis
-from app.workers.tasks import as_worker_task, heartbeat
+from app.workers.tasks import (
+    as_worker_task,
+    heartbeat,
+    refresh_density,
+    roll_presence,
+    run_retention,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,16 +48,31 @@ async def on_shutdown(ctx: dict[str, object]) -> None:
 class WorkerSettings:
     """Picked up by the `arq` CLI."""
 
-    functions: ClassVar[list[WorkerCoroutine]] = [as_worker_task(heartbeat)]
+    functions: ClassVar[list[WorkerCoroutine]] = [
+        as_worker_task(heartbeat),
+        as_worker_task(refresh_density),
+        as_worker_task(roll_presence),
+        as_worker_task(run_retention),
+    ]
 
     cron_jobs: ClassVar[list[CronJob]] = [
-        # Every quarter hour. Phase 1's cell_activity refresh joins this schedule.
+        # Density every quarter hour. The radius engine reads what this writes,
+        # so the cadence here is how quickly the product notices a neighbourhood
+        # filling up.
         cron(
-            as_worker_task(heartbeat),
+            as_worker_task(refresh_density),
             minute={0, 15, 30, 45},
             second=0,
-            run_at_startup=False,
+            # Runs on boot so a fresh deployment has density immediately rather
+            # than labelling everyone "nearby" until the next quarter hour.
+            run_at_startup=True,
         ),
+        # Scheduled in UTC, as everything here is. 00:20 UTC is 03:20 in Nairobi:
+        # past midnight local time, so "today" has definitely turned over for
+        # every Kenyan user, and in the quietest part of the night.
+        cron(as_worker_task(roll_presence), hour={0}, minute={20}, second=0),
+        cron(as_worker_task(run_retention), hour={0}, minute={40}, second=0),
+        cron(as_worker_task(heartbeat), minute={0}, second=0, run_at_startup=False),
     ]
 
     on_startup = staticmethod(on_startup)

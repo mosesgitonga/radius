@@ -4,9 +4,12 @@ Tasks are plain async functions taking arq's `ctx` as their first argument, whic
 means tests call them directly with a stub context instead of standing up a
 worker — the approach the brief asks for.
 
-Later phases register their work here: the `cell_activity` density refresh and
-radius recomputation (Phase 1), story expiry (Phase 2), push fan-out (Phase 3),
-event reminders (Phase 7), badge recomputation and retention purges (Phase 8).
+Each task here is a thin wrapper: it opens a session and calls the module that
+owns the work. The scheduling lives in `app/workers/settings.py`, the logic lives
+with the models it touches, and this file is only the seam between them.
+
+Later phases add: story expiry (Phase 2), push fan-out (Phase 3), event reminders
+(Phase 7), and badge recomputation (Phase 8).
 """
 
 from __future__ import annotations
@@ -19,7 +22,11 @@ from typing import Any, Concatenate, cast
 
 from arq.typing import WorkerCoroutine
 
+from app.core.config import get_settings
 from app.core.context import new_request_id, reset_request_id, set_request_id
+from app.core.db import session_scope
+from app.modules.location.tasks import refresh_cell_activity, roll_home_presence
+from app.modules.users.tasks import delete_expired_sessions, purge_deleted_accounts
 
 logger = logging.getLogger(__name__)
 
@@ -69,13 +76,55 @@ def with_job_context[**P, R](
 async def heartbeat(ctx: JobContext) -> str:
     """Prove the worker is alive and its schedule fires.
 
-    Scheduled on the same fifteen-minute cadence the `cell_activity` refresh will
-    use in Phase 1, so that if the schedule is misconfigured we find out now rather
-    than when the radius engine depends on it.
+    Kept now that real tasks exist, because it is the only scheduled job with no
+    dependencies: if the heartbeat stops while other jobs are failing, the
+    problem is the worker, and if it continues, the problem is the job.
     """
     now = datetime.now(UTC)
     logger.info("worker_heartbeat", extra={"at": now.isoformat()})
     return now.isoformat()
+
+
+@with_job_context
+async def refresh_density(ctx: JobContext) -> dict[str, int]:
+    """Recompute `cell_activity`, which is what makes the radius adaptive.
+
+    Every fifteen minutes. If this stops, radii do not break — they freeze at
+    their last values and slowly drift out of step with reality, which is why
+    Phase 8 alerts on the table's staleness rather than only on job failures.
+    """
+    settings = get_settings()
+    async with session_scope() as session:
+        result = await refresh_cell_activity(session, settings=settings)
+    return {
+        "cells_updated": result.cells_updated,
+        "stale_cells_removed": result.stale_cells_removed,
+    }
+
+
+@with_job_context
+async def roll_presence(ctx: JobContext) -> dict[str, int]:
+    """Age home-presence masks forward for accounts that missed a day."""
+    async with session_scope() as session:
+        rolled = await roll_home_presence(session)
+    return {"users_updated": rolled}
+
+
+@with_job_context
+async def run_retention(ctx: JobContext) -> dict[str, int]:
+    """Purge accounts past their grace period, and sweep stale sessions.
+
+    One job rather than two, because both are daily retention work over the same
+    tables and splitting them would double the schedule for no benefit.
+    """
+    settings = get_settings()
+    async with session_scope() as session:
+        purged = await purge_deleted_accounts(session, settings=settings)
+        sessions_removed = await delete_expired_sessions(session)
+    return {
+        "accounts_purged": purged.accounts_purged,
+        "expired_sessions_deleted": sessions_removed,
+    }
 
 
 def as_worker_task(func: Callable[..., Coroutine[Any, Any, Any]]) -> WorkerCoroutine:

@@ -1,0 +1,528 @@
+{
+  "type": "FeatureCollection",
+  "name": "nyeri",
+  "metadata": {
+    "description": "Development and test seed for Nyeri. Polygons are approximate boxes around neighbourhood centres, not survey boundaries. Replace with real geometry before launch; the loader needs no changes.",
+    "crs": "EPSG:4326"
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Nyeri County",
+        "kind": "county",
+        "town": null,
+        "county": "Nyeri",
+        "parent": null
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.770333,
+              -0.610874
+            ],
+            [
+              37.129667,
+              -0.610874
+            ],
+            [
+              37.129667,
+              -0.249126
+            ],
+            [
+              36.770333,
+              -0.249126
+            ],
+            [
+              36.770333,
+              -0.610874
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Nyeri Town",
+        "kind": "town",
+        "town": null,
+        "county": "Nyeri",
+        "parent": "Nyeri County"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.911667,
+              -0.456275
+            ],
+            [
+              36.983533,
+              -0.456275
+            ],
+            [
+              36.983533,
+              -0.383925
+            ],
+            [
+              36.911667,
+              -0.383925
+            ],
+            [
+              36.911667,
+              -0.456275
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Karatina",
+        "kind": "town",
+        "town": null,
+        "county": "Nyeri",
+        "parent": "Nyeri County"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              37.106341,
+              -0.504309
+            ],
+            [
+              37.151259,
+              -0.504309
+            ],
+            [
+              37.151259,
+              -0.459091
+            ],
+            [
+              37.106341,
+              -0.459091
+            ],
+            [
+              37.106341,
+              -0.504309
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Mweiga",
+        "kind": "town",
+        "town": null,
+        "county": "Nyeri",
+        "parent": "Nyeri County"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.832033,
+              -0.338087
+            ],
+            [
+              36.867967,
+              -0.338087
+            ],
+            [
+              36.867967,
+              -0.301913
+            ],
+            [
+              36.832033,
+              -0.301913
+            ],
+            [
+              36.832033,
+              -0.338087
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Kiganjo",
+        "kind": "town",
+        "town": null,
+        "county": "Nyeri",
+        "parent": "Nyeri County"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.982033,
+              -0.368087
+            ],
+            [
+              37.017967,
+              -0.368087
+            ],
+            [
+              37.017967,
+              -0.331913
+            ],
+            [
+              36.982033,
+              -0.331913
+            ],
+            [
+              36.982033,
+              -0.368087
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Majengo",
+        "kind": "estate",
+        "town": "Nyeri",
+        "county": "Nyeri",
+        "parent": "Nyeri Town"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.93461,
+              -0.429426
+            ],
+            [
+              36.94539,
+              -0.429426
+            ],
+            [
+              36.94539,
+              -0.418574
+            ],
+            [
+              36.93461,
+              -0.418574
+            ],
+            [
+              36.93461,
+              -0.429426
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Kamakwa",
+        "kind": "estate",
+        "town": "Nyeri",
+        "county": "Nyeri",
+        "parent": "Nyeri Town"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.954813,
+              -0.419235
+            ],
+            [
+              36.969187,
+              -0.419235
+            ],
+            [
+              36.969187,
+              -0.404765
+            ],
+            [
+              36.954813,
+              -0.404765
+            ],
+            [
+              36.954813,
+              -0.419235
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Ruring'u",
+        "kind": "estate",
+        "town": "Nyeri",
+        "county": "Nyeri",
+        "parent": "Nyeri Town"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.939813,
+              -0.445235
+            ],
+            [
+              36.954187,
+              -0.445235
+            ],
+            [
+              36.954187,
+              -0.430765
+            ],
+            [
+              36.939813,
+              -0.430765
+            ],
+            [
+              36.939813,
+              -0.445235
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "King'ong'o",
+        "kind": "estate",
+        "town": "Nyeri",
+        "county": "Nyeri",
+        "parent": "Nyeri Town"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.925813,
+              -0.411235
+            ],
+            [
+              36.940187,
+              -0.411235
+            ],
+            [
+              36.940187,
+              -0.396765
+            ],
+            [
+              36.925813,
+              -0.396765
+            ],
+            [
+              36.925813,
+              -0.411235
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Witemere",
+        "kind": "estate",
+        "town": "Nyeri",
+        "county": "Nyeri",
+        "parent": "Nyeri Town"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.94361,
+              -0.413426
+            ],
+            [
+              36.95439,
+              -0.413426
+            ],
+            [
+              36.95439,
+              -0.402574
+            ],
+            [
+              36.94361,
+              -0.402574
+            ],
+            [
+              36.94361,
+              -0.413426
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Blue Valley",
+        "kind": "estate",
+        "town": "Nyeri",
+        "county": "Nyeri",
+        "parent": "Nyeri Town"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.961712,
+              -0.427331
+            ],
+            [
+              36.974288,
+              -0.427331
+            ],
+            [
+              36.974288,
+              -0.414669
+            ],
+            [
+              36.961712,
+              -0.414669
+            ],
+            [
+              36.961712,
+              -0.427331
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Chania",
+        "kind": "estate",
+        "town": "Nyeri",
+        "county": "Nyeri",
+        "parent": "Nyeri Town"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.95061,
+              -0.435426
+            ],
+            [
+              36.96139,
+              -0.435426
+            ],
+            [
+              36.96139,
+              -0.424574
+            ],
+            [
+              36.95061,
+              -0.424574
+            ],
+            [
+              36.95061,
+              -0.435426
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Kiawara",
+        "kind": "estate",
+        "town": "Nyeri",
+        "county": "Nyeri",
+        "parent": "Nyeri Town"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.93261,
+              -0.420426
+            ],
+            [
+              36.94339,
+              -0.420426
+            ],
+            [
+              36.94339,
+              -0.409574
+            ],
+            [
+              36.93261,
+              -0.409574
+            ],
+            [
+              36.93261,
+              -0.420426
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Dedan Kimathi University",
+        "kind": "campus",
+        "town": "Nyeri",
+        "county": "Nyeri",
+        "parent": "Nyeri Town"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              36.953017,
+              -0.405644
+            ],
+            [
+              36.970983,
+              -0.405644
+            ],
+            [
+              36.970983,
+              -0.387556
+            ],
+            [
+              36.953017,
+              -0.387556
+            ],
+            [
+              36.953017,
+              -0.405644
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

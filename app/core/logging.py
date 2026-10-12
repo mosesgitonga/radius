@@ -281,3 +281,25 @@ def configure_logging(settings: Settings, *, service: str = "api") -> None:
     logging.getLogger("sqlalchemy.engine").setLevel(
         logging.INFO if settings.db_echo else logging.WARNING
     )
+
+
+def safe_extra(fields: dict[str, Any]) -> dict[str, Any]:
+    """Make a dict safe to pass as `extra=`.
+
+    The logging module builds a `LogRecord` by assigning `extra` straight onto the
+    record's `__dict__`, and it raises `KeyError` if a key would overwrite one of
+    its own attributes. `created`, `module`, `message`, `name`, `args`, `filename`,
+    `process` and `thread` are all reserved, and all are names a caller might
+    reasonably pick for a counter or a field.
+
+    The raise happens inside `makeRecord`, before any filter runs, so a filter
+    cannot prevent it — the keys have to be corrected on the way in. Colliding keys
+    are suffixed with an underscore rather than dropped, so nothing is silently
+    lost from a log line.
+
+    Use this wherever the keys are built at runtime, from a dict or a loop. Keys
+    written out literally in the source are better checked by reading them.
+    """
+    return {
+        f"{key}_" if key in _STANDARD_RECORD_ATTRS else key: value for key, value in fields.items()
+    }
