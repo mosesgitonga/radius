@@ -95,9 +95,7 @@ class AuditEvent(Base, UUIDPrimaryKeyMixin):
     target_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     target_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
 
-    context: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, default=dict, server_default="{}"
-    )
+    context: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
     """Structured detail: the old and new values of a changed field, the session
     family that was revoked, the implied speed of a suspected spoof.
 

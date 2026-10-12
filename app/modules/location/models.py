@@ -95,8 +95,12 @@ class Area(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     __table_args__ = (
         CheckConstraint("parent_id IS NULL OR parent_id <> id", name="area_parent_not_self"),
-        Index("ix_areas_name_trgm", "name", postgresql_using="gin",
-              postgresql_ops={"name": "gin_trgm_ops"}),
+        Index(
+            "ix_areas_name_trgm",
+            "name",
+            postgresql_using="gin",
+            postgresql_ops={"name": "gin_trgm_ops"},
+        ),
     )
 
     def __repr__(self) -> str:  # pragma: no cover — debugging aid

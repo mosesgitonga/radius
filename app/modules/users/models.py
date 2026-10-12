@@ -127,16 +127,12 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     every seeded area, which is normal before a town is seeded."""
 
     home_set_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    home_changed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    home_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     """Enforces the change cooldown. Separate from `home_set_at` so that setting a
     home for the first time does not start a cooldown."""
 
     # -- Verified-neighbour badge (computed in Phase 8) ----------------------
-    home_presence_mask: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0"
-    )
+    home_presence_mask: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     """A 14-bit rolling window: bit 0 is the most recent day, 1 meaning the user
     was seen in their home area that day. This is the entire location history the
     system keeps — fourteen bits instead of fourteen positions."""
@@ -184,8 +180,12 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
         Index("ix_users_home_cell_res8_last_active_at", "home_cell_res8", "last_active_at"),
         # The retention job scans for grace periods that have run out.
         Index("ix_users_deletion_requested_at", "deletion_requested_at"),
-        Index("ix_users_display_name_trgm", "display_name", postgresql_using="gin",
-              postgresql_ops={"display_name": "gin_trgm_ops"}),
+        Index(
+            "ix_users_display_name_trgm",
+            "display_name",
+            postgresql_using="gin",
+            postgresql_ops={"display_name": "gin_trgm_ops"},
+        ),
     )
 
     @property
@@ -227,8 +227,9 @@ class Consent(Base, UUIDPrimaryKeyMixin):
     )
 
     __table_args__ = (
-        Index("ix_consents_user_id_consent_type_created_at", "user_id", "consent_type",
-              "created_at"),
+        Index(
+            "ix_consents_user_id_consent_type_created_at", "user_id", "consent_type", "created_at"
+        ),
     )
 
     def __repr__(self) -> str:  # pragma: no cover — debugging aid
@@ -252,9 +253,7 @@ class Block(Base, UUIDPrimaryKeyMixin):
     blocked_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         UniqueConstraint("blocker_id", "blocked_id", name="uq_blocks_blocker_id_blocked_id"),
