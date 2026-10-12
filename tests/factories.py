@@ -8,16 +8,22 @@ than hardcoding magic latitudes and longitudes nobody can check.
 
 Anchors are approximate town centres, which is all that is needed and all that
 should be in a repository: nothing here is a real person's location.
-
-Model factories arrive with the models themselves in Phase 1.
 """
 
 from __future__ import annotations
 
 import math
 import random
+import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Final
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.modules.location import cells
+from app.modules.location.models import Area, CellActivity
+from app.modules.users.models import User, UserStatus
 
 # Metres per degree of latitude, and per degree of longitude at the equator.
 # Good to a few parts in a thousand over the distances the radius system uses
@@ -45,6 +51,10 @@ class Coordinates:
         which is the opposite of how coordinates are usually spoken."""
         return f"POINT({self.longitude} {self.latitude})"
 
+    def as_payload(self) -> dict[str, float]:
+        """Shaped for `LocationIn`."""
+        return {"latitude": self.latitude, "longitude": self.longitude}
+
 
 # Approximate anchors for the launch towns. Nyeri is first (the brief's launch
 # market), Karatina second. Nothing in the application hardcodes these: new towns
@@ -56,6 +66,9 @@ OTHAYA: Final = Coordinates(-0.5500, 36.9333)
 
 # The launch anchor community, a few kilometres north of Nyeri town.
 DEKUT_CAMPUS: Final = Coordinates(-0.3966, 36.9620)
+
+# Far enough to be outside every configured radius, for "a user far away" cases.
+NAIROBI: Final = Coordinates(-1.2864, 36.8172)
 
 
 def offset_km(origin: Coordinates, *, north: float = 0.0, east: float = 0.0) -> Coordinates:
@@ -126,3 +139,175 @@ def unique_phone() -> str:
 
 def unique_display_name(prefix: str = "Test Neighbour") -> str:
     return f"{prefix} {_name_counter.next()}"
+
+
+# ---------------------------------------------------------------------------
+# Model factories
+# ---------------------------------------------------------------------------
+async def make_user(
+    session: AsyncSession,
+    *,
+    at: Coordinates | None = None,
+    display_name: str | None = None,
+    phone_number: str | None = None,
+    status: UserStatus = UserStatus.active,
+    last_active_at: datetime | None = None,
+    is_verified_neighbour: bool = False,
+    storage_resolution: int = 9,
+) -> User:
+    """A user, optionally with a home location already set.
+
+    Writes the cells directly rather than going through the location service,
+    because most tests want a user *at* a place, not a test of how they got there.
+    The handful of tests that do care about that path call the service.
+    """
+    now = datetime.now(UTC)
+    user = User(
+        phone_number=phone_number or unique_phone(),
+        display_name=display_name or unique_display_name(),
+        phone_verified_at=now,
+        adult_confirmed_at=now,
+        last_active_at=last_active_at or now,
+        status=status,
+        is_verified_neighbour=is_verified_neighbour,
+    )
+
+    if at is not None:
+        location = cells.locate(at.latitude, at.longitude, storage_resolution=storage_resolution)
+        user.home_cell_res9 = location.cell_res9
+        user.home_cell_res8 = location.cell_res8
+        user.home_cell_res7 = location.cell_res7
+        user.home_cell_res6 = location.cell_res6
+        user.home_centroid = location.centroid_wkt
+        user.home_set_at = now
+
+    session.add(user)
+    await session.flush()
+    return user
+
+
+async def make_users_at(
+    session: AsyncSession,
+    *,
+    origin: Coordinates,
+    count: int,
+    radius_km: float,
+    seed: int = 0,
+    active: bool = True,
+) -> list[User]:
+    """A cluster of users around a point, for density tests.
+
+    `active=False` places them outside the active window, so a test can prove the
+    radius counts active neighbours rather than registered ones.
+    """
+    stale = datetime.now(UTC) - timedelta(days=400)
+    points = scatter(origin, count=count, radius_km=radius_km, seed=seed)
+    return [
+        await make_user(session, at=point, last_active_at=None if active else stale)
+        for point in points
+    ]
+
+
+async def set_cell_density(
+    session: AsyncSession,
+    *,
+    origin: Coordinates,
+    active_per_cell: int,
+    rings: int,
+    registered_per_cell: int | None = None,
+    resolution: int = 8,
+) -> int:
+    """Populate `cell_activity` directly around a point.
+
+    Faster than creating thousands of users when the test is about the radius
+    algorithm rather than about how the counts were derived. Tests of the refresh
+    worker itself create real users instead.
+
+    Returns the anchor cell.
+    """
+    anchor = cells.locate(origin.latitude, origin.longitude).cell_at(resolution)
+    registered = active_per_cell if registered_per_cell is None else registered_per_cell
+    for k in range(rings + 1):
+        for cell in cells.ring(anchor, k):
+            session.add(
+                CellActivity(
+                    resolution=resolution,
+                    cell=cell,
+                    active_user_count=active_per_cell,
+                    registered_user_count=max(registered, active_per_cell),
+                )
+            )
+    await session.flush()
+    return anchor
+
+
+async def set_registered_density(
+    session: AsyncSession,
+    *,
+    at: Coordinates,
+    registered: int,
+    resolutions: tuple[int, ...] = (8, 7, 6),
+) -> None:
+    """Satisfy k-anonymity for a point, so an area label can be resolved.
+
+    Area labels read registered counts from `cell_activity`, so a test that wants
+    a precise label has to say how many neighbours share the cell.
+    """
+    location = cells.locate(at.latitude, at.longitude)
+    for resolution in resolutions:
+        session.add(
+            CellActivity(
+                resolution=resolution,
+                cell=location.cell_at(resolution),
+                active_user_count=min(registered, registered),
+                registered_user_count=registered,
+            )
+        )
+    await session.flush()
+
+
+async def make_area(
+    session: AsyncSession,
+    *,
+    name: str,
+    centre: Coordinates,
+    width_km: float = 2.0,
+    kind: str = "estate",
+    town: str | None = "Nyeri",
+    county: str | None = "Nyeri",
+    parent_id: uuid.UUID | None = None,
+) -> Area:
+    """A square area around a point."""
+    half_lat = (width_km * 500.0) / _METRES_PER_DEGREE_LAT
+    half_lon = (width_km * 500.0) / (
+        _METRES_PER_DEGREE_LON_EQUATOR * math.cos(math.radians(centre.latitude))
+    )
+    west, east = centre.longitude - half_lon, centre.longitude + half_lon
+    south, north = centre.latitude - half_lat, centre.latitude + half_lat
+    wkt = (
+        "SRID=4326;MULTIPOLYGON((("
+        f"{west} {south},{east} {south},{east} {north},{west} {north},{west} {south}"
+        ")))"
+    )
+    area = Area(
+        name=name,
+        kind=kind,
+        town=town,
+        county=county,
+        boundary=wkt,
+        parent_id=parent_id,
+    )
+    session.add(area)
+    await session.flush()
+    return area
+
+
+def phone_of(user: User) -> str:
+    """A user's number, with the "every live account has one" invariant asserted.
+
+    `User.phone_number` is nullable because a purged account holds none, so this
+    narrows the type for the tests that sign somebody in — and fails loudly rather
+    than passing None to an endpoint if that invariant ever breaks.
+    """
+    assert user.phone_number is not None, "a live user must have a phone number"
+    return user.phone_number

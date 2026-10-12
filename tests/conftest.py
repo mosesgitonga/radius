@@ -15,7 +15,7 @@ while still being undone afterwards.
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
 
 # Must happen before anything imports settings: real environment variables take
@@ -33,7 +33,10 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["REDIS_URL"] = TEST_REDIS_URL
 os.environ["LOG_FORMAT"] = "console"
 os.environ["LOG_ACCESS"] = "false"
-os.environ["SECRET_KEY"] = "test-secret-key"
+# At least 32 bytes, matching what production requires: a shorter key makes
+# PyJWT warn, and a suite that runs with warnings it ignores teaches nobody
+# anything.
+os.environ["SECRET_KEY"] = "test-secret-key-at-least-32-bytes-long-for-hs256"
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
@@ -42,12 +45,17 @@ from alembic import command  # noqa: E402
 from alembic.config import Config as AlembicConfig  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 from redis.asyncio import Redis  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession  # noqa: E402
 
 from app.core import db as db_module  # noqa: E402
 from app.core import redis as redis_module  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
+from app.core.providers.sms import ConsoleSmsProvider, set_sms_provider  # noqa: E402
 from app.main import create_app  # noqa: E402
+from app.modules.auth import service as auth_service  # noqa: E402
+from app.modules.users.models import User  # noqa: E402
+from tests.factories import NYERI_TOWN, make_user, offset_km  # noqa: E402
 
 pytest_plugins: list[str] = []
 
@@ -105,6 +113,45 @@ async def engine(settings: Settings, apply_migrations: None) -> AsyncIterator[As
     await db_module.dispose_engine()
 
 
+@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
+async def clean_database(engine: AsyncEngine) -> None:
+    """Remove any committed rows before the session starts.
+
+    Tests isolate themselves by transaction rollback, which cannot undo data
+    somebody committed outside a test — running `scripts/seed_areas.py` against
+    the test database, for instance, leaves fourteen areas behind that then show
+    up in every area listing. CI always starts clean, so this would be a failure
+    only a developer sees, which is the worst kind.
+
+    The table list comes from the database rather than from `Base.metadata`,
+    deliberately. Importing the test suite registers throwaway models on the
+    shared declarative base — `tests/test_pagination.py` has one — and those
+    tables are created inside a transaction and never exist on disk, so
+    truncating a list built from metadata fails on a table that is not there.
+    Asking PostgreSQL what exists is both simpler and catches tables metadata
+    does not know about.
+
+    Truncating once per session rather than per test keeps the rollback-based
+    isolation that makes the suite fast.
+    """
+    async with engine.begin() as connection:
+        rows = await connection.execute(
+            text(
+                "SELECT tablename FROM pg_tables "
+                "WHERE schemaname = 'public' "
+                # PostGIS owns spatial_ref_sys, and Alembic owns its version row.
+                "AND tablename NOT IN ('spatial_ref_sys', 'alembic_version')"
+            )
+        )
+        tables = [row[0] for row in rows]
+        if not tables:
+            return
+        joined = ", ".join(f'"{table}"' for table in tables)
+        # One statement, foreign keys included, and sequences reset so IDs do not
+        # drift between runs.
+        await connection.execute(text(f"TRUNCATE TABLE {joined} RESTART IDENTITY CASCADE"))
+
+
 @pytest_asyncio.fixture(loop_scope="session")
 async def connection(engine: AsyncEngine) -> AsyncIterator[AsyncConnection]:
     """A connection wrapped in a transaction that is always rolled back."""
@@ -136,13 +183,19 @@ async def db_session(connection: AsyncConnection) -> AsyncIterator[AsyncSession]
 # ---------------------------------------------------------------------------
 # Redis
 # ---------------------------------------------------------------------------
-@pytest_asyncio.fixture(loop_scope="session")
+@pytest_asyncio.fixture(loop_scope="session", autouse=True)
 async def redis_client(settings: Settings) -> AsyncIterator[Redis]:
-    """Redis on a dedicated database index, flushed before each test.
+    """Redis on a dedicated database index, flushed before and after each test.
 
-    Flushed rather than key-prefixed so that a leftover rate-limit counter from
-    one test cannot make another pass or fail. The index is separate from the
-    development one precisely because this flushes.
+    Flushed rather than key-prefixed so that a leftover rate-limit counter or
+    pending OTP from one test cannot make another pass or fail. The index is
+    separate from the development one precisely because this flushes.
+
+    **Autouse**, which matters more than it looks. Rate limits and OTP state live
+    only in Redis, so a test that never mentions Redis still depends on it being
+    clean — an OTP test running after twenty others would otherwise trip a daily
+    cap that somebody else filled. Isolation that applies only when a test
+    remembers to ask for it is not isolation.
     """
     client = redis_module.get_redis()
     try:
@@ -195,3 +248,76 @@ async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
         headers={"User-Agent": "myradius-tests"},
     ) as client:
         yield client
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: providers, users, and authenticated clients
+# ---------------------------------------------------------------------------
+@pytest.fixture
+def sms(settings: Settings) -> Iterator[ConsoleSmsProvider]:
+    """The console SMS provider, installed for the duration of a test.
+
+    A recording fake rather than a mock: tests assert on what was actually sent,
+    and nothing in the suite can reach Africa's Talking even by accident.
+    """
+    provider = ConsoleSmsProvider()
+    set_sms_provider(provider)
+    yield provider
+    set_sms_provider(None)
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def user(db_session: AsyncSession) -> User:
+    """An ordinary active user with a home location in Nyeri."""
+    return await make_user(db_session, at=NYERI_TOWN)
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def other_user(db_session: AsyncSession) -> User:
+    """A second user, a couple of kilometres from the first."""
+    return await make_user(db_session, at=offset_km(NYERI_TOWN, north=2.0))
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def tokens(
+    db_session: AsyncSession, settings: Settings, user: User
+) -> auth_service.TokenPair:
+    """A real token pair for `user`, issued through the service.
+
+    Issued by the production code path rather than hand-signed, so the tests
+    exercise the same session creation a sign-in does — including the session row
+    that `get_current_user` checks on every request.
+    """
+    pair = await auth_service.issue_tokens(
+        db_session, user=user, settings=settings, device_name="Test Device"
+    )
+    await db_session.flush()
+    return pair
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def auth_client(
+    client: httpx.AsyncClient, tokens: auth_service.TokenPair
+) -> httpx.AsyncClient:
+    """The HTTP client with `user`'s access token attached."""
+    client.headers["Authorization"] = f"Bearer {tokens.access_token}"
+    return client
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def authenticate(
+    client: httpx.AsyncClient, db_session: AsyncSession, settings: Settings
+) -> Callable[[User], Awaitable[httpx.AsyncClient]]:
+    """Sign in as any user, for tests that need a second identity.
+
+    Returns the same client with the header swapped: one client, one transaction,
+    so both identities see the same database state.
+    """
+
+    async def _authenticate(as_user: User) -> httpx.AsyncClient:
+        pair = await auth_service.issue_tokens(db_session, user=as_user, settings=settings)
+        await db_session.flush()
+        client.headers["Authorization"] = f"Bearer {pair.access_token}"
+        return client
+
+    return _authenticate

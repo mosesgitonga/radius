@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.core.config import INSECURE_DEV_SECRET, Settings
+from app.core.config import INSECURE_DEV_SECRET, RadiusFeature, Settings
 
 
 def _settings(**overrides: object) -> Settings:
@@ -44,13 +44,101 @@ def test_staging_refuses_the_development_secret() -> None:
 
 def test_production_refuses_debug_mode() -> None:
     with pytest.raises(ValidationError, match="DEBUG"):
-        _settings(app_env="production", secret_key="a-real-secret", debug=True)
+        _settings(
+            app_env="production",
+            secret_key="a-real-secret-of-at-least-32-bytes-length",
+            debug=True,
+        )
 
 
 def test_production_with_proper_configuration_boots() -> None:
-    settings = _settings(app_env="production", secret_key="a-real-secret", debug=False)
+    settings = _settings(
+        app_env="production",
+        secret_key="a-real-secret-of-at-least-32-bytes-length",
+        debug=False,
+        sms_provider="africastalking",
+        africastalking_username="myradius",
+        africastalking_api_key="real-key",
+    )
 
     assert settings.is_deployed is True
+
+
+def test_production_refuses_a_short_secret_key() -> None:
+    """RFC 7518: an HMAC-SHA256 key should be at least as long as the hash output.
+    PyJWT only warns about a shorter one, so the refusal happens here."""
+    with pytest.raises(ValidationError, match="at least 32 bytes"):
+        _settings(
+            app_env="production",
+            secret_key="short",
+            sms_provider="africastalking",
+            africastalking_username="u",
+            africastalking_api_key="k",
+        )
+
+
+def test_local_tolerates_a_short_secret_key() -> None:
+    """Developers should not need to generate a key to run the app."""
+    assert _settings(secret_key="short").app_env == "local"
+
+
+def test_production_refuses_the_console_sms_provider() -> None:
+    """The console provider logs codes instead of sending them, so in production
+    it would mean nobody can sign up and every code sits in the log."""
+    with pytest.raises(ValidationError, match="SMS_PROVIDER"):
+        _settings(
+            app_env="production",
+            secret_key="a-real-secret-of-at-least-32-bytes-length",
+            sms_provider="console",
+        )
+
+
+def test_africastalking_requires_credentials() -> None:
+    """Fails at boot rather than at the first signup attempt."""
+    with pytest.raises(ValidationError, match="AFRICASTALKING"):
+        _settings(sms_provider="africastalking")
+
+
+def test_a_minimum_radius_above_its_maximum_is_refused() -> None:
+    """Otherwise every radius silently clamps to the minimum and returns a
+    plausible-looking number that is simply wrong."""
+    with pytest.raises(ValidationError, match="exceeds maximum"):
+        _settings(feed_radius_min_km=20.0, feed_radius_max_km=15.0)
+
+
+def test_a_filter_cap_below_the_minimum_radius_is_refused() -> None:
+    with pytest.raises(ValidationError, match="below"):
+        _settings(marketplace_radius_min_km=10.0, marketplace_filter_max_km=5.0)
+
+
+def test_the_radius_table_matches_the_brief() -> None:
+    """The product's main tuning surface, pinned so a careless edit is visible."""
+    rules = _settings().radius_rules
+
+    assert rules[RadiusFeature.feed].target_active_users == 500
+    assert (rules[RadiusFeature.feed].min_km, rules[RadiusFeature.feed].max_km) == (1.0, 15.0)
+    assert rules[RadiusFeature.feed].user_filter_max_km is None
+
+    assert rules[RadiusFeature.groups].feed_multiplier == 2.0
+    assert rules[RadiusFeature.marketplace].feed_multiplier == 2.0
+    assert rules[RadiusFeature.services].feed_multiplier == 3.0
+    assert rules[RadiusFeature.events].feed_multiplier == 2.0
+
+    assert rules[RadiusFeature.services].max_km == 40.0
+    assert rules[RadiusFeature.marketplace].user_filter_max_km == 50.0
+
+
+def test_coarse_resolutions_follow_the_storage_resolution() -> None:
+    """Derived rather than configured separately, so the two cannot drift."""
+    assert _settings().h3_coarse_resolutions == (8, 7, 6)
+    assert _settings(h3_storage_resolution=10).h3_coarse_resolutions == (9, 8, 7)
+
+
+def test_the_minimum_age_cannot_be_lowered_below_18() -> None:
+    """Lowering it is a legal decision, not a configuration one: under-18s bring
+    the Act's parental-consent regime into scope."""
+    with pytest.raises(ValidationError):
+        _settings(minimum_age_years=16)
 
 
 def test_local_tolerates_the_development_secret() -> None:
