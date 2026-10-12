@@ -22,6 +22,9 @@ from app.core.health import router as health_router
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
 from app.core.redis import close_redis
+from app.modules.auth.router import router as auth_router
+from app.modules.location.router import router as location_router
+from app.modules.users.router import router as users_router
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +53,24 @@ location. Places are described by area label and distance bucket only.
 
 TAGS_METADATA = [
     {"name": "system", "description": "Liveness and readiness probes."},
+    {
+        "name": "auth",
+        "description": (
+            "Phone verification, tokens, and device sessions. There are no "
+            "passwords: identity is a phone number proved by a one-time code."
+        ),
+    },
+    {
+        "name": "users",
+        "description": ("Profiles, consent records, blocking, and data-protection rights."),
+    },
+    {
+        "name": "location",
+        "description": (
+            "Home area, explore mode, and the adaptive radius. Coordinates go in; "
+            "only area labels and distance bands come out."
+        ),
+    },
 ]
 
 # Attached to every `/v1` route so the error envelope is documented once rather
@@ -85,10 +106,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def build_v1_router(settings: Settings) -> APIRouter:
     """The versioned client API.
 
-    Module routers are mounted here as each phase lands them: auth and users in
-    Phase 1, media and feed in Phase 2, and so on.
+    Module routers are mounted here as each phase lands them. Media and feed
+    arrive in Phase 2, messaging and notifications in Phase 3, and so on.
     """
     router = APIRouter(prefix=settings.api_prefix, responses=COMMON_ERROR_RESPONSES)
+    router.include_router(auth_router)
+    router.include_router(users_router)
+    router.include_router(location_router)
     return router
 
 
