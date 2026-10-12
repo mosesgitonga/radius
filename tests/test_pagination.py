@@ -200,7 +200,10 @@ async def test_pages_cover_every_row_exactly_once(
             break
 
     assert cursor is None
-    assert seen == sorted(seen, reverse=True)
+    # `row-00` is the newest (its timestamp is the base, `row-08`'s is eight
+    # minutes earlier), so newest-first order runs row-00 through row-08. Pinning
+    # the exact sequence covers completeness and ordering in one assertion.
+    assert seen == [f"row-{index:02d}" for index in range(9)]
     assert len(seen) == len(set(seen)) == 9
 
 
