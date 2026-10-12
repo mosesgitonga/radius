@@ -30,9 +30,13 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.core.config import get_settings
 from app.core.models import Base
 
-# Importing the model modules is what populates `Base.metadata`; autogenerate sees
-# only what has been imported. Phase 1 onwards adds them here.
-# e.g. "from app.modules.users import models as _users_models" with a noqa: F401
+# Importing the model modules is what populates `Base.metadata`. Autogenerate sees
+# only what has been imported, so a model nobody imports here produces an empty
+# migration and no warning at all. Every new module's models go in this list.
+from app.modules.auth import models as _auth_models  # noqa: F401
+from app.modules.location import models as _location_models  # noqa: F401
+from app.modules.moderation import models as _moderation_models  # noqa: F401
+from app.modules.users import models as _users_models  # noqa: F401
 
 config = context.config
 
