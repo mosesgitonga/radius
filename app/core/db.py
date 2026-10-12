@@ -67,7 +67,17 @@ def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
     if _sessionmaker is None:
         _sessionmaker = async_sessionmaker(
             bind=get_engine(),
+            # Objects stay usable after commit, so a handler can still read the
+            # row it just wrote without a second query.
             expire_on_commit=False,
+            # No implicit flush before every query. Explicit flushes make it
+            # obvious where a write hits the database, which matters in async
+            # code where an unexpected flush can interleave with other work.
+            #
+            # The cost is real and worth knowing: a pending `session.add()` is
+            # **not** visible to a later `select()` in the same transaction until
+            # something flushes. Service code that adds a row and then queries for
+            # it must call `await session.flush()` in between.
             autoflush=False,
         )
     return _sessionmaker

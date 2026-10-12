@@ -34,11 +34,11 @@ from dataclasses import dataclass
 from typing import Literal
 
 from redis.asyncio import Redis
-from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import RadiusFeature, RadiusRule, Settings
+from app.core.redis import CACHE_ERRORS
 from app.modules.location import cells
 from app.modules.location.models import CellActivity
 
@@ -278,7 +278,7 @@ class RadiusEngine:
         """
         try:
             raw = await self._redis.get(self.cache_key(anchor_cell_res8))
-        except RedisError:
+        except CACHE_ERRORS:
             logger.warning("radius_cache_unavailable", exc_info=True)
             return None
         if raw is None:
@@ -295,7 +295,7 @@ class RadiusEngine:
                 f"{radius_km:.4f}",
                 ex=self._settings.radius_cache_ttl_seconds,
             )
-        except RedisError:
+        except CACHE_ERRORS:
             # Losing the cache costs performance and stability, not correctness.
             logger.warning("radius_cache_write_failed", exc_info=True)
 
@@ -303,7 +303,7 @@ class RadiusEngine:
         """Drop a cached radius. Used by tests and by density backfills."""
         try:
             await self._redis.delete(self.cache_key(anchor_cell_res8))
-        except RedisError:
+        except CACHE_ERRORS:
             logger.warning("radius_cache_invalidate_failed", exc_info=True)
 
 

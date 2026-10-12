@@ -32,12 +32,12 @@ from typing import Any, Literal
 
 import h3
 from redis.asyncio import Redis
-from redis.exceptions import RedisError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import BadRequestError, ConflictError
+from app.core.redis import CACHE_ERRORS
 from app.modules.location import cells
 from app.modules.location.cells import CellLocation, InvalidCoordinatesError
 from app.modules.location.models import Area, CellActivity
@@ -374,7 +374,7 @@ def _label_cache_key(cell_res9: int) -> str:
 async def _read_label_cache(redis: Redis, cell_res9: int) -> AreaLabel | None:
     try:
         raw = await redis.get(_label_cache_key(cell_res9))
-    except RedisError:
+    except CACHE_ERRORS:
         return None
     if not raw:
         return None
@@ -402,7 +402,7 @@ async def _write_label_cache(redis: Redis, cell_res9: int, label: AreaLabel) -> 
             json.dumps(payload),
             ex=AREA_LABEL_CACHE_TTL_SECONDS,
         )
-    except RedisError:
+    except CACHE_ERRORS:
         logger.warning("area_label_cache_write_failed")
 
 
@@ -448,7 +448,7 @@ async def start_explore(
 async def get_explore(redis: Redis, *, user_id: uuid.UUID) -> ExploreLocation | None:
     try:
         raw = await redis.get(_explore_key(user_id))
-    except RedisError:
+    except CACHE_ERRORS:
         # Redis is the only store for this, so an outage simply ends explore mode
         # and the user falls back to their home feed. Degraded, not broken.
         logger.warning("explore_lookup_failed")
@@ -469,7 +469,7 @@ async def get_explore(redis: Redis, *, user_id: uuid.UUID) -> ExploreLocation | 
 async def stop_explore(redis: Redis, *, user_id: uuid.UUID) -> None:
     try:
         await redis.delete(_explore_key(user_id))
-    except RedisError:
+    except CACHE_ERRORS:
         logger.warning("explore_clear_failed")
 
 

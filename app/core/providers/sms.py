@@ -67,7 +67,9 @@ class ConsoleSmsProvider:
         # in locally. WARNING rather than INFO because this line contains a live
         # credential and should look wrong if it ever shows up in a deployed
         # environment; a settings validator stops it reaching production at all.
-        logger.warning("sms_not_sent_console_provider", extra={"to": to, "message": body})
+        # Field named `sms_body`, not `body` or `message`: both of those are
+        # reserved LogRecord attributes and logging raises on collision.
+        logger.warning("sms_not_sent_console_provider", extra={"to": to, "sms_body": body})
         return SmsResult(provider=self.name, accepted=True, status="console")
 
     def last_message(self) -> str | None:

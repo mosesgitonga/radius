@@ -26,11 +26,10 @@ from typing import Any, Literal
 
 from fastapi import Request, Response
 from redis.asyncio import Redis
-from redis.exceptions import RedisError
 
 from app.core.config import Settings, get_settings
 from app.core.errors import RateLimitedError
-from app.core.redis import get_redis
+from app.core.redis import CACHE_ERRORS, get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +103,7 @@ class RateLimiter:
             raw: Any = await self._script(keys=[key], args=[window_seconds * 1000, cost])
             count = int(raw[0])
             ttl_ms = int(raw[1])
-        except RedisError:
+        except CACHE_ERRORS:
             open_on_failure = (
                 self._settings.rate_limit_fail_open if fail_open is None else fail_open
             )
@@ -130,7 +129,7 @@ class RateLimiter:
         """Requests remaining in the current window, without consuming one."""
         try:
             raw = await self._redis.get(self.build_key(bucket, identity))
-        except RedisError:
+        except CACHE_ERRORS:
             return limit
         return max(0, limit - int(raw or 0))
 
@@ -138,7 +137,7 @@ class RateLimiter:
         """Clear a bucket. Used after a successful verification, and by tests."""
         try:
             await self._redis.delete(self.build_key(bucket, identity))
-        except RedisError:
+        except CACHE_ERRORS:
             logger.warning("rate_limit_reset_failed", extra={"bucket": bucket})
 
 

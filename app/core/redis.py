@@ -14,12 +14,27 @@ from collections.abc import Awaitable
 from typing import Any, cast
 
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 _client: Redis | None = None
+
+# What "Redis is unreachable" looks like when caught.
+#
+# redis-py wraps socket failures in its own `RedisError` hierarchy, but not
+# always: a DNS failure or a connection reset can surface as a plain `OSError`
+# from the event loop before redis-py sees it. Both belong here, because
+# everything Redis is used for in this codebase — cached radii, area labels,
+# rate-limit counters — degrades rather than breaks when it is unavailable, and a
+# radius computation must never fail because its cache was weird.
+#
+# Deliberately not `Exception`: a TypeError from our own code is a bug, and
+# swallowing it here would hide it behind a plausible-looking "cache
+# unavailable" warning.
+CACHE_ERRORS: tuple[type[BaseException], ...] = (RedisError, OSError)
 
 
 def get_redis() -> Redis:
