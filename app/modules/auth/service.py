@@ -387,6 +387,14 @@ async def rotate_refresh_token(
             target_type="session_family",
             target_id=device_session.family_id,
         )
+        # Committed before raising, and this is the whole point of the branch.
+        # The request session is a unit of work that rolls back on an exception,
+        # so without this commit the revocation would be discarded by the very
+        # error that reports it: the reused token would be refused while every
+        # other token in the family kept working — which is precisely the
+        # situation reuse detection exists to prevent. Verified by
+        # `test_reusing_a_token_revokes_the_whole_family`.
+        await session.commit()
         raise UnauthenticatedError(
             "This session has been ended for your security. Please sign in again."
         )
