@@ -83,6 +83,7 @@ through service functions, never through each other's routers.
 
 ## Documentation
 
+- [`docs/BRIEF.md`](docs/BRIEF.md) — the build brief: what is being built, and why
 - [`PROGRESS.md`](PROGRESS.md) — what each phase planned, built, and deferred
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how the pieces fit together
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — decisions taken, with alternatives
