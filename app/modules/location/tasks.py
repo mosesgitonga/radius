@@ -117,21 +117,25 @@ async def refresh_cell_activity(
 # ---------------------------------------------------------------------------
 # Home presence
 # ---------------------------------------------------------------------------
-# The window width and its bit mask are bound parameters, not interpolated, so
-# this statement contains no string construction at all. PostgreSQL accepts a
-# parameter on either side of `>=` and `&`; only the shift width has to stay an
-# expression, and that one is computed from columns.
+# All three values are bound parameters, so this statement contains no string
+# construction at all.
+#
+# Written with CAST(...) rather than PostgreSQL's `:param::type` shorthand:
+# SQLAlchemy's text() parses `:name` as a bind parameter and the `::` that
+# follows confuses it, which fails as "syntax error at or near :". CAST is also
+# the form that reads unambiguously.
 _ROLL_PRESENCE_SQL = """
 UPDATE users
 SET home_presence_mask = CASE
-        WHEN (:today::date - home_presence_updated_on) >= :window::integer
+        WHEN (CAST(:today AS date) - home_presence_updated_on)
+             >= CAST(:window AS integer)
             THEN 0
-        ELSE (home_presence_mask << (:today::date - home_presence_updated_on))
-             & :mask::integer
+        ELSE (home_presence_mask << (CAST(:today AS date) - home_presence_updated_on))
+             & CAST(:mask AS integer)
     END,
-    home_presence_updated_on = :today::date
+    home_presence_updated_on = CAST(:today AS date)
 WHERE home_presence_updated_on IS NOT NULL
-  AND home_presence_updated_on < :today::date
+  AND home_presence_updated_on < CAST(:today AS date)
   AND deleted_at IS NULL
 """
 
