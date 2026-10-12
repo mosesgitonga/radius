@@ -7,7 +7,7 @@ product context. This file tracks what each phase planned, built, and deferred.
 
 ## Phase 0 — Foundation
 
-**Status:** complete, pending verification of the Docker-dependent checks
+**Status:** complete and verified against the real stack on 2026-10-12
 
 ### Plan
 
@@ -155,16 +155,40 @@ production image build.
 
 ### Verification status
 
-Verified on this machine: ruff clean, mypy clean over `app` and `tests`, the app boots and
-serves `/health`, `/ready`, `/docs`, and `/openapi.json`, the error envelope and request-ID
-header behave as specified, `alembic upgrade head --sql` renders migration 0001 correctly
-offline, both shell scripts pass `bash -n`, and **91 of 176 tests pass** — every test that
-does not need a database.
+Verified in full once Docker was available.
 
-**Not yet verified:** `docker compose up`, and the 85 tests that need PostGIS or Redis.
-Docker Desktop was not installed on this machine during Phase 0; it is being installed
-separately. Everything needed to run them is committed, and this section will be updated
-once the stack has actually been brought up.
+| Check | Result |
+| --- | --- |
+| `ruff check` and `ruff format --check` | clean |
+| `mypy app tests` (strict) | clean, 44 files |
+| `pytest` | **176 passed**, twice in succession, 90% coverage |
+| Migrations on an empty database | `upgrade head` → `downgrade base` → `upgrade head`, then `alembic check` clean |
+| Extensions | absent before 0001, `postgis` + `pg_trgm` after, gone after downgrade |
+| `docker compose up` | all four services healthy; API applies migrations on start |
+| `GET /health`, `/ready`, `/docs`, `/openapi.json` | 200, with `X-Request-ID` on every response |
+| Readiness under failure | Redis stopped → `/ready` 503 with `checks.redis: false`; `/health` stays 200 |
+| Worker | boots, cron fired on the quarter hour, job ID carried into the logs |
+| Production image | builds, runs as uid 1001, Gunicorn boots Uvicorn workers, container healthcheck healthy, JSON access logs |
+
+Three defects were found by running it, all fixed:
+
+1. **Every database test failed** with asyncpg's "attached to a different loop".
+   `asyncio_default_fixture_loop_scope` was set but
+   `asyncio_default_test_loop_scope` was not, so the session-scoped engine and
+   the tests were on different event loops. Both are now set, with a comment
+   saying why they must match.
+2. **A wrong assertion** in `test_pages_cover_every_row_exactly_once`: label
+   order *ascends* as recency descends, so `sorted(reverse=True)` was backwards.
+   It now pins the exact expected sequence, which covers ordering and
+   completeness together.
+3. **The worker did not come back after a Redis bounce.** arq exits when it loses
+   Redis, and compose had no restart policy, so the worker stayed dead while the
+   API carried on looking healthy. From Phase 1 the worker owns the
+   `cell_activity` refresh, so this would have meant every radius quietly going
+   stale with nothing reporting it. All four services now set
+   `restart: unless-stopped`; verified by bouncing Redis and watching the worker
+   restart itself. Phase 8 should add alerting on arq's health-check key, so this
+   is noticed rather than merely recovered from.
 
 ### Deferred
 
