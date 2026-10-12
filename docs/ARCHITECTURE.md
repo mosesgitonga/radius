@@ -42,7 +42,7 @@ queue. Losing Redis degrades the service; losing PostgreSQL loses data.
 app/
   main.py          application factory, middleware and router wiring
   core/            cross-cutting concerns, knows about no feature
-    config.py        settings
+    config.py        settings, including the radius table
     context.py       request-scoped context (request ID)
     db.py            engine, sessions, unit of work
     models.py        declarative base and shared mixins
@@ -51,8 +51,14 @@ app/
     middleware.py    request ID and access log
     pagination.py    cursor pagination
     ratelimit.py     Redis rate limiter
-    redis.py         Redis client
+    redis.py         Redis client and the cache-error set
+    security.py      codes, keyed hashing, access tokens
     health.py        liveness and readiness
+    providers/       external services, each behind a Protocol
+  modules/
+    auth/            phone.py, service.py, dependencies.py, router.py
+    users/           service.py (incl. the shared blocking check), tasks.py
+    location/        cells.py, radius.py, service.py, tasks.py
   modules/<name>/  one package per feature area
     models.py        SQLAlchemy models
     schemas.py       Pydantic request and response models
@@ -70,7 +76,12 @@ Three rules keep the monolith from congealing:
    "is A blocked by B?"; it does not query `blocks` itself.
 3. **Shared rules live in exactly one place.** Blocking checks, location privacy,
    and rate limits are imported, not reimplemented. A rule with two
-   implementations has one that is wrong.
+   implementations has one that is wrong. Concretely, as of Phase 1:
+   `users.service.blocked_user_ids` is the only blocking rule,
+   `location.cells.locate` is the only way coordinates become storable,
+   `location.service.area_label_for_cell` is the only way a place gets a name,
+   and `moderation.service.record_audit_event` is the only way anything is
+   audited.
 
 `core` may not import from `modules`. That is what makes it reusable and keeps
 import cycles impossible.
@@ -96,11 +107,17 @@ import cycles impossible.
 This is the part of the system worth designing carefully, because it is both the
 product's differentiator and its largest privacy risk.
 
-**Storage.** Clients send latitude and longitude. The server converts them to an
-H3 resolution-9 cell immediately and stores the cell ID (`BIGINT`, B-tree indexed)
-plus that cell's centroid as `geography(Point, 4326)` with a GiST index. Raw
-coordinates are never persisted and never logged. Coarser parent cells (res 7 and
-8) are stored where queries need to aggregate.
+**Storage.** Clients send latitude and longitude. `location.cells.locate` converts
+them to an H3 resolution-9 cell immediately and returns a `CellLocation`; nothing
+downstream can recover the input. The cell ID is stored as `BIGINT` with a B-tree
+index, alongside its centroid as `geography(Point, 4326)` with a GiST index, and
+the res 8, 7 and 6 parents that density aggregation and k-anonymity need. Raw
+coordinates are never persisted and never logged.
+
+**No location history exists.** A home change overwrites. Explore-mode locations
+live in Redis for about two hours and never reach PostgreSQL. The fourteen days of
+"was this user in their home area" that the verified badge needs is a 14-bit
+integer on the user row — a fact, not a movement profile. See decision 1.1.
 
 **The radius** is computed per res-8 cell rather than per user, so it can be
 cached and shared by everyone in that cell. A worker refreshes a `cell_activity`
@@ -110,6 +127,10 @@ the feature's target, converts the ring distance to kilometres using real H3 cel
 distances, and clamps to the feature's bounds. Results are cached in Redis per
 `(feature, cell)` with hysteresis: a cached radius is only replaced when the new
 value differs by more than 20%, so feeds do not jump about between refreshes.
+
+Only the feed radius is computed. The other four features are multiples of it,
+clamped to their own bounds, so the expensive part happens once and every feature
+widens and narrows together as an area fills up.
 
 **Querying** is then `ST_DWithin(content.geog, viewer_centroid, radius_m)`,
 answered from the GiST index.

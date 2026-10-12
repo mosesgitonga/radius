@@ -248,7 +248,7 @@ containers are not required.
 
 ## Phase 1 — Accounts, consent and location
 
-**Status:** in progress
+**Status:** complete and verified on 2026-10-12
 
 ### Plan
 
@@ -319,6 +319,133 @@ are exposed as buckets only. The privacy schema scanner from Phase 0 guards all 
   fast path back.
 - Explore days are **excluded** from the badge count, neither a yes nor a no.
 
+### Built
+
+**Authentication.** Phone OTP (6 digits, HMAC-hashed in Redis, 5-minute expiry, 5
+attempts, 60-second resend cooldown, daily caps per number and per IP, all failing
+closed). JWT access tokens (15 minutes) and rotating refresh tokens (30 days)
+stored as keyed hashes per device session, with reuse detection that revokes the
+whole token family. Logout, logout-everywhere (keeping the current device by
+default), and a sessions list. Signup takes a display name, an 18+ confirmation,
+and explicit consents.
+
+**Users.** Own profile and a public profile carrying an area label and a distance
+band. Append-only consent records with document versions. Blocking, through the
+one shared `blocked_user_ids` check every later module will use. Data export as
+JSON and a deletion request with a 30-day grace period.
+
+**Location.** `cells.py`: coordinates to H3 cells and nothing back. Home location
+with a change cooldown, area resolution, and spoof flagging. Area labels with
+k-anonymity, snapping up through res 8, 7, 6 and falling back to a generic label.
+Distance buckets. Explore mode in Redis only. `GET /v1/me/radius`.
+
+**The radius engine.** Per res-8 cell, ring expansion against precomputed density,
+ring distances from real H3 geometry, 20% hysteresis, feed-only computation with
+the other four features derived as multiples, and user distance filters capped per
+feature.
+
+**Workers.** `refresh_density` every quarter hour (and at startup), `roll_presence`
+and `run_retention` nightly at 00:20 and 00:40 UTC — after midnight in Nairobi.
+
+**Areas.** `areas` table, `scripts/seed_areas.py`, and `seeds/areas/nyeri.geojson`
+with 14 areas including DeKUT. Nothing about Nyeri is in application code.
+
+**Providers.** `SmsProvider` with a recording console implementation and an
+Africa's Talking implementation over their REST API. Tests cannot reach the
+network.
+
+**Schema.** Migrations 0002 (seven tables) and 0003, both reviewed by hand.
+
+**Endpoints:** 18 under `/v1`, bringing the total to 20.
+
+### Verified
+
+| Check | Result |
+| --- | --- |
+| `pytest` | **487 passed**, twice in succession, **89% coverage** |
+| `ruff` + `mypy` (strict, `app` + `tests` + `scripts`) | clean, 77 files |
+| Migrations on an empty database | 3 up, 3 down, 3 up again, `alembic check` clean |
+| Compose stack | all four services healthy; API migrates on start |
+| Full client flow against the live API | OTP → signup → set location → radius → explore → export → rotate → replay-detection, all as specified |
+| Area labels | "nearby" with one user in the cell; "Nyeri Town" once 40 neighbours satisfy K=10 |
+| Radius behaviour | empty 15.00 km, very sparse 11.95, rural 6.69, small town 3.19, dense estate 1.49, very dense 1.00 (floor) |
+| Hysteresis | unchanged through a 10% density rise, moves on a sixfold one |
+| Refresh reuse | replaying a consumed token revokes the family; the rotated token dies with it |
+
+### Six defects found by testing, all fixed
+
+1. **Refresh reuse detection did not persist.** The family revocation was rolled
+   back by the exception that reported it, so the replayed token was refused while
+   every other token in the family kept working — precisely the failure the
+   mechanism exists to prevent.
+2. **Account purging could never succeed.** `purge_user` wrote a 43-character
+   placeholder into a `VARCHAR(20)` column, so the nightly retention job failed on
+   its first real account. A Data Protection Act failure whose only symptom was a
+   worker log line. A purged account now holds no phone number at all.
+3. **No minimum secret-key length.** PyJWT warns that an HMAC key shorter than the
+   hash output weakens the signature, then signs anyway. Production now refuses to
+   boot below 32 bytes.
+4. **Reserved log keys crashed logging, twice.** `extra={"created": ...}` and
+   `extra={"message": ...}` both raise `KeyError` before any filter runs.
+   `safe_extra()` corrects dynamic field names; the static ones were renamed.
+5. **Redis errors were caught too narrowly.** A raw `OSError` escaping redis-py
+   would have broken a radius computation that should merely have missed its cache.
+6. **`:param::type` in raw SQL.** SQLAlchemy's `text()` parser chokes on it; the
+   presence-roll statement failed outright until rewritten with `CAST`.
+
+Two test-infrastructure fixes mattered beyond the suite: Redis isolation is now
+autouse (rate limits live only in Redis, so a test that never mentions Redis still
+depends on it being clean), and committed rows are truncated at session start
+(transaction rollback cannot undo what the area seeder committed).
+
+### Deferred
+
+With the phase that will own each; reasoning in `docs/DECISIONS.md`.
+
+- **Avatars** — Phase 2. The column exists and stays null until the media table does.
+- **Content reach estimates** — Phase 2. The density data is already in `cell_activity`.
+- **Badge computation** — Phase 8. Phase 1 records the presence bits it will read.
+- **Moderation queue, moderator roles, restrictions, ban lists** — Phase 8.
+- **Vouching** — Phase 8, as the fast path back after a home change resets the window.
+- **`Idempotency-Key`** — Phase 2, with the first create endpoint worth retrying.
+- **`ETag`** — Phase 4. The areas list is the first cheap candidate.
+
+### How to try it
+
+```bash
+cp .env.example .env
+docker compose up --build
+uv run python -m scripts.seed_areas seeds/areas/nyeri.geojson
+```
+
+Then, with `SMS_PROVIDER=console`, the code is printed in the API log:
+
+```bash
+curl -X POST localhost:8000/v1/auth/otp/request \
+  -H 'Content-Type: application/json' -d '{"phone_number":"0712345678"}'
+
+docker compose logs api | grep 'code is'
+```
+
+Verify it, sign up, and the response carries a token pair. Then:
+
+```bash
+# Coordinates go in...
+curl -X PUT localhost:8000/v1/me/location -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"latitude":-0.4201,"longitude":36.9476}'
+
+# ...an area label comes back, and never a coordinate.
+curl localhost:8000/v1/me/radius -H "Authorization: Bearer $TOKEN"
+```
+
+A single user is below K=10, so the label is `nearby`. To see a real one, create
+some synthetic neighbours and run the density refresh — `tests/factories.py` has
+the helpers, and `tests/test_radius.py` shows the pattern.
+
+Interactive docs, with examples, at <http://localhost:8000/docs>.
+
 ### Open questions
 
-_None blocking. Anything that arises goes to `docs/DECISIONS.md`._
+_None blocking. Three sub-questions raised during planning were answered with the
+recommended values and are recorded as decision 1.1 in `docs/DECISIONS.md`._
+

@@ -340,6 +340,241 @@ system would otherwise have to defend against or store:
   only *active* days, and penalising a deliberate, temporary mode would make the
   badge measure "did not travel" rather than "lives here".
 
+### 1.2 Verification does not reveal whether an account exists
+
+**Context.** `POST /v1/auth/otp/request` could usefully tell the client whether
+to show a sign-in or a sign-up screen.
+
+**Choice.** It does not. The response is byte-for-byte identical either way, and
+`verify_otp` returns either a token pair or a signup token.
+
+**Reasoning.** Anything that differed would make the endpoint an oracle for "is
+this number registered?". For a neighbourhood product that is a way to find out
+who lives in a place, which is the attack the rest of the privacy design exists to
+prevent. The client gets its answer one step later, from verification, by which
+point the caller has proved they control the number.
+
+### 1.3 Refresh tokens rotate, and reuse revokes the whole family
+
+**Context.** Rotation is safer than long-lived refresh tokens, but it creates an
+ambiguity: a client whose network drops after the server rotates and before it
+stores the new token will retry with a token the server has already consumed —
+which is indistinguishable from an attacker replaying a stolen one.
+
+**Choice.** Every session records the session it replaced and the `family_id` of
+the sign-in it descends from. A consumed token presented again revokes the entire
+family.
+
+**Alternatives.** Allowing a short replay window would make theft undetectable
+during that window. Revoking only the presented token would leave the thief's
+current token working. Revoking the family means a thief loses what they stole,
+and an honest user on bad mobile data signs in once more instead of being quietly
+shadowed by somebody holding a live token — which is the right way round.
+
+**One subtlety, found by a test.** The revocation has to be committed before the
+error is raised, because the request session rolls back on an exception. Without
+that commit the mechanism produced exactly the failure it exists to prevent.
+
+### 1.4 Access tokens name their session, and it is checked every request
+
+**Choice.** The access token carries a session ID, and `get_current_user` loads
+that session to confirm it is still live. One indexed lookup per authenticated
+request.
+
+**Reasoning.** Without it, "sign out this device" would not take effect until the
+access token expired — so a stolen phone would keep working for another fifteen
+minutes after its owner revoked it. Fifteen minutes is exactly when that matters.
+
+### 1.5 Suspended accounts keep read access
+
+**Choice.** `CurrentUser` admits suspended and deletion-pending accounts;
+`ActiveUser` is required for anything that creates or changes something.
+
+**Reasoning.** A suspension restricts what somebody may do, not whether they may
+look. Blocking sign-in outright would also stop them reading why they were
+suspended, exporting their data, or cancelling a deletion — all of which they are
+entitled to do.
+
+### 1.6 Only the feed radius is computed; the rest are multiples
+
+**Context.** Five features each have a radius.
+
+**Choice.** The density walk runs once, for the feed. Every other feature is the
+feed radius times its configured multiplier, then clamped to its own bounds.
+
+**Reasoning.** It is what the brief specifies, and it has a property worth
+keeping: every feature widens and narrows together as an area fills up, rather
+than drifting apart. It also means the expensive part happens once.
+
+The multiplier applies to the feed's *clamped* radius, because "2 × feed radius"
+means twice the radius the feed actually uses. The unclamped ring distance is kept
+alongside it purely so a result can report honestly whether a clamp was applied.
+
+### 1.7 One cache entry per cell, not per (feature, cell)
+
+**Context.** The brief says to cache per `(feature, cell)` with hysteresis.
+
+**Choice.** Cache the feed radius per cell, with hysteresis, and derive the other
+four arithmetically from the stabilised value.
+
+**Reasoning.** The outcome is identical — the derived radii are pure functions of
+the feed radius, so stabilising it stabilises all of them — with one Redis round
+trip instead of five. On an API serving mobile clients over expensive data, four
+avoided round trips per radius read is worth more than the symmetry.
+
+### 1.8 The density query is bounded by the feed maximum, not the ring cap
+
+**Choice.** The disk fetched for the ring walk reaches the feed's configured
+maximum (about 17 res-8 rings for 15 km), not `radius_max_ring_k` (40).
+
+**Reasoning.** A radius can never exceed its maximum, so counting users beyond
+that distance is work whose result is discarded. `radius_max_ring_k` stays as a
+safety bound against a sparse-data bug becoming an unbounded loop.
+
+### 1.9 Ring distances come from H3 geometry, never a constant
+
+**Choice.** `ring_distance_km` measures real centroid-to-centroid distances and
+adds half a cell diameter.
+
+**Reasoning.** The brief asks for this, and the reason is concrete: H3 cells are
+not uniform. Their size varies with latitude and with the icosahedron's
+distortion, so a hardcoded "1.2 km per ring" would be wrong by a different amount
+in Nyeri than in Nairobi — and the radius a user is shown would not match the one
+actually being queried.
+
+### 1.10 Area labels fail towards privacy
+
+**Choice.** Registered counts come from the precomputed `cell_activity` table,
+and a missing row counts as zero.
+
+**Consequence, accepted.** A freshly deployed system whose density worker has not
+yet run labels everyone generically ("nearby") rather than precisely. That is the
+safe direction to fail in: the alternative is naming a place that fewer than K
+people share. The density cron runs at startup partly to shorten that window.
+
+### 1.11 Spoofing is flagged, not refused
+
+**Choice.** An implausible jump between home locations is recorded as an audit
+event and reported in the service result, but the update succeeds. The response
+says nothing about it.
+
+**Reasoning.** The brief asks for implausible jumps to be *flagged*. Refusing
+would lock out anyone who genuinely flew between Kenyan towns while doing almost
+nothing to stop a patient attacker, who need only wait. The real control is the
+home-change cooldown. Telling the caller they were flagged would only teach them
+what to avoid next time.
+
+### 1.12 The home-change cooldown is the anti-abuse control
+
+**Choice.** An established home area can be changed about once a fortnight;
+setting one for the first time is free, and re-reporting the same cell is not a
+change.
+
+**Reasoning.** It is what stops someone hopping between neighbourhoods to spam
+each in turn, and it is cheap to enforce. A fortnight is loose enough for a DeKUT
+student moving between campus and home over the holidays, which is the case the
+launch market actually contains.
+
+### 1.13 Explore mode never reaches PostgreSQL
+
+**Choice.** The explored anchor lives in Redis with a ~2 hour TTL. Authored
+content still carries the author's home area, and other users always see the home
+area.
+
+**Reasoning.** Where somebody is *right now* is the most sensitive thing this
+system could hold. Keeping it only in an expiring cache means there is nothing to
+export, nothing to purge, no retention job, and nothing to disclose in a breach —
+a stronger guarantee than any access control over a stored column. It also means
+explore mode cannot be used to post into a neighbourhood somebody does not live
+in, which removes a whole class of abuse.
+
+### 1.14 Presence is one bit per day, recorded when a location is reported
+
+**Choice.** `home_presence_mask` is a 14-bit integer, bit 0 being today. It is
+rolled and set in the request that reports a location, and a nightly worker ages
+stale masks forward.
+
+**Reasoning.** The badge rule needs "was this user in their home area on at least
+10 of the last 14 days". Fourteen bits answers that. Fourteen stored positions
+would answer it too, and would also be a movement profile — the difference
+between holding a fact and holding a dossier.
+
+Comparison is at resolution 7, not 9: "in my home area" means the neighbourhood,
+and someone at the shops two streets away is at home in every sense that matters.
+Explore days set no bit and are therefore excluded rather than counted as absence.
+
+### 1.15 A purged account holds no phone number
+
+**Choice.** `phone_number` is nullable and set to null on purge.
+
+**Alternatives.** The first implementation wrote a `purged:<uuid>` placeholder to
+keep the unique index satisfied. It did not fit the column, so the retention job
+failed on its first real account and nothing was ever purged — a compliance
+failure whose only symptom was a worker log line. Widening the column would have
+worked; null is better. It is the honest record of an erasure, PostgreSQL permits
+many nulls in a unique index, and there is no width left to get wrong.
+
+### 1.16 Enums are check constraints, not PostgreSQL enum types
+
+**Choice.** `sa.Enum(..., native_enum=False)` renders closed sets — account
+status, consent type, revocation reason — as VARCHAR with a CHECK constraint. The
+product's *configurable* lists (post categories, group categories, service
+categories) will be plain strings with no database constraint at all.
+
+**Reasoning.** Adding a value to a native enum needs `ALTER TYPE`, which is
+awkward to reverse and historically could not run inside a transaction. A check
+constraint is an ordinary, reversible migration. And the brief requires new towns
+and categories to work from configuration and seed data alone, which a database
+enum would quietly prevent.
+
+### 1.17 Per-user rate limiting lives in the auth module
+
+**Choice.** `auth.dependencies.user_rate_limit` wraps the core limiter for
+authenticated routes, instead of using `core.ratelimit.rate_limit(scope="user")`.
+
+**Reasoning.** Dependency ordering. FastAPI resolves route-level dependencies
+before path parameters, so a limiter that read `request.state.user_id` would run
+before authentication had set it and silently fall back to counting per IP — a
+per-account limit that was quietly per-address. Depending on `CurrentUser` makes
+the order explicit rather than accidental.
+
+### 1.18 A blocked user gets 404, not 403
+
+**Choice.** `GET /v1/users/{id}` returns "not found" when either party has
+blocked the other.
+
+**Reasoning.** A distinct "you are blocked" response would let somebody confirm
+a block — and the obvious next move is to ask a friend to look instead. 404 is
+the same answer they would get for an account that never existed.
+
+### 1.19 The displayed radius is rounded
+
+**Choice.** `GET /v1/me/radius` rounds to the nearest half kilometre, and the
+neighbour estimate to the nearest ten.
+
+**Reasoning.** An exact radius is a direct read-out of how dense the caller's own
+immediate area is, and an exact count is a count of identifiable people. Both are
+information about the caller's neighbours rather than about the caller. Rounding
+also gives the app the string it actually wants to show: "Your radius: 3 km".
+
+---
+
+### Deferred from Phase 1, with the phase that will own it
+
+- **Avatars.** `users.avatar_media_id` exists and stays null until Phase 2
+  creates the media table; it becomes a foreign key then, which is a constraint
+  rather than a table rewrite.
+- **Reach estimates on content.** Phase 2, with the first posts. The density data
+  they need is already in `cell_activity`.
+- **Badge computation.** Phase 8. Phase 1 records the presence bits it will read.
+- **Moderation queue and moderator roles.** Phase 8. The audit table is here
+  because data-rights actions need auditing from the first day there is personal
+  data.
+- **Restrictions and ban lists.** Phase 8. `UserStatus` already carries
+  `suspended` and `banned`, and the dependencies enforce them.
+- **Vouching.** Phase 8, as the fast path back after a home change resets the
+  badge window.
+
 ---
 
 ### Deferred from Phase 0, with the phase that will own it
