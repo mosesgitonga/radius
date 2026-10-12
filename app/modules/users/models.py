@@ -74,10 +74,20 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "users"
 
     # -- Identity ------------------------------------------------------------
-    phone_number: Mapped[str] = mapped_column(String(20), unique=True)
+    phone_number: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True)
     """E.164, normalised on the way in. Stored in the clear and uniquely indexed
     because sign-in has to find an account from the number alone; there is no
-    second factor to look it up by. Redaction keeps it out of logs."""
+    second factor to look it up by. Redaction keeps it out of logs.
+
+    **Nullable, and null means purged.** An erased account holds no number at all,
+    which is both the honest outcome of a Data Protection Act erasure and simpler
+    than the alternative: the first implementation wrote a `purged:<uuid>`
+    tombstone to keep the unique index satisfied, which did not fit the column and
+    made the nightly retention job fail silently. PostgreSQL permits many nulls in
+    a unique index, so nothing needs to be invented to keep rows distinct.
+
+    Every live account has one. Null is unreachable through the API, because a
+    purged account cannot authenticate."""
 
     phone_verified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

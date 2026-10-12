@@ -489,15 +489,18 @@ async def export_user_data(
 async def purge_user(session: AsyncSession, *, user: User) -> None:
     """Irreversibly purge an account whose grace period has run out.
 
-    Personal fields are overwritten rather than the row deleted, because other
-    tables reference it and a cascade would take moderation evidence with it. The
-    phone number is replaced with a value that keeps the unique index satisfied
-    while being unusable for sign-in.
+    Personal fields are cleared rather than the row deleted, because other tables
+    reference it and a cascade would take moderation evidence with it.
+
+    The phone number is set to null, not to a placeholder. Null is the honest
+    record of an erasure — we no longer hold the number — and PostgreSQL allows
+    many nulls in a unique index, so nothing has to be invented to keep rows
+    distinct.
 
     The audit trail is untouched on purpose: a log that disappears with the
     account is useless for the investigations it exists for.
     """
-    user.phone_number = f"purged:{user.id}"
+    user.phone_number = None
     user.display_name = "Deleted user"
     user.phone_verified_at = None
     user.avatar_media_id = None

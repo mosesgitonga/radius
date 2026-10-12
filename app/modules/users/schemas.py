@@ -47,7 +47,12 @@ class MeOut(BaseModel):
 
     id: uuid.UUID
     display_name: str
-    phone_number: str
+    phone_number: str | None = Field(
+        description=(
+            "The caller's own number. Null only for a purged account, which "
+            "cannot sign in, so in practice this is always present."
+        )
+    )
     status: UserStatus
     member_since: datetime
 

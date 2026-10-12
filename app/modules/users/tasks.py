@@ -59,6 +59,12 @@ async def purge_deleted_accounts(
         await purge_user(session, user=user)
 
     if due:
+        # Flushed here, not left to the caller's commit. The session runs with
+        # autoflush off, so until this runs the purge exists only as pending
+        # changes on in-memory objects — and the count reported below would
+        # describe work the database has not seen.
+        await session.flush()
+
         logger.info(
             "accounts_purged",
             extra={"count": len(due), "grace_period_days": settings.deletion_grace_period_days},
