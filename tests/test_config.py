@@ -59,9 +59,37 @@ def test_production_with_proper_configuration_boots() -> None:
         sms_provider="africastalking",
         africastalking_username="myradius",
         africastalking_api_key="real-key",
+        storage_provider="s3",
+        storage_access_key_id="key",
+        storage_secret_access_key="secret",
     )
 
     assert settings.is_deployed is True
+
+
+def test_production_refuses_in_memory_storage() -> None:
+    """The memory provider loses every image when the process restarts."""
+    with pytest.raises(ValidationError, match="STORAGE_PROVIDER"):
+        _settings(
+            app_env="production",
+            secret_key="a-real-secret-of-at-least-32-bytes-length",
+            sms_provider="africastalking",
+            africastalking_username="u",
+            africastalking_api_key="k",
+            storage_provider="memory",
+        )
+
+
+def test_s3_storage_requires_credentials() -> None:
+    """Fail at boot rather than at the first upload."""
+    with pytest.raises(ValidationError, match="STORAGE_ACCESS_KEY_ID"):
+        _settings(storage_provider="s3")
+
+
+def test_a_new_account_limit_looser_than_the_established_one_is_refused() -> None:
+    """It would make the age check pointless, and it is an easy env-file mistake."""
+    with pytest.raises(ValidationError, match="NEW_ACCOUNT_POSTS_PER_DAY"):
+        _settings(new_account_posts_per_day=50, posts_per_day=30)
 
 
 def test_production_refuses_a_short_secret_key() -> None:

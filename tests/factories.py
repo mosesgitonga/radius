@@ -19,10 +19,17 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
+from app.core.providers.storage import StorageProvider
+from app.modules.feed import service as feed_service
+from app.modules.feed.models import Post
 from app.modules.location import cells
 from app.modules.location.models import Area, CellActivity
+from app.modules.media import service as media_service
+from app.modules.media.models import MediaAsset, MediaPurpose
 from app.modules.users.models import User, UserStatus
 
 # Metres per degree of latitude, and per degree of longitude at the equator.
@@ -154,6 +161,7 @@ async def make_user(
     last_active_at: datetime | None = None,
     is_verified_neighbour: bool = False,
     storage_resolution: int = 9,
+    created_days_ago: float | None = None,
 ) -> User:
     """A user, optionally with a home location already set.
 
@@ -171,6 +179,10 @@ async def make_user(
         status=status,
         is_verified_neighbour=is_verified_neighbour,
     )
+    if created_days_ago is not None:
+        # Account age drives new-account rate limits and reporter trust, so tests
+        # need to be able to say how old an account is.
+        user.created_at = now - timedelta(days=created_days_ago)
 
     if at is not None:
         location = cells.locate(at.latitude, at.longitude, storage_resolution=storage_resolution)
@@ -311,3 +323,108 @@ def phone_of(user: User) -> str:
     """
     assert user.phone_number is not None, "a live user must have a phone number"
     return user.phone_number
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: images, media, posts
+# ---------------------------------------------------------------------------
+def jpeg_with_gps(
+    *, width: int = 1600, height: int = 1200, latitude: float = -0.42, longitude: float = 36.95
+) -> bytes:
+    """A JPEG carrying the metadata a real phone photo would.
+
+    GPS coordinates, camera make and model, and a capture timestamp — everything
+    the pipeline must remove. Built here rather than checked in as a fixture file,
+    so the test states exactly what it is proving is stripped.
+    """
+    import io
+    from fractions import Fraction
+
+    from PIL import Image
+
+    def dms(value: float) -> tuple[Fraction, Fraction, Fraction]:
+        value = abs(value)
+        degrees = int(value)
+        minutes = int((value - degrees) * 60)
+        seconds = round(((value - degrees) * 60 - minutes) * 60, 2)
+        return Fraction(degrees), Fraction(minutes), Fraction(seconds).limit_denominator(100)
+
+    image = Image.new("RGB", (width, height), (120, 160, 90))
+    exif = image.getexif()
+    exif[271] = "TestCamera"
+    exif[272] = "Model X"
+    exif[306] = "2026:10:12 14:30:00"
+    gps = exif.get_ifd(34853)
+    gps[1] = "S" if latitude < 0 else "N"
+    gps[2] = dms(latitude)
+    gps[3] = "W" if longitude < 0 else "E"
+    gps[4] = dms(longitude)
+
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", exif=exif, quality=90)
+    return buffer.getvalue()
+
+
+def png_bytes(width: int = 400, height: int = 300, *, mode: str = "RGB") -> bytes:
+    import io
+
+    from PIL import Image
+
+    image = Image.new(mode, (width, height))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+async def make_ready_image(
+    session: AsyncSession,
+    storage: StorageProvider,
+    *,
+    owner: User,
+    purpose: MediaPurpose = MediaPurpose.post,
+    data: bytes | None = None,
+) -> MediaAsset:
+    """An upload taken all the way through the pipeline to `ready`.
+
+    Uses the real service functions, so a test that attaches an image to a post is
+    also exercising the path a real image takes.
+    """
+    settings = get_settings()
+    ticket = await media_service.create_upload(
+        session,
+        storage,
+        owner_id=owner.id,
+        purpose=purpose,
+        content_type="image/jpeg",
+        settings=settings,
+    )
+    assert ticket.asset.original_key is not None
+    await storage.put_object(
+        storage_key=ticket.asset.original_key,
+        data=data or jpeg_with_gps(),
+        content_type="image/jpeg",
+    )
+    asset = await media_service.mark_uploaded(session, storage, asset=ticket.asset)
+    return await media_service.process_asset(session, storage, asset=asset, settings=settings)
+
+
+async def make_post(
+    session: AsyncSession,
+    redis: Redis,
+    *,
+    author: User,
+    body: str = "Has anyone seen a brown dog near the market?",
+    category: str = "general",
+    media_ids: list[uuid.UUID] | None = None,
+) -> Post:
+    """A post, created through the real service so its location is the author's home."""
+    post, _ = await feed_service.create_post(
+        session,
+        redis,
+        author=author,
+        body=body,
+        category=category,
+        media_ids=media_ids or [],
+        settings=get_settings(),
+    )
+    return post

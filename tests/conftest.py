@@ -37,6 +37,10 @@ os.environ["LOG_ACCESS"] = "false"
 # PyJWT warn, and a suite that runs with warnings it ignores teaches nobody
 # anything.
 os.environ["SECRET_KEY"] = "test-secret-key-at-least-32-bytes-long-for-hs256"
+# Never real storage or SMS, whatever the developer's .env says: tests must not
+# reach the network, and must not write into a bucket somebody is using.
+os.environ["STORAGE_PROVIDER"] = "memory"
+os.environ["SMS_PROVIDER"] = "console"
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
@@ -52,6 +56,8 @@ from app.core import db as db_module  # noqa: E402
 from app.core import redis as redis_module  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.core.providers.sms import ConsoleSmsProvider, set_sms_provider  # noqa: E402
+from app.core.providers.storage import MemoryStorageProvider, set_storage_provider  # noqa: E402
+from app.core.queue import RecordingJobQueue, set_queue  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.modules.auth import service as auth_service  # noqa: E402
 from app.modules.users.models import User  # noqa: E402
@@ -218,19 +224,36 @@ async def redis_client(settings: Settings) -> AsyncIterator[Redis]:
 def app(settings: Settings, db_session: AsyncSession) -> Iterator[FastAPI]:
     """An application whose requests join the test's transaction.
 
-    The override mirrors the real dependency, commit included, so endpoint code
-    behaves identically — the commit lands on a savepoint and the outer
-    transaction rollback undoes it.
+    The override mirrors the real dependency — commit on success, rollback on
+    failure — scoped so that a failing request undoes only its own work, exactly
+    as a separate production request would.
     """
     application = create_app(settings)
 
     async def override_get_session() -> AsyncIterator[AsyncSession]:
+        # Commit whatever the test set up before this request, because in
+        # production anything that exists before a request arrives is already
+        # committed. Without this, every request in a test shares one uncommitted
+        # transaction, and a request that fails — a 404, say — rolls back the
+        # test's own setup with it: the user, their session row, the post under
+        # test. The next request then fails for reasons that have nothing to do
+        # with what is being tested. Committing here only releases a savepoint;
+        # the outer transaction still rolls everything back at the end.
+        await db_session.commit()
+
+        # The request's own work gets a savepoint, so a failure undoes exactly
+        # that request and nothing before it — the production behaviour, where
+        # each request has its own session.
+        request_scope = await db_session.begin_nested()
         try:
             yield db_session
         except Exception:
-            await db_session.rollback()
+            if request_scope.is_active:
+                await request_scope.rollback()
             raise
         else:
+            if request_scope.is_active:
+                await request_scope.commit()
             await db_session.commit()
 
     application.dependency_overrides[db_module.get_session] = override_get_session
@@ -315,9 +338,46 @@ async def authenticate(
     """
 
     async def _authenticate(as_user: User) -> httpx.AsyncClient:
+        # A failed request rolls back its savepoint, and SQLAlchemy expires any
+        # object that request loaded — including this user, if the request
+        # authenticated as them. Reading an expired attribute then triggers a
+        # synchronous reload, which async SQLAlchemy cannot do (MissingGreenlet).
+        # Refreshing here, asynchronously, makes switching identity after an
+        # error response safe.
+        await db_session.refresh(as_user)
         pair = await auth_service.issue_tokens(db_session, user=as_user, settings=settings)
         await db_session.flush()
         client.headers["Authorization"] = f"Bearer {pair.access_token}"
         return client
 
     return _authenticate
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: storage and the job queue
+# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def storage() -> Iterator[MemoryStorageProvider]:
+    """A fresh in-memory object store for every test.
+
+    Autouse for the same reason Redis isolation is: a test that never mentions
+    storage can still be affected by an object another test left behind, and the
+    process-wide provider singleton would otherwise carry them across tests.
+    """
+    provider = MemoryStorageProvider()
+    set_storage_provider(provider)
+    yield provider
+    set_storage_provider(None)
+
+
+@pytest.fixture(autouse=True)
+def queue() -> Iterator[RecordingJobQueue]:
+    """Records enqueued jobs instead of sending them to Redis.
+
+    Tests assert that a job was queued, then call the worker task directly — as
+    the brief asks — rather than standing up a worker mid-test.
+    """
+    recorder = RecordingJobQueue()
+    set_queue(recorder)
+    yield recorder
+    set_queue(None)
