@@ -57,6 +57,8 @@ from app.modules.location.service import (
 from app.modules.media.models import MediaPurpose
 from app.modules.media.service import claim_assets_for
 from app.modules.moderation.models import ContentStatus
+from app.modules.notifications import service as notifications_service
+from app.modules.notifications.models import NotificationType
 from app.modules.users.models import User
 from app.modules.users.service import blocked_user_ids, is_blocked_between
 
@@ -337,7 +339,48 @@ async def add_comment(
             .where(Comment.id == parent.id)
             .values(reply_count=Comment.reply_count + 1)
         )
+    await _notify_comment(session, post=post, comment=comment, parent=parent, settings=settings)
     return comment
+
+
+async def _notify_comment(
+    session: AsyncSession,
+    *,
+    post: Post,
+    comment: Comment,
+    parent: Comment | None,
+    settings: Settings,
+) -> None:
+    """A reply notifies the comment's author; any comment notifies the post's.
+
+    One notification per person: a post author replied to under their own
+    comment hears about the reply, not about a comment as well.
+    """
+    data = {"post_id": str(post.id), "comment_id": str(comment.id)}
+    if parent is not None:
+        await notifications_service.notify(
+            session,
+            recipient_id=parent.author_id,
+            kind=NotificationType.reply,
+            actor_id=comment.author_id,
+            target_type="comment",
+            target_id=parent.id,
+            collapse_key=f"reply:{parent.id}",
+            data=data,
+            settings=settings,
+        )
+    if parent is None or parent.author_id != post.author_id:
+        await notifications_service.notify(
+            session,
+            recipient_id=post.author_id,
+            kind=NotificationType.comment,
+            actor_id=comment.author_id,
+            target_type="post",
+            target_id=post.id,
+            collapse_key=f"comment:{post.id}",
+            data=data,
+            settings=settings,
+        )
 
 
 async def _visible_comment(
@@ -482,6 +525,23 @@ async def set_reaction(
         .where(target_model.id == target_id)
         .values(reaction_count=target_model.reaction_count + 1)
     )
+    # Only a new reaction notifies; changing one's reaction is not news.
+    target_name = "post" if target_model is Post else "comment"
+    target_author = await session.scalar(
+        select(target_model.author_id).where(target_model.id == target_id)
+    )
+    if target_author is not None:
+        await notifications_service.notify(
+            session,
+            recipient_id=target_author,
+            kind=NotificationType.reaction,
+            actor_id=user.id,
+            target_type=target_name,
+            target_id=target_id,
+            collapse_key=f"reaction:{target_name}:{target_id}",
+            data={f"{target_name}_id": str(target_id)},
+            settings=settings,
+        )
     return kind, await _reaction_count(session, target_model, target_id)
 
 
