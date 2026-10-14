@@ -31,11 +31,14 @@ import hashlib
 import json
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
 from fastapi import Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlalchemy import DateTime, Index, Integer, String, Uuid, delete, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
@@ -274,3 +277,63 @@ async def purge_expired(
     if removed:
         logger.info("idempotency_records_purged", extra={"count": removed})
     return removed
+
+
+async def execute_idempotently(
+    session: AsyncSession,
+    *,
+    request: Request,
+    user_id: uuid.UUID,
+    payload: Any,
+    status_code: int,
+    action: Callable[[], Awaitable[BaseModel]],
+    settings: Settings,
+) -> JSONResponse:
+    """Run a create action at most once per `Idempotency-Key`.
+
+    Without a key, the action simply runs. With one: a first request claims the
+    key, runs, and stores its response; a retry gets that stored response back
+    with an `Idempotent-Replayed: true` header and nothing is created twice.
+
+    On failure the claim is released *after* rolling back the action's work. The
+    order matters: releasing commits, and committing before the rollback would
+    persist half of whatever the failed action did.
+    """
+    endpoint = f"{request.method} {request.url.path}"
+    key = read_key(request)
+
+    if key is None:
+        result = await action()
+        return JSONResponse(result.model_dump(mode="json"), status_code=status_code)
+
+    stored = await claim(
+        session,
+        key=key,
+        user_id=user_id,
+        endpoint=endpoint,
+        payload=payload,
+        settings=settings,
+    )
+    if stored is not None:
+        return JSONResponse(
+            stored.body,
+            status_code=stored.status_code,
+            headers={"Idempotent-Replayed": "true"},
+        )
+
+    try:
+        result = await action()
+        body = result.model_dump(mode="json")
+        await complete(
+            session,
+            key=key,
+            user_id=user_id,
+            endpoint=endpoint,
+            status_code=status_code,
+            body=body,
+        )
+    except Exception:
+        await session.rollback()
+        await release(session, key=key, user_id=user_id, endpoint=endpoint)
+        raise
+    return JSONResponse(body, status_code=status_code)

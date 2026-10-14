@@ -17,7 +17,7 @@ table in the system:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, MetaData, Uuid, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -48,15 +48,33 @@ class UUIDPrimaryKeyMixin:
     )
 
 
-class TimestampMixin:
-    """Creation and last-update timestamps, both maintained by the database.
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
 
-    `server_default` and `onupdate` are used rather than Python defaults so that
-    rows written by migrations, seed scripts, or raw SQL are stamped correctly too.
+
+class TimestampMixin:
+    """Creation and last-update timestamps.
+
+    `created_at` has **both** a Python default and a server default, on purpose.
+    PostgreSQL's `now()` is the time the *transaction* started, not the time of
+    the statement, so every row inserted in one transaction gets an identical
+    timestamp. Newest-first ordering then falls back to the random-UUID tiebreaker
+    and those rows come out in arbitrary order. Production requests are one
+    transaction each, but seed scripts, imports, and Phase 8's half-million-post
+    load are not — and a feed whose order depends on how the data was loaded is a
+    feed nobody can reason about.
+
+    The Python default gives each ORM insert its own wall-clock time. The server
+    default stays so raw SQL and migrations still stamp rows. Found by
+    `test_the_feed_is_newest_first`, which created three posts in one transaction.
     """
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False, sort_order=100
+        DateTime(timezone=True),
+        default=_utc_now,
+        server_default=func.now(),
+        nullable=False,
+        sort_order=100,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
