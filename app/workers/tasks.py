@@ -17,11 +17,13 @@ from __future__ import annotations
 import functools
 import logging
 import uuid
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any, Concatenate, cast
 
 from arq.typing import WorkerCoroutine
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.context import new_request_id, reset_request_id, set_request_id
@@ -77,6 +79,25 @@ def with_job_context[**P, R](
     return wrapper
 
 
+@asynccontextmanager
+async def task_session(ctx: JobContext) -> AsyncIterator[AsyncSession]:
+    """The session a task works in.
+
+    In production, a fresh unit of work per job. A test may put its own session in
+    `ctx["session"]`, so it can run the real task against data inside the test's
+    transaction — which a separate connection could never see — instead of
+    bypassing the task and calling the service underneath. The task code under
+    test is then the task code that runs.
+    """
+    provided = ctx.get("session")
+    if isinstance(provided, AsyncSession):
+        yield provided
+        await provided.flush()
+        return
+    async with session_scope() as session:
+        yield session
+
+
 @with_job_context
 async def heartbeat(ctx: JobContext) -> str:
     """Prove the worker is alive and its schedule fires.
@@ -99,7 +120,7 @@ async def refresh_density(ctx: JobContext) -> dict[str, int]:
     Phase 8 alerts on the table's staleness rather than only on job failures.
     """
     settings = get_settings()
-    async with session_scope() as session:
+    async with task_session(ctx) as session:
         result = await refresh_cell_activity(session, settings=settings)
     return {
         "cells_updated": result.cells_updated,
@@ -110,7 +131,7 @@ async def refresh_density(ctx: JobContext) -> dict[str, int]:
 @with_job_context
 async def roll_presence(ctx: JobContext) -> dict[str, int]:
     """Age home-presence masks forward for accounts that missed a day."""
-    async with session_scope() as session:
+    async with task_session(ctx) as session:
         rolled = await roll_home_presence(session)
     return {"users_updated": rolled}
 
@@ -124,7 +145,7 @@ async def run_retention(ctx: JobContext) -> dict[str, int]:
     """
     settings = get_settings()
     storage = get_storage_provider()
-    async with session_scope() as session:
+    async with task_session(ctx) as session:
         purged = await purge_deleted_accounts(session, settings=settings, storage=storage)
         sessions_removed = await delete_expired_sessions(session)
         uploads_swept = await media_service.sweep_abandoned_uploads(
@@ -148,7 +169,7 @@ async def process_media(ctx: JobContext, media_id: str) -> str:
     """
     settings = get_settings()
     storage = get_storage_provider()
-    async with session_scope() as session:
+    async with task_session(ctx) as session:
         asset = await media_service.get_asset(session, uuid.UUID(media_id))
         if asset is None:
             logger.warning("process_media_missing_asset", extra={"media_id": media_id})
@@ -172,7 +193,7 @@ async def catch_up_media(ctx: JobContext) -> dict[str, int]:
     settings = get_settings()
     storage = get_storage_provider()
     processed = 0
-    async with session_scope() as session:
+    async with task_session(ctx) as session:
         stuck = await media_service.assets_awaiting_processing(
             session, older_than=timedelta(minutes=2)
         )
@@ -186,7 +207,7 @@ async def catch_up_media(ctx: JobContext) -> dict[str, int]:
 async def expire_old_stories(ctx: JobContext) -> dict[str, int]:
     """Delete stories past their 24 hours, and their images."""
     storage = get_storage_provider()
-    async with session_scope() as session:
+    async with task_session(ctx) as session:
         result = await expire_stories(session, storage)
     return {"deleted": result.deleted, "held_for_review": result.held_for_review}
 
