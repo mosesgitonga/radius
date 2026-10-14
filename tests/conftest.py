@@ -220,15 +220,13 @@ async def redis_client(settings: Settings) -> AsyncIterator[Redis]:
 # ---------------------------------------------------------------------------
 # Application
 # ---------------------------------------------------------------------------
-@pytest.fixture
-def app(settings: Settings, db_session: AsyncSession) -> Iterator[FastAPI]:
-    """An application whose requests join the test's transaction.
+def _install_session_override(application: FastAPI, db_session: AsyncSession) -> None:
+    """Route the application's database dependency to the test's session.
 
     The override mirrors the real dependency — commit on success, rollback on
     failure — scoped so that a failing request undoes only its own work, exactly
     as a separate production request would.
     """
-    application = create_app(settings)
 
     async def override_get_session() -> AsyncIterator[AsyncSession]:
         # Commit whatever the test set up before this request, because in
@@ -257,6 +255,43 @@ def app(settings: Settings, db_session: AsyncSession) -> Iterator[FastAPI]:
             await db_session.commit()
 
     application.dependency_overrides[db_module.get_session] = override_get_session
+
+
+@pytest.fixture(scope="session")
+def shared_app(settings: Settings) -> FastAPI:
+    """One application for the whole session.
+
+    Building the app is not free: FastAPI constructs a pydantic adapter for every
+    route parameter and response model at include time, about 150 ms for this
+    API. Built per test, that was over a minute and a half of a four-and-a-half
+    minute run, spent rebuilding an identical object 643 times.
+    """
+    return create_app(settings)
+
+
+@pytest.fixture
+def app(shared_app: FastAPI, db_session: AsyncSession) -> Iterator[FastAPI]:
+    """The shared application, wired to this test's transaction.
+
+    Do not add routes to it: they would persist into every later test. A test that
+    needs to mount its own routes takes `fresh_app` instead.
+    """
+    _install_session_override(shared_app, db_session)
+    yield shared_app
+    shared_app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def fresh_app(settings: Settings, db_session: AsyncSession) -> Iterator[FastAPI]:
+    """A private application, for tests that mount routes of their own.
+
+    The error-envelope tests mount failing routes, and the privacy tests mount
+    deliberately leaky ones to prove the scanner catches them. On the shared app
+    those would leak — a leaky route left behind would make the real privacy scan
+    fail in whichever test happened to run next.
+    """
+    application = create_app(settings)
+    _install_session_override(application, db_session)
     yield application
     application.dependency_overrides.clear()
 

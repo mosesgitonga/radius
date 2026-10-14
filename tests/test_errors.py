@@ -34,7 +34,8 @@ class _Point(BaseModel):
 
 
 @pytest.fixture
-def error_routes(app: FastAPI) -> FastAPI:
+def error_routes(fresh_app: FastAPI) -> FastAPI:
+    app = fresh_app
     """Routes that raise each kind of failure, mounted on the test application."""
 
     @app.get("/v1/test/not-found")

@@ -151,9 +151,10 @@ def test_the_scan_actually_inspects_something(app: FastAPI) -> None:
     assert any(values for values in fields.values())
 
 
-def test_the_scan_catches_a_violation(app: FastAPI) -> None:
+def test_the_scan_catches_a_violation(fresh_app: FastAPI) -> None:
     """Proves the check can fail. A privacy test nobody has seen fail is a
     privacy test nobody should trust."""
+    app = fresh_app
 
     class LeakyNeighbour(BaseModel):
         display_name: str
@@ -176,9 +177,10 @@ def test_the_scan_catches_a_violation(app: FastAPI) -> None:
     assert leaked == {"latitude", "longitude"}
 
 
-def test_nested_response_models_are_inspected(app: FastAPI) -> None:
+def test_nested_response_models_are_inspected(fresh_app: FastAPI) -> None:
     """Most leaks will arrive nested — an author summary inside a post, say —
     not as a top-level field."""
+    app = fresh_app
 
     class Inner(BaseModel):
         centroid: str
