@@ -22,6 +22,8 @@ from app.modules.auth import service as auth_service
 from app.modules.auth.models import DeviceSession
 from app.modules.feed import service as feed_service
 from app.modules.media import service as media_service
+from app.modules.messaging import service as messaging_service
+from app.modules.notifications import service as notifications_service
 from app.modules.users.models import User
 from app.modules.users.service import purge_user
 
@@ -73,6 +75,10 @@ async def purge_deleted_accounts(
     for user in due:
         await auth_service.revoke_sessions_for_deleted_account(session, user_id=user.id)
         await feed_service.purge_author_content(session, user_id=user.id)
+        # Messages before media: the media purge strips every image the account
+        # uploaded, message images included, so messaging only clears text here.
+        await messaging_service.purge_user_messages(session, None, user_id=user.id)
+        await notifications_service.purge_user_notifications(session, user_id=user.id)
         if storage is not None:
             await media_service.purge_owner_media(session, storage, owner_id=user.id)
         await purge_user(session, user=user)

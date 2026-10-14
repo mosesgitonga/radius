@@ -24,6 +24,8 @@ from app.modules.location import service as location_service
 from app.modules.media import service as media_service
 from app.modules.media.schemas import ImageVariantOut
 from app.modules.media.views import image_variants
+from app.modules.messaging import service as messaging_service
+from app.modules.notifications import service as notifications_service
 from app.modules.users import service as users_service
 from app.modules.users.models import Block, User
 from app.modules.users.schemas import (
@@ -317,9 +319,16 @@ async def export_my_data(
     # service cannot do it itself, because the feed imports the users service.
     export["content"] = await feed_service.export_author_content(session, user_id=user.id)
     export["media"] = await media_service.export_owner_media(session, owner_id=user.id)
+    export["messaging"] = await messaging_service.export_user_messages(session, user_id=user.id)
+    export["notifications"] = await notifications_service.export_user_notifications(
+        session, user_id=user.id
+    )
     export["not_held"] = [
         item for item in export["not_held"] if item != "message content (no messaging yet)"
-    ] + ["image metadata (EXIF, including GPS, is removed from every upload)"]
+    ] + [
+        "image metadata (EXIF, including GPS, is removed from every upload)",
+        "who you were online with, or when: presence is held in memory for a minute",
+    ]
     return export
 
 

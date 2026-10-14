@@ -8,8 +8,7 @@ Each task here is a thin wrapper: it opens a session and calls the module that
 owns the work. The scheduling lives in `app/workers/settings.py`, the logic lives
 with the models it touches, and this file is only the seam between them.
 
-Later phases add: push fan-out (Phase 3), event reminders (Phase 7), and badge
-recomputation (Phase 8).
+Later phases add event reminders (Phase 7) and badge recomputation (Phase 8).
 """
 
 from __future__ import annotations
@@ -29,10 +28,15 @@ from app.core.config import get_settings
 from app.core.context import new_request_id, reset_request_id, set_request_id
 from app.core.db import session_scope
 from app.core.idempotency import purge_expired as purge_idempotency_records
+from app.core.providers.push import get_push_provider
 from app.core.providers.storage import get_storage_provider
+from app.core.redis import get_redis
 from app.modules.feed.tasks import expire_stories
 from app.modules.location.tasks import refresh_cell_activity, roll_home_presence
 from app.modules.media import service as media_service
+from app.modules.messaging import service as messaging_service
+from app.modules.notifications import service as notifications_service
+from app.modules.notifications.models import NotificationType
 from app.modules.users.tasks import delete_expired_sessions, purge_deleted_accounts
 
 logger = logging.getLogger(__name__)
@@ -152,11 +156,19 @@ async def run_retention(ctx: JobContext) -> dict[str, int]:
             session, storage, settings=settings
         )
         idempotency_purged = await purge_idempotency_records(session, settings=settings)
+        notifications_purged = await notifications_service.purge_old_notifications(
+            session, settings=settings
+        )
+        tokens_removed = await notifications_service.delete_stale_device_tokens(
+            session, settings=settings
+        )
     return {
         "accounts_purged": purged.accounts_purged,
         "expired_sessions_deleted": sessions_removed,
         "abandoned_uploads_swept": uploads_swept,
         "idempotency_records_purged": idempotency_purged,
+        "notifications_purged": notifications_purged,
+        "stale_device_tokens_deleted": tokens_removed,
     }
 
 
@@ -210,6 +222,52 @@ async def expire_old_stories(ctx: JobContext) -> dict[str, int]:
     async with task_session(ctx) as session:
         result = await expire_stories(session, storage)
     return {"deleted": result.deleted, "held_for_review": result.held_for_review}
+
+
+@with_job_context
+async def deliver_message_push(ctx: JobContext, message_id: str) -> dict[str, int]:
+    """Push a new message to the members who are not connected.
+
+    Enqueued after the message commits. Presence is checked here, at delivery,
+    not when the message was sent: someone who opened the app in between has
+    already seen it.
+    """
+    settings = get_settings()
+    async with task_session(ctx) as session:
+        return await messaging_service.deliver_message_push(
+            session,
+            get_redis(),
+            get_push_provider(),
+            message_id=uuid.UUID(message_id),
+            settings=settings,
+        )
+
+
+@with_job_context
+async def deliver_notification_push(
+    ctx: JobContext,
+    recipient_id: str,
+    kind: str,
+    actor_id: str,
+    collapse_key: str,
+    data: dict[str, str],
+) -> str:
+    """Push one activity notification — a comment, reply, reaction, request or
+    invitation. Returns why it was or was not sent, which arq keeps for an hour."""
+    settings = get_settings()
+    async with task_session(ctx) as session:
+        outcome = await notifications_service.deliver_notification_push(
+            session,
+            get_redis(),
+            get_push_provider(),
+            recipient_id=uuid.UUID(recipient_id),
+            kind=NotificationType(kind),
+            actor_id=uuid.UUID(actor_id),
+            collapse_key=collapse_key,
+            data=data,
+            settings=settings,
+        )
+    return outcome.reason
 
 
 def as_worker_task(func: Callable[..., Coroutine[Any, Any, Any]]) -> WorkerCoroutine:

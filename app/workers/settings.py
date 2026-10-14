@@ -26,6 +26,8 @@ from app.core.redis import close_redis
 from app.workers.tasks import (
     as_worker_task,
     catch_up_media,
+    deliver_message_push,
+    deliver_notification_push,
     expire_old_stories,
     heartbeat,
     process_media,
@@ -59,6 +61,8 @@ class WorkerSettings:
         as_worker_task(process_media),
         as_worker_task(catch_up_media),
         as_worker_task(expire_old_stories),
+        as_worker_task(deliver_message_push),
+        as_worker_task(deliver_notification_push),
     ]
 
     cron_jobs: ClassVar[list[CronJob]] = [
