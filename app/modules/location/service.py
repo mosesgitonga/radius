@@ -41,8 +41,8 @@ from app.core.redis import CACHE_ERRORS
 from app.modules.location import cells
 from app.modules.location.cells import CellLocation, InvalidCoordinatesError
 from app.modules.location.models import Area, CellActivity
+from app.modules.moderation.audit import record_audit_event
 from app.modules.moderation.models import AuditAction
-from app.modules.moderation.service import record_audit_event
 from app.modules.users.models import HOME_PRESENCE_WINDOW_DAYS, User
 
 logger = logging.getLogger(__name__)
@@ -546,3 +546,71 @@ def record_home_presence(
 def presence_days_recorded(mask: int) -> int:
     """How many of the recorded days were spent in the home area."""
     return bin(mask).count("1")
+
+
+@dataclass(frozen=True, slots=True)
+class Anchor:
+    """Where a query is measured from: the cells, and the WKT of the centre.
+
+    The res-9 cell gives the point `ST_DWithin` measures from; the res-8 cell is
+    what the radius engine and the distance buckets use. Both come from the same
+    place so they cannot disagree.
+    """
+
+    mode: AnchorMode
+    cell_res9: int
+    cell_res8: int
+
+    @property
+    def centroid_wkt(self) -> str:
+        latitude, longitude = cells.cell_centroid(self.cell_res9)
+        return f"SRID=4326;POINT({longitude} {latitude})"
+
+
+async def resolve_anchor(redis: Redis, *, user: User, mode: AnchorMode = "home") -> Anchor | None:
+    """The full anchor for a query, or None if the user has no location at all.
+
+    Explore mode falls back to home when its session has expired, which is what a
+    user expects after leaving the app for an afternoon.
+    """
+    if mode == "explore":
+        explored = await get_explore(redis, user_id=user.id)
+        if explored is not None:
+            return Anchor(
+                mode="explore",
+                cell_res9=explored.cell_res9,
+                cell_res8=explored.cell_res8,
+            )
+    if user.home_cell_res9 is None or user.home_cell_res8 is None:
+        return None
+    return Anchor(mode="home", cell_res9=user.home_cell_res9, cell_res8=user.home_cell_res8)
+
+
+async def is_exploring(redis: Redis, *, user_id: uuid.UUID) -> bool:
+    return await get_explore(redis, user_id=user_id) is not None
+
+
+def home_location_columns(user: User) -> dict[str, object] | None:
+    """The location columns for content authored by this user.
+
+    Always the **home** area, even while exploring — decision 1.1, rule 1. That is
+    what stops someone dropping posts into a neighbourhood they do not live in.
+    Derived from the stored cells rather than copied from the user's centroid
+    column, so it is identical whether or not the user row was just loaded.
+    """
+    if (
+        user.home_cell_res9 is None
+        or user.home_cell_res8 is None
+        or user.home_cell_res7 is None
+        or user.home_cell_res6 is None
+    ):
+        return None
+    latitude, longitude = cells.cell_centroid(user.home_cell_res9)
+    return {
+        "cell_res9": user.home_cell_res9,
+        "cell_res8": user.home_cell_res8,
+        "cell_res7": user.home_cell_res7,
+        "cell_res6": user.home_cell_res6,
+        "centroid": f"SRID=4326;POINT({longitude} {latitude})",
+        "area_id": user.home_area_id,
+    }

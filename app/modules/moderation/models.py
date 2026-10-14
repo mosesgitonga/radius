@@ -85,6 +85,8 @@ class AuditAction(StrEnum):
     # Safety
     user_blocked = "user_blocked"
     user_unblocked = "user_unblocked"
+    report_submitted = "report_submitted"
+    content_auto_hidden = "content_auto_hidden"
 
 
 _actor_type = Enum(AuditActorType, name="audit_actor_type", native_enum=False, length=20)

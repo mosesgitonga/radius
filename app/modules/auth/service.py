@@ -52,8 +52,8 @@ from app.core.security import (
     verify_secret,
 )
 from app.modules.auth.models import DeviceSession, SessionRevocationReason
+from app.modules.moderation.audit import record_audit_event
 from app.modules.moderation.models import AuditAction
-from app.modules.moderation.service import record_audit_event
 from app.modules.users.models import User, UserStatus
 from app.modules.users.service import touch_last_active
 

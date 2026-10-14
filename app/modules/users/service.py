@@ -27,8 +27,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import BadRequestError, ConflictError, NotFoundError
+from app.modules.moderation.audit import record_audit_event
 from app.modules.moderation.models import AuditAction, AuditActorType
-from app.modules.moderation.service import record_audit_event
 from app.modules.users.models import (
     Block,
     Consent,
