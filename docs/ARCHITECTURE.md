@@ -21,11 +21,13 @@ rewrite.
                     │  api (FastAPI)    │   Gunicorn + Uvicorn workers
                     └───┬───────────┬───┘
                         │           │
-          ┌─────────────▼──┐   ┌────▼──────────────────────┐
-          │ PostgreSQL 16  │   │ Redis                     │
-          │ PostGIS 3      │   │ cache, rate limits, OTPs, │
-          │ pg_trgm        │   │ pub/sub, arq queue        │
-          └─────────────▲──┘   └────▲──────────────────────┘
+          ┌─────────────▼──┐   ┌────▼──────────────────────┐   ┌──────────────┐
+          │ PostgreSQL 16  │   │ Redis                     │   │ Object store │
+          │ PostGIS 3      │   │ cache, rate limits, OTPs, │   │ R2 (prod)    │
+          │ pg_trgm        │   │ pub/sub, arq queue        │   │ SeaweedFS    │
+          └─────────────▲──┘   └────▲──────────────────────┘   │ (dev)        │
+                                                                └──────▲───────┘
+                  phones upload images straight to the object store ───┘
                         │           │
                     ┌───┴───────────┴───┐
                     │ worker (arq)      │   schedules and queued jobs
@@ -80,8 +82,10 @@ Three rules keep the monolith from congealing:
    `users.service.blocked_user_ids` is the only blocking rule,
    `location.cells.locate` is the only way coordinates become storable,
    `location.service.area_label_for_cell` is the only way a place gets a name,
-   and `moderation.service.record_audit_event` is the only way anything is
-   audited.
+   `moderation.audit.record_audit_event` is the only way anything is audited,
+   `media.images.process_image` is the only way an image becomes servable, and
+   `feed.service.visible_to` is the only definition of who may see moderated
+   content.
 
 `core` may not import from `modules`. That is what makes it reusable and keeps
 import cycles impossible.
@@ -144,6 +148,18 @@ run and fails if one appears. Positions reach clients as an **area label**
 `10km_plus`). Buckets rather than exact distances specifically to defeat
 trilateration: an attacker who can spoof their own location and read exact
 distances can locate someone's home in three requests.
+
+## Media
+
+Images never pass through the API. A client asks for a presigned PUT, uploads
+directly to storage, and confirms; the worker then fetches the original, validates
+it from its magic bytes, re-encodes it to WebP at 320, 720 and 1280 px from decoded
+pixels — which is what guarantees no EXIF survives — stores the variants, and
+deletes the original. Only processed variants are ever addressable.
+
+Two safety nets keep this from leaving users stranded: enqueueing is best-effort,
+with a five-minute catch-up sweep for lost jobs, and abandoned uploads are swept
+after a day.
 
 ## Scaling, when it is needed
 

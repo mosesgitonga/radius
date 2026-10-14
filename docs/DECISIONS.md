@@ -590,3 +590,242 @@ also gives the app the string it actually wants to show: "Your radius: 3 km".
   Phase 4's group metadata and Phase 1's area list are the first candidates.
 - **Production deployment notes, backups, metrics, and error tracking.** Phase 8,
   per the brief.
+
+---
+
+## Phase 2 — Media and neighbourhood feed
+
+### 2.1 Clients upload directly to storage; the API never handles image bytes
+
+**Choice.** `POST /v1/media/uploads` returns a presigned PUT. The client uploads
+straight to storage, then calls `/complete`; the worker fetches the bytes from
+storage to process them.
+
+**Reasoning.** A 12 MB photo on a slow Kenyan connection can take a minute, and a
+minute of a Uvicorn worker is a minute nobody else gets served. The cost is that a
+client can abandon an upload between presign and confirm, which the sweeper
+handles — cheaper than any scheme to prevent it.
+
+### 2.2 Images are re-encoded, not edited, and the original is deleted
+
+**Choice.** Processing decodes the pixels and writes new WebP files. The EXIF
+orientation is applied first, then everything is discarded. The original is
+deleted once every variant is stored.
+
+**Alternatives.** Stripping EXIF tags in place is fragile: metadata also lives in
+XMP, IPTC, maker notes and ICC profiles, and an editor that removes the tags it
+knows about leaves the ones it does not. Writing a new file from pixels is the only
+approach where nothing can come along by accident. Verified with a photo carrying
+four GPS tags, a camera make and a timestamp: none of it reaches any served byte,
+and no original remains in the bucket.
+
+### 2.3 The real content type comes from magic bytes
+
+**Choice.** The declared type is recorded as a claim; the type that counts is
+detected from the file. Pixel count is checked from the header before decoding,
+and `verify()` runs before `load()`. SVG, GIF and TIFF are refused.
+
+**Reasoning.** SVG is a document that can carry script. TIFF is large and a
+historic source of decoder bugs. An animated GIF avatar is a feature nobody asked
+for and a decoder surface nobody wants. A decompression bomb — a few kilobytes
+expanding into gigabytes — is caught from its dimensions before any allocation.
+
+### 2.4 Posts carry their own location, taken from the author's home
+
+**Choice.** Each post stores the author's home cells and centroid at posting time.
+
+**Reasoning.** It makes the feed one `ST_DWithin` on one GiST index rather than a
+join against the users table, which changes constantly. And it keeps a post where
+it was made: a user who moves does not drag two years of posts into a
+neighbourhood that never saw them.
+
+### 2.5 Reach is estimated from the post's own cell radius
+
+**Context.** The brief defines reach as the active users in every cell whose own
+radius covers the post, and allows an approximation.
+
+**Choice.** Sum the active users within the post's *own* cell's feed radius.
+
+**Reasoning.** Radius tracks density and density varies smoothly over a few
+kilometres, so neighbouring cells have radii close to the post's — the exact answer
+and the approximation agree closely. The exact version would need a radius per
+surrounding cell; this one costs one cached radius and one indexed read. Rounded to
+the nearest ten, because an exact figure is a headcount of who lives nearby.
+
+### 2.6 Counters change in SQL; concurrent inserts use savepoints
+
+**Choice.** `UPDATE ... SET count = count + 1`, never read-modify-write. Reactions,
+story views and reports insert inside `begin_nested()`, and an integrity error from
+the unique index is treated as "already done".
+
+**Reasoning.** Two neighbours reacting at once would otherwise both read 4 and both
+write 5. And a double tap on a laggy connection is ordinary, not exceptional — it
+should produce one row, not an error.
+
+### 2.7 Every refusal to read is a 404
+
+**Choice.** Blocked, hidden, removed, deleted and nonexistent all return the same
+"not found".
+
+**Reasoning.** A distinct answer for "blocked" would confirm a block, and one for
+"hidden" would tell a reporter their report worked — both are information the
+caller has no business having.
+
+### 2.8 Hidden content stays visible to its author
+
+**Choice.** Content hidden pending review is invisible to everyone except its
+author, who sees it with `status: hidden_pending_review`.
+
+**Reasoning.** Being made invisible without being told is worse than being told, and
+the author is the one person for whom seeing it cannot amplify whatever got it
+reported.
+
+### 2.9 Auto-hide needs distinct, trusted reporters — and never applies to people
+
+**Choice.** Content is hidden after `REPORT_AUTO_HIDE_THRESHOLD` reports from
+distinct trusted reporters. Trusted, until Phase 8's badge exists, means: at least
+7 days old, phone verified, active, and nothing upheld against them. A verified
+neighbour is trusted outright. Reports against *users* never auto-act.
+
+**Reasoning.** Each word closes an abuse. *Distinct* stops one person silencing a
+neighbour by reporting repeatedly; *trusted* stops a burst of fresh accounts doing
+the same. Untrusted reports still reach the queue for a human. People are excluded
+because auto-suspending a person on three reports hands a coordinated group a way
+to silence someone, whereas hiding a post is narrow and reversible.
+
+### 2.10 Reports target a type and a UUID; reactions use real foreign keys
+
+**Choice.** Opposite designs in the same phase.
+
+**Reasoning.** Reactions have two targets, and a reaction must not outlive its post,
+so real referential integrity is worth more than openness. Reports already foresee
+nine target types across the phases, and must *outlive* what they concern — a
+report about a purged post is still the record of why something happened.
+
+### 2.11 Idempotency lives in PostgreSQL, in `core`
+
+**Choice.** `Idempotency-Key` is supported on post, comment and story creation. The
+claim is an INSERT against a unique index on `(user_id, endpoint, key)`, committed
+before the work runs; the response is stored and replayed with
+`Idempotent-Replayed: true`. A reused key with a different body is a 422. A failed
+action's claim is released after rolling back.
+
+**Alternatives.** Redis would be faster, but a flushed Redis would let a replay
+create a second post — precisely what this exists to prevent. The stored response
+has to be as durable as what it describes. Keys are scoped per user and endpoint so
+one client cannot collide with, or probe for, another's.
+
+### 2.12 Enqueueing is best-effort, backed by a catch-up sweep
+
+**Choice.** If Redis is unavailable, `/complete` still succeeds and the asset waits
+in `processing`; `catch_up_media` runs every five minutes and processes anything
+stuck for more than two.
+
+**Reasoning.** A user's upload should not fail because the queue blinked, and a job
+that never runs is prevented by the sweep rather than by refusing the request.
+
+### 2.13 Expired stories are deleted, not hidden — unless reported
+
+**Choice.** `expire_old_stories` hard-deletes stories past their 24 hours, and their
+stored images. A story under a pending report is kept until it is reviewed. Reads
+also filter on expiry, because the sweep is not instant.
+
+**Reasoning.** "Gone in a day" is a promise about data, not about visibility. But
+deleting on schedule would destroy the evidence for exactly the stories most likely
+to need it.
+
+### 2.14 A post's author may delete comments under it
+
+**Choice.** A comment can be deleted by its own author or by the author of the post
+it is on.
+
+**Reasoning.** A neighbour asking about a lost child or a burst pipe should be able
+to clear abuse from beneath their own post without waiting for a moderator.
+
+### 2.15 New accounts get tighter limits, on a shared counter
+
+**Choice.** Below `NEW_ACCOUNT_AGE_HOURS` (48), an account gets 5 posts a day, 10
+comments an hour, 3 stories a day; established accounts get 30, 60 and 10. Both
+tiers count against one bucket. A config where the new-account limit exceeds the
+established one is refused at boot.
+
+**Reasoning.** A throwaway account is the cheapest spam vector there is, and age is
+the one signal that cannot be faked without waiting. One counter means crossing the
+threshold mid-window does not hand out a fresh allowance.
+
+### 2.16 The feed response carries a `sort` field with one value
+
+**Choice.** `FeedOut.sort` is always `"recent"` today.
+
+**Reasoning.** The brief asks for ranking to be addable without changing the API.
+A field the client already reads is how that happens; the query side only needs a
+different ordering and cursor key.
+
+### 2.17 SeaweedFS for development storage
+
+**Context.** The plan said MinIO. `minio/minio` no longer pulls from Docker Hub —
+MinIO stopped publishing community images in 2025 — and `quay.io/minio/minio` is
+also unavailable.
+
+**Choice.** SeaweedFS, which is Apache-licensed and speaks S3 with SigV4
+presigning. Production uses Cloudflare R2; the application code is identical.
+
+**Alternatives.** LocalStack also pulled, but is 1.6 GB against SeaweedFS's 724 MB
+and has had licensing changes of its own. Running storage only in memory locally
+would have left the presigned-upload flow unexercised until production.
+
+**Consequence.** Presigning needs its own endpoint setting
+(`STORAGE_PRESIGN_ENDPOINT_URL`). Inside Docker the API reaches storage as
+`storage:8333`, which no phone can resolve, and the host is part of a SigV4
+signature, so a URL cannot be rewritten after signing.
+
+### 2.18 The audit writer is its own module
+
+**Choice.** `record_audit_event` moved from `moderation/service.py` to
+`moderation/audit.py`, which imports only `core` and the model.
+
+**Reasoning.** Every module audits. When reports needed the users service, the old
+location made `users.service → moderation.service → users.service` a cycle. A
+module everyone imports must import nothing that imports it back.
+
+### 2.19 `created_at` has a Python default as well as a server default
+
+**Choice.** `TimestampMixin.created_at` gets `default=datetime.now(UTC)` alongside
+`server_default=now()`.
+
+**Reasoning.** PostgreSQL's `now()` is the time the *transaction* started, so every
+row inserted in one transaction shares a timestamp and newest-first falls back to
+the random UUID tiebreaker. Requests are one transaction each, but seed scripts,
+imports, and Phase 8's half-million-post load are not. No migration was needed: the
+server default is unchanged and still stamps raw SQL.
+
+### 2.20 Each module exports and purges its own data; the router and task assemble
+
+**Choice.** `feed.service.export_author_content`, `media.service.export_owner_media`,
+`feed.service.purge_author_content` and `media.service.purge_owner_media` each own
+their module's data. The export endpoint and the purge task call all of them.
+
+**Reasoning.** The users service cannot do it itself — the feed imports it — and the
+data-map rule is that a phase adding personal data extends export and erasure in the
+same change. This shape makes that one new function per module.
+
+---
+
+### Deferred from Phase 2, with the phase that will own it
+
+- **Feed ranking.** The `sort` field and query shape are ready; Phase 8's
+  performance work is the natural time, with real engagement data.
+- **Notifications for comments, replies and reactions.** Phase 3, as the brief
+  specifies.
+- **The moderation queue and actions.** Phase 8. Reports are filed, prioritised and
+  auto-hide works; nobody can yet resolve one.
+- **Hard purge of soft-deleted content.** Phase 8's retention job, with the 90-day
+  window in the data map.
+- **A CDN for images.** `STORAGE_PUBLIC_BASE_URL` is supported; until it is set,
+  images are served by presigned GET, which works but defeats caching.
+- **HEIC/HEIF.** Refused at presign. Pillow cannot decode it without the
+  `pillow-heif` plugin, which is not in the agreed dependencies. An earlier draft
+  accepted it at presign, so the user paid to upload a file that was then rejected
+  as "could not be read"; refusing up front lets the client convert first. Android
+  cameras produce JPEG; iPhones default to HEIC, so this matters for iOS. **Open
+  question** — see the Phase 2 summary.

@@ -151,13 +151,108 @@ nothing at rest to export.
 
 ---
 
+## Phase 2 — Media and neighbourhood feed
+
+### Object storage
+
+| What | Why | Retention | Notes |
+| --- | --- | --- | --- |
+| Processed WebP variants | Serving images | Until the content is deleted or the account purged | **Re-encoded from decoded pixels, so they carry no EXIF at all** — no GPS, no capture time, no device serial. Keys are random and partitioned by owner. |
+| Uploaded originals | Input to processing | **Deleted as soon as processing finishes** | The one copy that still carries EXIF. Rejected uploads are deleted too. |
+| Abandoned uploads | — | Swept after 24 hours | Presigned but never confirmed. |
+
+### `media_assets`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `owner_id`, `purpose`, `status` | Ownership and processing state | With the asset |
+| `declared_content_type`, `detected_content_type` | Diagnosing rejected uploads | With the asset |
+| `original_key` | Where the upload landed | **Nulled once processed**, recording that the EXIF-bearing original is gone |
+| `byte_size`, `source_width`, `source_height`, `variants` | Serving | With the asset |
+| `rejection_code`, `rejection_reason` | Telling the uploader why | With the asset |
+
+On account purge the stored objects are deleted and the row is kept, marked
+`rejected` with code `purged` and no variants: a soft-deleted post still
+references it, and nothing servable remains.
+
+### `posts` and `post_images`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `author_id`, `body`, `category` | The post | Soft-deleted on request or purge; purged by the Phase 8 retention job |
+| `cell_res9/8/7/6`, `centroid`, `area_id` | Radius filtering and the area label | With the post |
+| `status`, `hidden_at` | Moderation state | With the post |
+| `reach_estimate`, `comment_count`, `reaction_count` | Display | With the post |
+
+The location is the **author's home cell at posting time** — a cell centre, never a
+coordinate — and stays with the post if the author later moves. Authored content
+never takes an explore-mode location (decision 1.1, rule 1).
+
+### `stories` and `story_views`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| Story: author, kind, text or image, location cells, `expires_at` | The story | **24 hours, then hard-deleted with its image** — unless a report against it is pending |
+| `story_views`: `story_id`, `viewer_id`, `created_at` | The author's viewer list | Deleted with the story |
+
+One view row per viewer, never a count of repeat views: the feature promises the
+author learns *who* looked, not who keeps coming back. Shown only to the author,
+and filtered through blocking.
+
+### `comments` and `reactions`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| Comment: `post_id`, `author_id`, `parent_id`, `body`, `status` | The conversation | Soft-deleted; purged with the account |
+| `is_visiting` | Marks a comment written while exploring (decision 1.1, rule 3) | With the comment |
+| Reaction: `user_id`, target, `kind`, `created_at` | Reactions | Deleted on account purge |
+
+`is_visiting` is a boolean, not a location: it records *that* the author was
+elsewhere, never *where*.
+
+### `reports`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `reporter_id`, `target_type`, `target_id`, `reason`, `details`, `priority`, `status` | The moderation queue | 2 years (Phase 8 job) |
+| `counted_towards_auto_hide` | Whether the reporter was trusted at the time | With the report |
+| `resolved_at`, `resolved_by_id`, `resolution_note` | Moderator outcome (Phase 8) | With the report |
+
+`details` is free text from the reporter and may name people. It is visible only
+to moderators. Reports survive the purge of the reported account, for the same
+reason the audit log does: they are the record of why somebody was acted against.
+
+### `idempotency_records`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `user_id`, `endpoint`, `key`, `request_fingerprint` | Recognising a retried request | **24 hours** |
+| `response_status`, `response_body` | Replaying the original response | **24 hours** |
+
+**Note:** `response_body` is a copy of a create response, so it holds whatever that
+response held — a post's body, for instance. It is purged daily by `run_retention`
+after 24 hours, which is long enough for any realistic retry and short enough that
+it is not a second, shadow copy of anyone's content.
+
+### Data rights in Phase 2
+
+- **Export** now includes the user's posts, comments, stories and reactions —
+  soft-deleted ones included and marked, since the right of access is to what is
+  held — and a list of their uploads. Upload entries carry no URLs: an export file
+  is something people forward, and a working link to every image would outlive its
+  purpose.
+- **Purge** now soft-deletes the account's posts, comments and stories, deletes its
+  reactions and story views, and deletes every stored image it uploaded.
+
+---
+
 ## Data subject rights — implementation status
 
 | Right | Status | Where |
 | --- | --- | --- |
-| Access (export as JSON) | **Implemented** (Phase 1 scope) | `GET /v1/me/export`; extended by each later phase |
+| Access (export as JSON) | **Implemented** (through Phase 2) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads |
 | Rectification | **Implemented** | `PATCH /v1/me` |
-| Erasure | **Implemented** | `POST /v1/me/deletion-request`, 30-day grace, then the `run_retention` worker purges |
+| Erasure | **Implemented** (through Phase 2) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, and its stored images |
 | Restriction of processing | Not started | Phase 8, account restrictions (`UserStatus.suspended` exists) |
 | Objection to marketing | **Implemented** | `PUT /v1/me/consents`, marketing consent is withdrawable |
 | Data portability | **Implemented** | Covered by the JSON export |
@@ -178,13 +273,15 @@ becomes a worker job in the phase that owns the data.
 | Account, while active | Until deletion is requested |
 | Deleted account | Purged 30 days after the request, except where law requires otherwise |
 | Soft-deleted user content | 90 days, then purged — kept because moderation needs the evidence |
-| Stories | 24 hours, then purged |
+| Stories | 24 hours, then hard-deleted with their images — held only while a report is pending |
 | Home location | Only the current H3 cell and its centroid. No history: a change overwrites. |
 | Explore-mode location | **Redis only, ~2 hour TTL. Never written to PostgreSQL.** Not in the export, because it is never at rest. |
 | Home-presence history | A 14-bit rolling mask of daily yes/no answers to "was this user in their home area". Not the locations it came from. Self-purging. |
 | Moderation reports and actions | 2 years, as the record of why an account was acted against |
 | Audit log | 2 years |
 | Payment records | 7 years, as tax law requires. **Survives account deletion**, and the deletion flow must say so. |
+| Uploaded originals | Deleted immediately after processing |
+| Idempotency records | 24 hours |
 | Application logs | 30 days |
 
 ---

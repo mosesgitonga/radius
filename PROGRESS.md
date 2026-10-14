@@ -454,7 +454,7 @@ recommended values and are recorded as decision 1.1 in `docs/DECISIONS.md`._
 
 ## Phase 2 — Media and neighbourhood feed
 
-**Status:** in progress
+**Status:** complete and verified on 2026-10-14
 
 ### Plan
 
@@ -526,7 +526,133 @@ commenting and story limits either side of it.
 - `process_media` — the pipeline above.
 - `expire_stories` — hourly cleanup.
 
+### Built
+
+**Media.** Presigned direct-to-storage uploads; the API never handles image bytes.
+A worker validates from magic bytes, re-encodes to WebP at 320/720/1280 px from
+decoded pixels (so no EXIF can survive), and deletes the original. A five-minute
+catch-up sweep processes uploads whose job was lost, and abandoned uploads are
+swept after a day. Avatars, as a real foreign key.
+
+**Feed.** Posts with up to six images and a configurable category, placed at the
+author's home cell. `GET /v1/feed` within the adaptive radius, newest first,
+keyset-paginated, excluding blocked users and hidden or removed content, with a
+`sort` field ready for ranking. Reach estimate on creation. Explore mode browses
+another area; posting still goes home.
+
+**Comments** with one level of replies, visitor marking, and post-author deletion.
+**Reactions** on posts and comments, one per person, from a configurable list.
+**Stories**, text or image, 24 hours, with an author-only viewer list; expired
+stories are deleted with their images unless a report is pending.
+
+**Reporting** for posts, comments, stories and users, prioritised so job scams and
+safety come first, with auto-hide after three distinct trusted reports. People are
+never auto-hidden.
+
+**Cross-cutting.** `Idempotency-Key` on post, comment and story creation.
+New-account rate limits. The purge and export now reach content and images.
+
+**Infrastructure.** SeaweedFS in compose for local S3; separate presign endpoint;
+`StorageProvider` with S3 and in-memory implementations; a job-queue seam.
+
+**Schema.** Migrations 0004 (nine tables) and 0005, reviewed by hand.
+
+**Endpoints:** 26 new, 46 in total across 36 paths.
+
+### Verified
+
+| Check | Result |
+| --- | --- |
+| `pytest` | **646 passed** in 78 s, **85% coverage** |
+| `ruff` + `mypy` (strict, 99 files) | clean |
+| Migrations on an empty database | 5 up, 5 down, 5 up, `alembic check` clean |
+| Privacy scan | 49 response schemas, no location fields |
+| OpenAPI | every endpoint has a summary and a description |
+| Live stack, real S3 | presigned PUT to SeaweedFS → real worker container → variants downloaded |
+
+**The brief's acceptance criteria, against the live stack:**
+
+| Criterion | Result |
+| --- | --- |
+| Two users in the same area see each other's posts | Kamau, 1 km from Wanjiku, sees her post (band `under_1km`) |
+| A user far away doesn't | A Nairobi account does not |
+| Blocked users' content never appears | After Kamau blocks Wanjiku: gone from his feed and stories; 404 by ID |
+| Uploaded images come back without EXIF | A photo with four GPS tags in → every downloaded variant has no EXIF and no GPS; **no original left in the bucket** |
+
+### Defects found, all fixed
+
+1. **HEIC uploads were accepted and then failed.** Presign accepted HEIC, the user
+   paid to upload it, and processing rejected it as "could not be read" — Pillow
+   cannot decode HEIC without a plugin. Now refused before upload. See open question.
+2. **Import cycle.** `users.service` imported the audit writer from
+   `moderation.service`, which reports then needed to import back. The audit writer
+   is now a leaf module.
+3. **Feed order depended on how data was loaded.** PostgreSQL's `now()` is the
+   transaction's start time, so rows created together shared a timestamp and fell
+   back to random-UUID order. `created_at` now has a wall-clock Python default.
+4. **CRLF broke the container.** `entrypoint.sh` picked up Windows line endings
+   from a script I edited, and the API restart-looped on `set: pipefail: invalid
+   option name`. `.gitattributes` governs checkout, not files written directly; the
+   tree is normalised and a test now fails on CRLF in shell scripts.
+5. **MinIO is gone from Docker Hub.** Replaced with SeaweedFS, which needed a
+   separate presign endpoint (the host is part of a SigV4 signature) and a
+   healthcheck on `127.0.0.1` (busybox resolves `localhost` to IPv6 first).
+6. **Two test-harness isolation bugs.** A failed request rolled back the test's own
+   setup, because all requests in a test shared one uncommitted transaction; and its
+   rollback expired objects later read synchronously. Each request now gets a
+   savepoint, after setup is committed.
+7. **The suite slowed from 31 s to 4½ minutes.** `create_app()` costs 150 ms and ran
+   per test. Built once per session now, with private apps for the two kinds of test
+   that mount routes. 52 s on the same tests.
+
+### Deferred
+
+With the phase that will own each; reasoning in `docs/DECISIONS.md`.
+
+- **Feed ranking** — the field and query shape are ready.
+- **Notifications** for comments, replies and reactions — Phase 3.
+- **The moderation queue and moderator actions** — Phase 8. Reports are filed,
+  prioritised, and auto-hide works; nothing can resolve one yet.
+- **Hard purge of soft-deleted content** — Phase 8's retention job.
+- **A CDN** — supported via `STORAGE_PUBLIC_BASE_URL`, not yet configured.
+- **HEIC** — pending a decision on `pillow-heif`.
+
+### How to try it
+
+```bash
+cp .env.example .env        # now includes the SeaweedFS storage settings
+docker compose up --build   # five services: api, worker, postgres, redis, storage
+```
+
+The upload flow, as the app performs it:
+
+```bash
+# 1. Ask for an upload URL
+curl -X POST localhost:8000/v1/media/uploads -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"purpose":"post","content_type":"image/jpeg"}'
+
+# 2. PUT the file to upload_url, with exactly the upload_headers returned
+curl -X PUT "$UPLOAD_URL" -H 'Content-Type: image/jpeg' --data-binary @photo.jpg
+
+# 3. Confirm, then poll until ready
+curl -X POST localhost:8000/v1/media/$MEDIA_ID/complete -H "Authorization: Bearer $TOKEN"
+curl localhost:8000/v1/media/$MEDIA_ID -H "Authorization: Bearer $TOKEN"
+
+# 4. Post it; send the same Idempotency-Key twice to see the replay
+curl -X POST localhost:8000/v1/posts -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" -H 'Content-Type: application/json' \
+  -d '{"body":"Mount Kenya clear today","category":"general","media_ids":["'$MEDIA_ID'"]}'
+
+curl localhost:8000/v1/feed -H "Authorization: Bearer $TOKEN"
+```
+
+Download any variant URL and inspect it: there is no EXIF.
+
 ### Open questions
 
-_None blocking. Choices on reaction kinds, trusted-reporter criteria, and the dev
-storage backend are recorded in `docs/DECISIONS.md`._
+- **HEIC support.** iPhones save photos as HEIC by default. Pillow cannot decode it
+  without the `pillow-heif` package, which is not in the agreed stack. Options: add
+  `pillow-heif` (a small, well-maintained Pillow plugin) so HEIC is accepted and
+  converted server-side; or keep refusing it and have the Flutter app convert to
+  JPEG before upload. Android is unaffected either way.
+
