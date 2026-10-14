@@ -246,13 +246,119 @@ it is not a second, shadow copy of anyone's content.
 
 ---
 
+## Phase 3 — Messaging and notifications
+
+Private messages are the most sensitive content the product holds. Three rules
+apply to all of it:
+
+1. **Nobody outside a conversation can read it.** Every refusal is a 404.
+2. **The one exception is a report.** Reporting a message shows it to moderators
+   (Phase 8), and only because a member chose to report it.
+3. **Nothing private passes through Redis.** Realtime events carry IDs and sequence
+   numbers, not text (decision 3.2).
+
+### `conversations`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `kind`, `title`, `state` | What the conversation is; group chat name; request state | Life of the conversation |
+| `created_by_id`, `request_sender_id` | Who started it, and who asked first: context for a harassment report | Life of the conversation |
+| `direct_key` | One direct conversation per pair (two user IDs) | Life of the conversation |
+| `last_seq`, `last_message_at` | Sync and inbox order | Life of the conversation |
+| `listing_id`, `group_id` | Phases 5 and 4 | — |
+
+### `conversation_members`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `user_id`, `role`, `status`, `invited_by_id` | Membership and permissions | Life of the conversation; set to `left` on purge |
+| `last_read_seq` | Read state: one number, not a row per message | As above |
+| `visible_from_seq` | Hides messages from before a member joined | As above |
+| `muted` | Push suppression | As above |
+
+### `messages`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `sender_id`, `seq`, `kind`, `reply_to_id` | The conversation's structure | Life of the conversation |
+| `body` | The message text | **Cleared on deletion and on account purge**, unless a report is pending |
+| `media_id` | An image, through `media_assets` (purpose `message`) | Image objects deleted on message deletion and on purge |
+| `deleted_at` | "Message deleted" placeholder | The row stays so numbering holds; hard purge in Phase 8 |
+
+**Read receipts** are `last_read_seq` values. Other members see them only once a
+conversation is accepted, so the sender of a request does not learn it was read.
+
+### `device_tokens`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `token` | The FCM address of one installed app | Deleted when FCM reports it dead, when not re-registered for `DEVICE_TOKEN_STALE_DAYS` (90), and on purge |
+| `device_session_id` | Pushes go only to live sign-ins | Cascades with the session |
+| `platform`, `last_seen_at` | Delivery and staleness | As the token |
+
+Not a credential for this API, but personal data: it addresses a person's phone.
+
+### `notification_preferences`
+
+Per type, `push_enabled`, `in_app_enabled`, and `show_preview` (default **off**:
+lock-screen previews on shared phones). A row exists only where the user changed a
+default. Deleted on purge.
+
+### `notifications`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `type`, `target_type`, `target_id`, `data` | What happened, as IDs only, never content | **90 days** (`NOTIFICATION_RETENTION_DAYS`) |
+| `actor_id`, `actor_ids`, `event_count` | "Kamau and 3 others", up to 50 actors | As above |
+| `read_at` | Unread count | As above |
+
+A user's own notifications are deleted on purge. Notifications *about* a purged user
+in other people's lists stay, because they belong to the recipient, and they name
+"Deleted user".
+
+### Redis
+
+| Key | Holds | Lifetime |
+| --- | --- | --- |
+| `rt:user:<id>` | Pub/sub channel; events with IDs and sequence numbers only | Not stored: delivered or dropped |
+| `presence:<id>` | Connection IDs and expiry times, never IP addresses or devices | `PRESENCE_TTL_SECONDS` (60) after the last heartbeat |
+| `push:throttle:<id>:<key>` | A flag saying a push was just sent | `PUSH_THROTTLE_SECONDS` (60) |
+| `rl:message_request:…` | Daily request count | 24 hours |
+
+### Push payloads
+
+A push leaves the system through FCM (Google), and from there goes to Apple for
+iOS devices. It carries:
+
+- a title (the sender's display name, or the group chat's name);
+- a body: "New message", or the text if the recipient opted in to previews;
+- IDs: conversation, sequence number, type.
+
+Activity pushes carry no content beyond names: "Kamau commented on your post". The
+body is never logged (`app/core/providers/push.py`).
+
+### Data rights in Phase 3
+
+- **Export** adds the user's conversations (kind, title, role, status, joined),
+  every message they sent (deleted ones included and marked), their devices (by the
+  last eight characters of the token), their notification preferences, and their
+  notifications. Messages **received** are not included: they are the other
+  person's words (decision 3.17).
+- **Purge** clears the text of every message the account sent, except under a
+  pending report. It deletes their images through the media purge, takes them out
+  of every chat (passing on any group they owned), and deletes their device tokens,
+  notifications and preferences. Other people's conversations keep their shape,
+  with "message deleted" in place of the purged account's messages.
+
+---
+
 ## Data subject rights — implementation status
 
 | Right | Status | Where |
 | --- | --- | --- |
-| Access (export as JSON) | **Implemented** (through Phase 2) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads |
+| Access (export as JSON) | **Implemented** (through Phase 3) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, conversations, messages sent, devices, notification preferences and notifications |
 | Rectification | **Implemented** | `PATCH /v1/me` |
-| Erasure | **Implemented** (through Phase 2) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, and its stored images |
+| Erasure | **Implemented** (through Phase 3) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its messages, its devices and notifications, and its stored images |
 | Restriction of processing | Not started | Phase 8, account restrictions (`UserStatus.suspended` exists) |
 | Objection to marketing | **Implemented** | `PUT /v1/me/consents`, marketing consent is withdrawable |
 | Data portability | **Implemented** | Covered by the JSON export |
@@ -282,6 +388,10 @@ becomes a worker job in the phase that owns the data.
 | Payment records | 7 years, as tax law requires. **Survives account deletion**, and the deletion flow must say so. |
 | Uploaded originals | Deleted immediately after processing |
 | Idempotency records | 24 hours |
+| Message text | Until deleted by its sender or the account is purged; kept only while a report on it is pending |
+| Notifications | 90 days |
+| Device tokens | Until signed out, reported dead by FCM, or 90 days without re-registering |
+| Presence | Redis only, a minute after the last heartbeat |
 | Application logs | 30 days |
 
 ---

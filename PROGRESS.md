@@ -660,7 +660,7 @@ Download any variant URL and inspect it: there is no EXIF.
 
 ## Phase 3 — Messaging and notifications
 
-**Status:** in progress
+**Status:** complete and verified on 2026-10-15
 
 ### Plan
 
@@ -724,6 +724,183 @@ text, unless the user opts in — phones are often shared.
 either direction. In a shared group chat, each is filtered out of the other's
 delivery and history.
 
+### Built
+
+**Conversations.** Direct conversations, exactly one per pair. Message requests, as
+the brief describes:
+
+- the first message lands in the recipient's requests;
+- the sender can send nothing more until a reply or an explicit accept;
+- the recipient can accept, decline, or block-and-report — which files a report
+  against the message and then blocks the sender;
+- a decline is indistinguishable, to the sender, from no answer.
+
+**Group chats** with a configurable member limit:
+
+- **Roles:** one owner, admins and members, with ownership handed over or passed on
+  when the owner leaves.
+- **Joining:** people the adder knows join at once; strangers are invited and see
+  nothing until they accept.
+- **History:** members see history only from when they joined.
+
+Listing conversations exist as a kind, for Phase 5.
+
+**Messages.** Text, images through the media pipeline (purpose `message`),
+reply-to, and delete-for-everyone, which erases the content unless a report is
+pending. Sequence numbers are allocated under the conversation's row lock, so
+sequence order is commit order. Read state is one number per member. Sync works at
+two levels:
+
+- `GET /v1/sync?since=` lists the conversations that changed;
+- `messages?after_seq=` catches up within one;
+- `messages/changes` finds deletions.
+
+**Realtime.** `/v1/ws`, authenticated by header or by a first frame, never by
+query string. Each API process runs one Redis pub/sub hub. Events are doorbells
+carrying IDs, published only after commit. Presence is a sorted set of
+connections. A socket closes when its token expires — unless the client
+re-authenticates in-band — and closes at once when its session is revoked, on
+whichever worker holds it.
+
+**Notifications.**
+
+- **Devices:** FCM token registration, tied to the sign-in, so signing out stops
+  pushes.
+- **Preferences:** per type, with previews off by default.
+- **In-app list:** collapses bursts into one entry, e.g. "Kamau and 3 others
+  reacted"; reading an entry does not reorder the list.
+- **Feed hooks:** comments, replies and reactions.
+- **Push from the worker:** only to people who are offline, haven't muted the
+  conversation and aren't blocked with the sender, throttled per collapse key.
+  Dead tokens are forgotten.
+
+`PushProvider` has a recording fake and FCM behind it.
+
+**Cross-cutting.**
+
+- `after_commit` hooks in the unit of work.
+- `authenticate_access_token`, shared by HTTP and the socket.
+- Tiered limits for messages and for message requests.
+- `Idempotency-Key` on sending.
+- Export, purge and the retention job reach messages, devices and notifications.
+- Enum values are enforced by the database (0006).
+
+**Schema.** Migrations 0006 (enum CHECK constraints for 14 existing columns), 0007
+(six tables), and 0008 (member visibility, deletable content, device sessions,
+message reports), each reviewed by hand.
+
+**Endpoints:** 28 new, 74 in total across 61 paths, plus the socket.
+
+### Verified
+
+| Check | Result |
+| --- | --- |
+| `pytest` | **773 passed**, **91% coverage** (6 minutes with coverage on) |
+| `ruff` + `mypy` (strict, 120 files incl. tests) | clean |
+| Migrations | 0005 → 0008 down and up on the test database; `alembic check` clean; 0006–0008 applied on boot to the development database holding Phase 2 data |
+| Privacy scan | 65 response schemas, 222 fields, no location fields |
+| OpenAPI | every operation has a summary and a description — **now a test** |
+| Live stack | real API and worker containers: request held, second message refused, reply rang the socket, offline push delivered by the worker |
+
+**The brief's acceptance criteria**, from `tests/test_realtime_live.py`. That test
+runs two separate `uvicorn` processes sharing the test database and Redis:
+
+| Criterion | Result |
+| --- | --- |
+| Two clients exchange messages in realtime across two API workers | Alice on worker 1 (header auth) and Bob on worker 2 (first-frame auth) ring each other; Bob fetches the message through worker 2. Twelve concurrent sends split across both workers get sequence numbers 3–14, no gaps or repeats |
+| Offline users get a push | Bob closes his socket and presence clears. The API queues `deliver_message_push` in Redis; running it pushes to Bob's phone — sender's name, no text |
+| Message requests behave as described | Carol's first message reaches Bob's requests and notifies him live; her second is refused with 409 `awaiting_reply` |
+| Blocked users cannot message each other | After Bob blocks Alice: sends both ways are 404, reopening is 404, and nothing reaches Alice's socket |
+
+Also proved live:
+
+- signing out on worker 2 closes the socket on worker 1 (4401 `session_revoked`);
+- a token in the query string is ignored;
+- an unauthenticated socket is closed.
+
+**One unreproduced flake.** `test_a_token_in_the_query_string_is_ignored` failed
+once in 15 runs of the live module. That run came straight after a six-minute
+coverage run, with the machine under load, and its detail was not captured. It
+passed the next 12 runs in a row. The likely cause is timing in the test's close
+wait rather than the server accepting the token: the same rejection path is
+covered by the bad-token and no-token tests, which never failed. If it recurs, the
+assertion reports the close code it got.
+
+### Defects found, all fixed
+
+1. **No enum column was constrained, ever.** Decision 1.16 said enums were CHECK
+   constraints; SQLAlchemy has not emitted them by default since 1.4, so every
+   status, reason and kind column accepted any string. Found by a stray insert.
+   Fixed: `db_enum`, migration 0006, and a test that every constraint matches its
+   enum exactly.
+2. **Autogenerate rendered every new enum constraint twice**, and the migration
+   failed on the duplicate. The explicit copies were removed from 0007.
+3. **Reuse detection would not have closed sockets.** It commits by hand (1.3),
+   which bypasses the after-commit step. It now runs the callbacks itself; a test
+   proves the event arrives.
+4. **"Mark all read" reshuffled the notification list.** The update bumped every
+   row's activity time. It now leaves `updated_at` alone.
+5. **Rows updated together tied on `updated_at`** — the 2.19 defect again, on the
+   column Phase 3 sorts by. `updated_at` now has a Python clock too.
+6. **Coverage under-reported async code by half.** Without greenlet tracing, the
+   messaging service measured 49% when it is 94%.
+7. **Four endpoints had no description.** There is now a test for it.
+8. **`dict()` over a SQLAlchemy `Result`** — a lint autofix — failed at runtime,
+   because a `Result` has `.keys()`. Caught by the suite.
+9. **Every write since Phase 0 committed after the response was sent.** FastAPI
+   runs a `yield` dependency's exit code after sending, by default, so a failed
+   commit could follow a 201. Invisible in-process; caught by the two-worker test,
+   where a job queued at commit was sometimes missing when the client already had
+   its answer. Every route now uses one function-scoped `SessionDep`, and a test
+   walks the routes to keep it that way (decision 3.22).
+
+### Deferred
+
+With the phase that will own each; reasoning in `docs/DECISIONS.md`.
+
+- **Listing conversations** — Phase 5. **A group's linked chat** — Phase 4.
+- **Typing indicators, message reactions, editing** — not in the brief.
+- **Swahili push text** — strings are English and rendered server-side.
+- **Moderator view of reported messages** — Phase 8; the content is kept for it.
+- **Hard purge of soft-deleted messages** — Phase 8's retention job.
+- **FCM installation IDs** — firebase-admin 7.7 deprecates addressing by
+  registration token, but moving needs a client change.
+- **HEIC** — still open, below.
+
+### How to try it
+
+```bash
+docker compose up --build   # migrations 0006-0008 run on boot
+```
+
+With two signed-in users (`$A`, `$B` are access tokens, `$B_ID` is B's user ID):
+
+```bash
+# A opens a conversation and sends a request
+CID=$(curl -s -X POST localhost:8000/v1/conversations/direct -H "Authorization: Bearer $A"   -H 'Content-Type: application/json' -d '{"user_id":"'$B_ID'"}' | jq -r .id)
+curl -X POST localhost:8000/v1/conversations/$CID/messages -H "Authorization: Bearer $A"   -H 'Content-Type: application/json' -d '{"body":"Is the bike still for sale?"}'
+
+# B sees it in requests; a second message from A is refused with 409
+curl "localhost:8000/v1/conversations?folder=requests" -H "Authorization: Bearer $B"
+
+# A listens on the socket (websocat, or any client that can set a header)
+websocat -H "Authorization: Bearer $A" ws://localhost:8000/v1/ws
+
+# B replies, which accepts; A's socket prints a message.created event
+curl -X POST localhost:8000/v1/conversations/$CID/messages -H "Authorization: Bearer $B"   -H 'Content-Type: application/json' -d '{"body":"Yes, come see it"}'
+```
+
+Pushes go to the fake provider in development. The worker log shows
+`push_not_sent_fake_provider` for each one. For real pushes, set
+`PUSH_PROVIDER=fcm` and mount a Firebase service-account file at
+`FCM_CREDENTIALS_FILE` (`.gitignore` covers the usual names).
+
 ### Open questions
 
-_None blocking. HEIC from Phase 2 is still open._
+- **HEIC support**, carried from Phase 2. Either add `pillow-heif` so iPhone photos
+  are converted on the server, or keep refusing HEIC and have the Flutter app send
+  JPEG.
+- **Development `SECRET_KEY`** (minor). The shipped development default is 29
+  bytes, so PyJWT warns when signing locally. Production and staging already
+  refuse anything under 32 bytes. Lengthening the default is a one-line change if
+  you want the warning gone.

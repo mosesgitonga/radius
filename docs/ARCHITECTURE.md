@@ -53,14 +53,17 @@ app/
     middleware.py    request ID and access log
     pagination.py    cursor pagination
     ratelimit.py     Redis rate limiter
+    realtime.py      pub/sub publish, the per-process hub, presence
     redis.py         Redis client and the cache-error set
     security.py      codes, keyed hashing, access tokens
     health.py        liveness and readiness
-    providers/       external services, each behind a Protocol
+    providers/       external services, each behind a Protocol: SMS, storage, push
   modules/
     auth/            phone.py, service.py, dependencies.py, router.py
     users/           service.py (incl. the shared blocking check), tasks.py
     location/        cells.py, radius.py, service.py, tasks.py
+    messaging/       service.py, views.py, router.py, socket.py (the `/v1/ws` endpoint)
+    notifications/   service.py (devices, preferences, collapsing, push), router.py
   modules/<name>/  one package per feature area
     models.py        SQLAlchemy models
     schemas.py       Pydantic request and response models
@@ -85,7 +88,14 @@ Three rules keep the monolith from congealing:
    `moderation.audit.record_audit_event` is the only way anything is audited,
    `media.images.process_image` is the only way an image becomes servable, and
    `feed.service.visible_to` is the only definition of who may see moderated
-   content.
+   content. Phase 3 adds `messaging.service.audience` as the only definition of
+   who hears about something in a conversation, and `notifications.service.notify`
+   as the only way a notification is created.
+
+   One deliberate exception to rule 2: moderation resolves a reported message by
+   querying the messaging *models*, because the messaging service imports
+   moderation (block-and-report) and the reverse import would be a cycle. The
+   query applies the same visibility rules as reading.
 
 `core` may not import from `modules`. That is what makes it reusable and keeps
 import cycles impossible.
@@ -98,7 +108,10 @@ import cycles impossible.
 2. **Route dependencies** run: authentication (Phase 1), rate limits, pagination
    parameters, and a database session.
 3. **The session is a unit of work.** It commits if the handler returns and rolls
-   back if it raises, so a handler cannot half-apply a change.
+   back if it raises, so a handler cannot half-apply a change. The commit, and the
+   realtime events and job enqueues registered with `after_commit`, finish
+   **before** the response is sent: routes take `core.db.SessionDep`, which is
+   function-scoped (decision 3.22).
 4. **Errors** become the single envelope. Service code raises `AppError`
    subclasses; the handlers in `core/errors.py` do the translating. Unhandled
    exceptions are logged with a traceback and returned as a bare 500.
@@ -149,6 +162,40 @@ run and fails if one appears. Positions reach clients as an **area label**
 trilateration: an attacker who can spoof their own location and read exact
 distances can locate someone's home in three requests.
 
+## Realtime
+
+```
+ phone A ──ws──▶ api worker 1                       api worker 2 ◀──ws── phone B
+                  │  POST /messages                      ▲
+                  │  1. lock conversation row,           │ 4. hub hands the event
+                  │     seq = last_seq + 1               │    to B's socket
+                  │  2. commit                           │
+                  │  3. after commit: PUBLISH ──▶ Redis rt:user:B ──┘
+                  │                                      (subscribed by worker 2,
+                  ▼                                       because B is connected there)
+           arq: deliver_message_push ──▶ for members not in presence:* ──▶ FCM
+```
+
+**Persist, then publish.** A message is committed before anyone hears of it, and
+what they hear is only "conversation X has seq N". Every client — live,
+reconnecting, or freshly installed — then does the same thing: fetch messages after
+the last seq it holds. Pub/sub can drop events, and that costs nothing, because the
+database is the record.
+
+**One hub per process.** Each API process subscribes, over a single Redis
+connection, to the channels of the users connected to it. That is why delivery
+works with any number of workers, and why a worker can crash without losing
+anything but its sockets, whose clients reconnect and sync.
+
+**Pushes are for people who are not looking.** The push job runs in the worker and
+checks presence at delivery time, so someone who opened the app in the meantime is
+not buzzed. A muted conversation, a block, or the throttle also stop a push;
+`notifications.service.push_to_user` is the one place those rules live.
+
+**Sockets follow their session.** Signing out publishes `session.revoked` and the
+socket closes, on whichever worker holds it. A token expiring closes the socket
+unless the client has re-authenticated in-band.
+
 ## Media
 
 Images never pass through the API. A client asks for a presigned PUT, uploads
@@ -169,7 +216,9 @@ In rough order, and none of it yet:
 2. A PostgreSQL read replica for feed and search queries.
 3. Separate worker processes per queue, once one kind of job can starve another.
 4. Extract a service only when a module has genuinely divergent scaling needs —
-   realtime messaging is the plausible first candidate.
+   realtime messaging is the plausible first candidate. The hub already talks only
+   to Redis, so moving `/v1/ws` to its own process is a deployment change: run the
+   same app with only the socket router mounted.
 
 The module boundaries above are what make step 4 cheap. They are worth keeping
 clean even while the answer is "one box is fine".

@@ -841,3 +841,318 @@ same change. This shape makes that one new function per module.
   as "could not be read"; refusing up front lets the client convert first. Android
   cameras produce JPEG; iPhones default to HEIC, so this matters for iOS. **Open
   question** — see the Phase 2 summary.
+
+---
+
+## Phase 3 — Messaging and notifications
+
+### 3.1 Message order is a per-conversation sequence, allocated under the row lock
+
+**Choice.** Each message takes `conversations.last_seq + 1`, incremented while the
+conversation row is locked (`SELECT … FOR UPDATE`), and the lock is held to commit.
+`(conversation_id, seq)` is unique.
+
+**Reasoning.** A reconnecting client asks for "everything after seq N", which is
+only safe if sequence order is commit order. A timestamp or a global sequence is
+assigned at insert time, so message 42 can commit before 41 and a client that
+synced in between skips 41 for ever. Holding the row lock means the next number
+cannot be handed out until the previous message is durable. The cost — sends in
+one conversation are serialised — is no cost for chat. Verified across two API
+processes by `test_concurrent_sends_through_both_workers_get_contiguous_sequence_numbers`.
+
+### 3.2 Persist, then publish — and the event carries no content
+
+**Choice.** Realtime events and push jobs are registered with `core.db.after_commit`
+and run only once the request's transaction commits; on rollback they are
+discarded. A `message.created` event carries the conversation, the sequence number
+and the message ID. The client fetches the message itself.
+
+**Reasoning.** A recipient told about a message must be able to read it, and a
+message that rolled back must never be announced. Keeping content out of the event
+makes live delivery and reconnection one code path: "fetch after the last seq I
+hold" handles a missed doorbell, a dropped socket, and a fresh launch alike. It also
+means nothing private passes through Redis.
+
+### 3.3 One hub per API process, one Redis channel per user
+
+**Choice.** Each process holds one pub/sub connection, subscribed to the channel of
+every user connected to it. Publishing writes to each recipient's channel. A socket
+has a bounded send queue (256 events); a client that falls that far behind is
+closed with 1013 and reconnects.
+
+**Reasoning.** This is what makes delivery work across any number of workers with
+no state outside Redis. Pub/sub drops messages nobody is subscribed to — acceptable,
+because the database is the record and the event is only a doorbell (3.2). A slow
+consumer is disconnected rather than buffered without limit: holding memory for a
+phone in a tunnel is worse than asking it to sync.
+
+### 3.4 Socket authentication: header or first frame, never the query string
+
+**Choice.** `/v1/ws` takes the access token in `Authorization`, or in a first
+`{"type": "auth"}` frame within `WS_AUTH_TIMEOUT_SECONDS`. A token in the URL is
+ignored. A socket lives no longer than its token; the client extends it in-band
+with another `auth` frame, which must name the same user. Signing out, signing out
+everywhere, reuse detection, eviction and account deletion publish
+`session.revoked`, which closes that session's sockets at once; every fourth
+heartbeat re-checks the session as a backstop.
+
+**Reasoning.** URLs are written to proxy and load-balancer logs, and a token in a
+log is a session for anyone who can read the logs. Without revocation events, a
+socket opened before "sign out this device" would keep receiving that person's
+messages until its token expired. Rotation is not announced: it is routine, and
+the client re-authenticates. The reuse-detection branch commits by hand (1.3), so
+it runs the after-commit callbacks by hand too.
+
+### 3.5 The socket opens short sessions, not one long one
+
+**Choice.** The socket takes a session *factory* dependency (`session_scope` by
+default) and opens a unit of work per check, rather than depending on `get_session`.
+
+**Reasoning.** `get_session` lives as long as the handler, and a socket's handler
+lives as long as the socket — hours, on a phone left open. That would hold a
+transaction open, and a connection checked out, for the whole time. The dependency
+also lets tests substitute their own.
+
+### 3.6 Presence is a sorted set of connections, failing towards offline
+
+**Choice.** `presence:<user>` is a sorted set of connection IDs scored by expiry,
+refreshed every heartbeat and removed on close. A user is online if any entry has
+not expired. If Redis cannot answer, everyone is treated as offline.
+
+**Reasoning.** One entry per connection, so closing the tablet does not mark
+someone offline while their phone is open. An entry from a process that died
+expires on its own within `PRESENCE_TTL_SECONDS`, so a crashed worker cannot leave
+anyone "online" — and therefore never pushed — for ever. Failing towards offline
+means a Redis fault causes an extra push, not a missed message.
+
+### 3.7 Message requests: whoever sends first is asking
+
+**Choice.**
+
+- **Opening a conversation sends nothing**, and an empty conversation is invisible
+  to the other person.
+- **The first message makes a request**, and its sender becomes the request sender
+  — not whoever happened to open the conversation.
+- **The sender may send one message.** A second is refused with 409
+  `awaiting_reply`.
+- **The recipient's reply accepts.** So does an explicit accept.
+- **A decline is invisible to the sender.** Their view stays `request_sent`, and they
+  get the same 409.
+- **Only the recipient can reopen a declined request.**
+
+**Reasoning.** Taking the opener as the asker would let someone open a conversation
+with you and wait for you to "accept" it by writing. Telling a sender they were
+declined invites them to try another channel, which is exactly what the recipient
+said no to; making the two states indistinguishable removes the signal. The
+recipient changing their mind is allowed, in that direction only.
+
+### 3.8 The request limit is checked in the service
+
+**Choice.** `MESSAGE_REQUESTS_PER_DAY` (5 for new accounts, 20 otherwise) is
+enforced inside `send_message`, only when a send creates a request. The ordinary
+per-minute message limit is a route dependency as usual.
+
+**Reasoning.** Only the service knows whether a given send is a request. Replies
+to strangers do not count against it: the limit is about reaching people, not
+answering them.
+
+### 3.9 Group chats: strangers are invited, and joiners see history from joining
+
+**Choice.**
+
+- **Who joins straight away:** someone with an accepted direct conversation with
+  the person adding them.
+- **Everyone else is `invited`:** they see the invitation, not the messages, until
+  they accept.
+- **History starts at joining:** `conversation_members.visible_from_seq` hides
+  everything before the moment a member joined.
+
+**Reasoning.** Without invitations, anyone could add anyone to a group and message
+them through it — the message-request rule with a hole in it. Hiding earlier
+history follows from the same principle: the people who wrote those messages did
+not know this person would read them.
+
+### 3.10 Roles: one owner, admins, members
+
+**Choice.**
+
+- **Owner:** exactly one. The owner promotes and demotes admins, and hands over
+  ownership; the previous owner becomes an admin.
+- **Admins:** add and remove members, and rename the chat.
+- **Who can be removed:** only the owner removes an admin, and nobody removes the
+  owner.
+- **When the owner leaves:** the longest-standing admin takes over, or failing that
+  the longest-standing member.
+
+**Reasoning.** The brief asks for admins, and the simplest hierarchy that cannot be
+used against its top is this one. Automatic succession means a chat is never left
+without anyone able to manage it.
+
+### 3.11 A block in a shared group filters, it does not eject
+
+**Choice.** Two people who block each other can both stay in a group. Each is left
+out of the other's message history, member list and realtime delivery; neither is
+told.
+
+**Reasoning.** Forcing one of them out would tell them about the block and make
+blocking costly for the blocker, who may need that estate committee chat.
+
+### 3.12 System messages name people by ID
+
+**Choice.** "Wanjiku added Kamau" is stored as `{"event": "members_added",
+"actor_id": …, "user_ids": […]}` and rendered by the client.
+
+**Reasoning.** Names change, and a purged account's name must not survive in other
+people's chat histories.
+
+### 3.13 Deleting a message erases it — unless it is reported
+
+**Choice.** Deleting for everyone sets `deleted_at` and clears the text. An image
+is stripped (as for an account purge) and its stored objects are deleted after
+commit. The exception is a message under a pending report: its content stays in
+the database for the moderator and is still shown to nobody.
+
+**Reasoning.** The sender asked for it to be gone, so it should be gone. But
+"delete before the moderator looks" must not be a way to destroy evidence of
+harassment. Storage deletes wait for commit so a rollback cannot leave a live
+message pointing at a missing image. The content check constraint was relaxed for
+deleted rows in migration 0008.
+
+### 3.14 Push tokens belong to a sign-in
+
+**Choice.** `device_tokens.device_session_id` records which sign-in registered a
+token, and pushes go only to tokens whose session is still live. Re-registering a
+token moves it to the account now signed in.
+
+**Reasoning.** Phones are shared in Kenya. Without this, signing out of a phone
+would leave it showing the previous person's messages until the token went stale.
+With it, signing out stops pushes at once, and when a second family member signs in
+on the same handset, the token follows them.
+
+### 3.15 Push text is decided by the server, with previews off by default
+
+**Choice.** A message push says "New message" (or "New message from Kamau" in a
+group); the text appears only if the recipient turned on `show_preview` for that
+type. Activity pushes are rendered server-side: "Kamau and 3 others reacted to
+your post". Pushes are throttled to one per collapse key per
+`PUSH_THROTTLE_SECONDS`, and skipped for anyone online, anyone who muted the
+conversation, or anyone blocked with the sender — re-checked when the job runs.
+
+**Reasoning.** A lock-screen preview on a shared phone is a message read by whoever
+picks it up. Rendering on the server keeps the client simple and the wording
+consistent. The text is English only for now; Swahili is deferred (below).
+
+### 3.16 Notifications store IDs, collapse while unread, and keep their place when read
+
+**Choice.**
+
+- **Contents:** an in-app notification holds a type, actors, a count and a target,
+  never the comment text. Messages have no in-app notifications, because the inbox
+  is their list.
+- **Collapsing:** a repeat event with the same collapse key updates the unread
+  notification from the last `NOTIFICATION_COLLAPSE_WINDOW_MINUTES`, remembering up
+  to 50 actors.
+- **Reading:** marking a notification read does not change its `updated_at`.
+- **Blocking:** notifications from someone the user has since blocked are left out
+  of the list and the count.
+
+**Reasoning.** Copying content into notifications would make a second copy of
+everyone's words, with its own retention problem, and a deleted comment would live
+on in someone else's list. The read rule is a defect found in testing: "mark all
+read" re-sorted the whole list, because the update bumped every row's activity
+time.
+
+### 3.17 The export includes messages sent, not messages received
+
+**Choice.** `GET /v1/me/export` lists the conversations a person is in and every
+message they sent, including deleted ones still held. It also shows device tokens,
+by their last eight characters only.
+
+**Reasoning.** Messages received are someone else's words. Including them would
+turn the access right into a way to extract another person's data. A full device
+token is an address for pushing to that phone, which a file passed around should
+not carry. The export says what it leaves out.
+
+### 3.18 `updated_at` gets a Python clock as well (extends 2.19)
+
+**Choice.** `TimestampMixin.updated_at` now has a Python default and `onupdate`,
+alongside the server default.
+
+**Reasoning.** This is the same defect as 2.19, now with `updated_at`, which Phase 3
+sorts by: the inbox, the notification list and sync. Two notifications created in
+one transaction tied and came out in either order. As a side benefit, an updated
+row now knows its new timestamp without a round trip, so async code cannot trip on
+an expired attribute.
+
+### 3.19 Coverage traces greenlets
+
+**Choice.** `concurrency = ["greenlet", "thread"]` in the coverage settings.
+
+**Reasoning.** SQLAlchemy's async layer runs ORM work in greenlets, and coverage
+without this loses track across switches: it reported the messaging service at 49%
+when it is 94%. Phase 2's 85% was likely understated the same way. With it, the
+suite measures 90%.
+
+### 3.20 The socket is tested in two real processes
+
+**Choice.** `tests/test_realtime_live.py` starts two `uvicorn` processes on free
+ports against the test database and Redis, commits its data for real, and
+truncates afterwards.
+
+**Reasoning.** It is the only honest test of "works across two API workers". The
+in-process ASGI client cannot speak WebSocket, and a threaded test client cannot
+share the suite's event loop. It also proves the parts no unit test can: revocation
+reaching a socket on another worker, a query-string token being ignored, and push
+for a user who really disconnected. One side effect: coverage does not follow
+subprocesses, so `socket.py` reads low (26%) despite being exercised end to end.
+
+### 3.21 FCM is addressed by registration token, despite a deprecation
+
+**Choice.** `FcmPushProvider` keeps `MulticastMessage(tokens=…)` and silences
+firebase-admin 7.7's deprecation warning at that one call site.
+
+**Reasoning.** The replacement, `fids`, takes Firebase Installation IDs, which are
+not what the Flutter SDK's `getToken()` returns. Switching blindly would break
+delivery. Moving to FIDs needs the client to change too, so it is listed as
+deferred.
+
+### 3.22 The request session commits before the response is sent (corrects 0.4)
+
+**Choice.** Every route takes its session through `core.db.SessionDep`, which is
+`Depends(get_session, scope="function")`. `tests/test_session_scope.py` fails if any
+route resolves `get_session` any other way.
+
+**Reasoning.** Decision 0.4 says the dependency commits when the handler returns.
+It did — but FastAPI's default exit point for a dependency with `yield` is
+`"request"`, which runs *after* the response has been sent. So since Phase 0, every
+write was committed after the client had been told it succeeded. Two consequences:
+
+- a commit that failed — a deferred constraint, a lost connection — left the client
+  holding a 201 for a write that never happened;
+- a client reading straight back through another worker could miss its own write.
+
+In-process tests cannot see this, because the test client returns only once the
+whole application call has finished. It surfaced in the two-worker test, where a
+push job queued after commit was sometimes not yet in Redis when the client had its
+response. With function scope, the commit and the after-commit callbacks finish
+before the response goes out. The cost is that those callbacks — a Redis publish,
+an enqueue — are now on the response path, a millisecond or two.
+
+---
+
+### Deferred from Phase 3, with the phase that will own it
+
+- **Listing conversations.** The kind and the nullable `listing_id` exist;
+  "chat with seller" arrives in Phase 5.
+- **A group's linked chat.** `group_id` exists; Phase 4.
+- **Typing indicators and message reactions.** Not in the brief. The socket
+  protocol leaves room for them (client frames are typed).
+- **Editing messages.** Not in the brief.
+- **Swahili push text.** Push strings are English, rendered server-side. Phase 8's
+  hardening pass, or earlier if the client team wants it, with a per-user language.
+- **Moderator access to reported messages.** Reports are filed, and the content is
+  kept for review; the queue that shows it is Phase 8.
+- **Hard purge of soft-deleted messages.** Deleted messages keep no text unless
+  reported. The row and any reported content go with Phase 8's retention job.
+- **FCM installation IDs** (3.21) — when the client moves to them.
+- **HEIC/HEIF** — still open from Phase 2.
