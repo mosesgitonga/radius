@@ -25,7 +25,10 @@ from app.core.logging import configure_logging
 from app.core.redis import close_redis
 from app.workers.tasks import (
     as_worker_task,
+    catch_up_media,
+    expire_old_stories,
     heartbeat,
+    process_media,
     refresh_density,
     roll_presence,
     run_retention,
@@ -53,6 +56,9 @@ class WorkerSettings:
         as_worker_task(refresh_density),
         as_worker_task(roll_presence),
         as_worker_task(run_retention),
+        as_worker_task(process_media),
+        as_worker_task(catch_up_media),
+        as_worker_task(expire_old_stories),
     ]
 
     cron_jobs: ClassVar[list[CronJob]] = [
@@ -73,6 +79,16 @@ class WorkerSettings:
         cron(as_worker_task(roll_presence), hour={0}, minute={20}, second=0),
         cron(as_worker_task(run_retention), hour={0}, minute={40}, second=0),
         cron(as_worker_task(heartbeat), minute={0}, second=0, run_at_startup=False),
+        # Every five minutes: uploads whose processing job was lost. Often enough
+        # that a dropped job means a slightly late image, not a confused user.
+        cron(as_worker_task(catch_up_media), minute=set(range(0, 60, 5)), second=30),
+        # Every quarter hour. Reads already filter on expiry, so this is about
+        # actually deleting stories — and their images — rather than hiding them.
+        cron(
+            as_worker_task(expire_old_stories),
+            minute={7, 22, 37, 52},
+            second=0,
+        ),
     ]
 
     on_startup = staticmethod(on_startup)

@@ -17,8 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.db import execute_dml
+from app.core.providers.storage import StorageProvider
 from app.modules.auth import service as auth_service
 from app.modules.auth.models import DeviceSession
+from app.modules.feed import service as feed_service
+from app.modules.media import service as media_service
 from app.modules.users.models import User
 from app.modules.users.service import purge_user
 
@@ -36,9 +39,22 @@ class PurgeResult:
 
 
 async def purge_deleted_accounts(
-    session: AsyncSession, *, settings: Settings, now: datetime | None = None
+    session: AsyncSession,
+    *,
+    settings: Settings,
+    storage: StorageProvider | None = None,
+    now: datetime | None = None,
 ) -> PurgeResult:
-    """Purge accounts whose grace period has run out."""
+    """Purge accounts whose grace period has run out.
+
+    Orchestrated here rather than inside `users.service.purge_user`, because the
+    purge has to reach every module that holds the person's data, and the users
+    service must not import the feed — the feed imports it. Each module owns how
+    its own data is erased; this decides that all of them run.
+
+    `storage` is optional so that a purge with no object store configured still
+    clears the database; the images are then left for the media sweeper.
+    """
     moment = now or datetime.now(UTC)
     cutoff = moment - timedelta(days=settings.deletion_grace_period_days)
 
@@ -56,6 +72,9 @@ async def purge_deleted_accounts(
 
     for user in due:
         await auth_service.revoke_sessions_for_deleted_account(session, user_id=user.id)
+        await feed_service.purge_author_content(session, user_id=user.id)
+        if storage is not None:
+            await media_service.purge_owner_media(session, storage, owner_id=user.id)
         await purge_user(session, user=user)
 
     if due:

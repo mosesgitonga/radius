@@ -72,9 +72,7 @@ class VariantView:
     url: str
 
 
-def variant_views(
-    asset: MediaAsset, storage: StorageProvider
-) -> dict[str, VariantView]:
+def variant_views(asset: MediaAsset, storage: StorageProvider) -> dict[str, VariantView]:
     """The asset's variants as client-facing URLs, smallest first."""
     views: dict[str, VariantView] = {}
     for size in sorted(asset.variants, key=lambda value: int(value)):
@@ -137,9 +135,7 @@ async def create_upload(
     return UploadTicket(asset=asset, upload=upload)
 
 
-async def get_asset(
-    session: AsyncSession, asset_id: uuid.UUID
-) -> MediaAsset | None:
+async def get_asset(session: AsyncSession, asset_id: uuid.UUID) -> MediaAsset | None:
     return (
         await session.execute(select(MediaAsset).where(MediaAsset.id == asset_id))
     ).scalar_one_or_none()
@@ -240,12 +236,8 @@ async def process_asset(
             declared_content_type=asset.declared_content_type,
         )
     except ImageRejectedError as exc:
-        logger.info(
-            "media_rejected", extra={"media_id": str(asset.id), "code": exc.code}
-        )
-        return await _reject(
-            session, storage, asset=asset, code=exc.code, reason=exc.reason
-        )
+        logger.info("media_rejected", extra={"media_id": str(asset.id), "code": exc.code})
+        return await _reject(session, storage, asset=asset, code=exc.code, reason=exc.reason)
 
     variants: dict[str, Any] = {}
     for size, variant in processed.variants.items():
@@ -336,11 +328,7 @@ async def claim_assets_for(
         raise BadRequestError("The same image cannot be attached twice")
 
     assets = list(
-        (
-            await session.execute(
-                select(MediaAsset).where(MediaAsset.id.in_(media_ids))
-            )
-        )
+        (await session.execute(select(MediaAsset).where(MediaAsset.id.in_(media_ids))))
         .scalars()
         .all()
     )
@@ -412,3 +400,89 @@ async def sweep_abandoned_uploads(
         await session.flush()
         logger.info("abandoned_uploads_swept", extra={"count": len(stale)})
     return len(stale)
+
+
+async def assets_awaiting_processing(
+    session: AsyncSession, *, older_than: timedelta, limit: int = 20
+) -> list[MediaAsset]:
+    """Assets stuck in `processing`, for the catch-up sweep.
+
+    Enqueueing is best-effort, so a job can be lost if Redis blinks between the
+    client's confirmation and the push. This finds those uploads so they are
+    processed a few minutes late rather than never. The age threshold keeps the
+    sweep from racing a job that is merely still in the queue.
+    """
+    cutoff = datetime.now(UTC) - older_than
+    return list(
+        (
+            await session.execute(
+                select(MediaAsset)
+                .where(
+                    MediaAsset.status == MediaStatus.processing,
+                    MediaAsset.updated_at < cutoff,
+                )
+                .order_by(MediaAsset.updated_at.asc())
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def purge_owner_media(
+    session: AsyncSession, storage: StorageProvider, *, owner_id: uuid.UUID
+) -> int:
+    """Delete every stored image belonging to a purged account.
+
+    The images are the personal data, so the objects are deleted outright. The
+    rows stay, marked `rejected` with code `purged` and no variants, because a
+    soft-deleted post still references them and moderation may need to know an
+    image existed. Nothing servable remains.
+    """
+    assets = list(
+        (await session.execute(select(MediaAsset).where(MediaAsset.owner_id == owner_id)))
+        .scalars()
+        .all()
+    )
+    for asset in assets:
+        for key in asset.variant_keys():
+            await storage.delete_object(storage_key=key)
+        if asset.original_key:
+            await storage.delete_object(storage_key=asset.original_key)
+        asset.variants = {}
+        asset.original_key = None
+        asset.status = MediaStatus.rejected
+        asset.rejection_code = "purged"
+        asset.rejection_reason = "The account that uploaded this was deleted"
+    if assets:
+        await session.flush()
+    return len(assets)
+
+
+async def export_owner_media(session: AsyncSession, *, owner_id: uuid.UUID) -> list[dict[str, Any]]:
+    """The user's uploads, for the data export.
+
+    Lists what exists and its state, not URLs: an export file is something people
+    forward and store, and a working link to every image in it would outlive the
+    export's purpose. The images themselves are visible in the app.
+    """
+    assets = (
+        await session.execute(
+            select(MediaAsset)
+            .where(MediaAsset.owner_id == owner_id)
+            .order_by(MediaAsset.created_at)
+        )
+    ).scalars()
+    return [
+        {
+            "id": str(asset.id),
+            "purpose": str(asset.purpose),
+            "status": str(asset.status),
+            "width": asset.source_width,
+            "height": asset.source_height,
+            "created_at": asset.created_at.isoformat() if asset.created_at else None,
+            "metadata_removed": asset.status == MediaStatus.ready,
+        }
+        for asset in assets
+    ]

@@ -14,11 +14,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.core.db import get_session
 from app.core.errors import ForbiddenError, NotFoundError
+from app.core.providers.storage import StorageProvider, get_storage_provider
 from app.core.redis import get_redis
 from app.modules.auth import service as auth_service
 from app.modules.auth.dependencies import ActiveUser, CurrentUser, user_rate_limit
+from app.modules.feed import service as feed_service
 from app.modules.location import cells
 from app.modules.location import service as location_service
+from app.modules.media import service as media_service
+from app.modules.media.schemas import ImageVariantOut
+from app.modules.media.views import image_variants
 from app.modules.users import service as users_service
 from app.modules.users.models import Block, User
 from app.modules.users.schemas import (
@@ -38,6 +43,16 @@ router = APIRouter(tags=["users"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 RedisDep = Annotated[Redis, Depends(get_redis)]
+StorageDep = Annotated[StorageProvider, Depends(get_storage_provider)]
+
+
+async def _avatar(
+    session: AsyncSession, storage: StorageProvider, user: User
+) -> dict[str, ImageVariantOut] | None:
+    if user.avatar_media_id is None:
+        return None
+    asset = await media_service.get_asset(session, user.avatar_media_id)
+    return image_variants(asset, storage)
 
 
 async def _area_label(
@@ -71,7 +86,11 @@ def _next_home_change_allowed_at(user: User, settings: Settings):  # type: ignor
     ),
 )
 async def get_me(
-    user: CurrentUser, session: SessionDep, redis: RedisDep, settings: SettingsDep
+    user: CurrentUser,
+    session: SessionDep,
+    redis: RedisDep,
+    settings: SettingsDep,
+    storage: StorageDep,
 ) -> MeOut:
     return MeOut(
         id=user.id,
@@ -88,6 +107,7 @@ async def get_me(
         rating_count=user.rating_count,
         deletion_requested_at=user.deletion_requested_at,
         avatar_media_id=user.avatar_media_id,
+        avatar=await _avatar(session, storage, user),
     )
 
 
@@ -109,9 +129,10 @@ async def update_me(
     session: SessionDep,
     redis: RedisDep,
     settings: SettingsDep,
+    storage: StorageDep,
 ) -> MeOut:
     await users_service.update_profile(session, user=user, display_name=payload.display_name)
-    return await get_me(user, session, redis, settings)
+    return await get_me(user, session, redis, settings, storage)
 
 
 @router.get(
@@ -130,6 +151,7 @@ async def get_public_profile(
     session: SessionDep,
     redis: RedisDep,
     settings: SettingsDep,
+    storage: StorageDep,
 ) -> PublicProfileOut:
     target = await users_service.get_user(session, user_id)
     if target is None:
@@ -149,6 +171,7 @@ async def get_public_profile(
     return PublicProfileOut(
         id=target.id,
         display_name=target.display_name,
+        avatar=await _avatar(session, storage, target),
         area_label=await _area_label(session, redis, target, settings),
         member_since=target.created_at,
         distance_bucket=bucket,
@@ -290,7 +313,15 @@ async def unblock_user(user_id: uuid.UUID, user: CurrentUser, session: SessionDe
 async def export_my_data(
     user: CurrentUser, session: SessionDep, settings: SettingsDep
 ) -> dict[str, Any]:
-    return await users_service.export_user_data(session, user=user, settings=settings)
+    export = await users_service.export_user_data(session, user=user, settings=settings)
+    # Each module exports its own data; the router assembles the whole. The users
+    # service cannot do it itself, because the feed imports the users service.
+    export["content"] = await feed_service.export_author_content(session, user_id=user.id)
+    export["media"] = await media_service.export_owner_media(session, owner_id=user.id)
+    export["not_held"] = [
+        item for item in export["not_held"] if item != "message content (no messaging yet)"
+    ] + ["image metadata (EXIF, including GPS, is removed from every upload)"]
+    return export
 
 
 @router.post(

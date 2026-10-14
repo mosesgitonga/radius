@@ -15,6 +15,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.location.cells import DistanceBucket
+from app.modules.media.schemas import ImageVariantOut
 from app.modules.users.models import ConsentType, UserStatus
 
 
@@ -74,8 +75,9 @@ class MeOut(BaseModel):
     rating_count: int
 
     deletion_requested_at: datetime | None = None
-    avatar_media_id: uuid.UUID | None = Field(
-        default=None, description="Populated from Phase 2, when media exists."
+    avatar_media_id: uuid.UUID | None = None
+    avatar: dict[str, ImageVariantOut] | None = Field(
+        default=None, description="Served avatar sizes, keyed by width."
     )
 
 
@@ -86,6 +88,7 @@ class PublicProfileOut(BaseModel):
 
     id: uuid.UUID
     display_name: str
+    avatar: dict[str, ImageVariantOut] | None = None
     area_label: AreaLabelOut | None = None
     member_since: datetime
 

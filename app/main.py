@@ -21,9 +21,13 @@ from app.core.errors import ErrorEnvelope, register_exception_handlers
 from app.core.health import router as health_router
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
+from app.core.queue import close_queue
 from app.core.redis import close_redis
 from app.modules.auth.router import router as auth_router
+from app.modules.feed.router import router as feed_router
 from app.modules.location.router import router as location_router
+from app.modules.media.router import router as media_router
+from app.modules.moderation.router import router as moderation_router
 from app.modules.users.router import router as users_router
 
 logger = logging.getLogger(__name__)
@@ -65,6 +69,20 @@ TAGS_METADATA = [
         "description": ("Profiles, consent records, blocking, and data-protection rights."),
     },
     {
+        "name": "media",
+        "description": (
+            "Direct-to-storage image uploads. Every image is re-encoded with all "
+            "metadata, including GPS, removed; the original is deleted."
+        ),
+    },
+    {
+        "name": "feed",
+        "description": (
+            "Posts, comments, reactions and stories within the caller's adaptive radius."
+        ),
+    },
+    {"name": "moderation", "description": "Reporting content and neighbours."},
+    {
         "name": "location",
         "description": (
             "Home area, explore mode, and the adaptive radius. Coordinates go in; "
@@ -100,19 +118,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # connections behind on PostgreSQL or Redis.
         await dispose_engine()
         await close_redis()
+        await close_queue()
         logger.info("api_stopped")
 
 
 def build_v1_router(settings: Settings) -> APIRouter:
     """The versioned client API.
 
-    Module routers are mounted here as each phase lands them. Media and feed
-    arrive in Phase 2, messaging and notifications in Phase 3, and so on.
+    Module routers are mounted here as each phase lands them. Messaging and
+    notifications arrive in Phase 3, groups in Phase 4, and so on.
     """
     router = APIRouter(prefix=settings.api_prefix, responses=COMMON_ERROR_RESPONSES)
     router.include_router(auth_router)
     router.include_router(users_router)
     router.include_router(location_router)
+    router.include_router(media_router)
+    router.include_router(feed_router)
+    router.include_router(moderation_router)
     return router
 
 

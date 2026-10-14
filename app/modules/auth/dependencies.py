@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, Request, Response
@@ -177,3 +178,53 @@ def current_session_id(request: Request) -> uuid.UUID | None:
     """
     session_id = getattr(request.state, "session_id", None)
     return session_id if isinstance(session_id, uuid.UUID) else None
+
+
+def is_new_account(user: User, settings: Settings) -> bool:
+    """Whether an account is still inside its probation window."""
+    age = datetime.now(UTC) - user.created_at
+    return age < timedelta(hours=settings.new_account_age_hours)
+
+
+def tiered_user_rate_limit(
+    *,
+    bucket: str,
+    window_seconds: int,
+    new_account_limit: Callable[[Settings], int],
+    established_limit: Callable[[Settings], int],
+) -> Callable[[User, Response], Awaitable[None]]:
+    """A per-account limit that is tighter while the account is new.
+
+    A throwaway account is the cheapest spam vector there is, and age is the one
+    signal that cannot be faked without waiting. So a brand-new account gets a
+    handful of posts a day, and an established neighbour gets room to be useful.
+
+    Depends on `ActiveUser`, not `CurrentUser`: everything this guards creates
+    content, and a suspended or deletion-pending account must be refused before
+    it is counted. Both buckets share one counter, so an account crossing the age
+    threshold mid-window keeps what it has already used.
+    """
+
+    async def dependency(user: ActiveUser, response: Response) -> None:
+        settings = get_settings()
+        limit = (
+            new_account_limit(settings)
+            if is_new_account(user, settings)
+            else established_limit(settings)
+        )
+        result = await get_rate_limiter().hit(
+            bucket, f"u:{user.id}", limit=limit, window_seconds=window_seconds
+        )
+        if not result.allowed:
+            logger.info(
+                "rate_limited",
+                extra={
+                    "bucket": bucket,
+                    "scope": "user",
+                    "new_account": is_new_account(user, settings),
+                },
+            )
+            raise RateLimitedError(retry_after_seconds=result.retry_after_seconds)
+        response.headers.update(result.headers)
+
+    return dependency

@@ -109,10 +109,14 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     )
     """Drives the active-user counts the radius engine is built on."""
 
-    avatar_media_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
-    """Set in Phase 2. Deliberately not a foreign key yet: the media table does
-    not exist, and the brief asks for the column now so the migration later is a
-    constraint rather than a table rewrite."""
+    avatar_media_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="SET NULL"), nullable=True
+    )
+    """The current avatar. Declared in Phase 1 without a constraint because the
+    media table did not exist; Phase 2 adds the foreign key — exactly the cheap,
+    constraint-only migration the brief asked the data model to allow for.
+
+    `SET NULL`, so removing an asset clears the avatar rather than failing."""
 
     # -- Home location -------------------------------------------------------
     # Four resolutions of the same cell, denormalised on purpose. Deriving the

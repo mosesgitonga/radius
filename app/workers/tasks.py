@@ -8,16 +8,17 @@ Each task here is a thin wrapper: it opens a session and calls the module that
 owns the work. The scheduling lives in `app/workers/settings.py`, the logic lives
 with the models it touches, and this file is only the seam between them.
 
-Later phases add: story expiry (Phase 2), push fan-out (Phase 3), event reminders
-(Phase 7), and badge recomputation (Phase 8).
+Later phases add: push fan-out (Phase 3), event reminders (Phase 7), and badge
+recomputation (Phase 8).
 """
 
 from __future__ import annotations
 
 import functools
 import logging
+import uuid
 from collections.abc import Callable, Coroutine
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Concatenate, cast
 
 from arq.typing import WorkerCoroutine
@@ -25,7 +26,11 @@ from arq.typing import WorkerCoroutine
 from app.core.config import get_settings
 from app.core.context import new_request_id, reset_request_id, set_request_id
 from app.core.db import session_scope
+from app.core.idempotency import purge_expired as purge_idempotency_records
+from app.core.providers.storage import get_storage_provider
+from app.modules.feed.tasks import expire_stories
 from app.modules.location.tasks import refresh_cell_activity, roll_home_presence
+from app.modules.media import service as media_service
 from app.modules.users.tasks import delete_expired_sessions, purge_deleted_accounts
 
 logger = logging.getLogger(__name__)
@@ -118,13 +123,72 @@ async def run_retention(ctx: JobContext) -> dict[str, int]:
     tables and splitting them would double the schedule for no benefit.
     """
     settings = get_settings()
+    storage = get_storage_provider()
     async with session_scope() as session:
-        purged = await purge_deleted_accounts(session, settings=settings)
+        purged = await purge_deleted_accounts(session, settings=settings, storage=storage)
         sessions_removed = await delete_expired_sessions(session)
+        uploads_swept = await media_service.sweep_abandoned_uploads(
+            session, storage, settings=settings
+        )
+        idempotency_purged = await purge_idempotency_records(session, settings=settings)
     return {
         "accounts_purged": purged.accounts_purged,
         "expired_sessions_deleted": sessions_removed,
+        "abandoned_uploads_swept": uploads_swept,
+        "idempotency_records_purged": idempotency_purged,
     }
+
+
+@with_job_context
+async def process_media(ctx: JobContext, media_id: str) -> str:
+    """Process one upload: validate, strip metadata, render variants.
+
+    Enqueued when a client confirms an upload. Returns the asset's final status,
+    which arq keeps for an hour — handy when diagnosing a stuck upload.
+    """
+    settings = get_settings()
+    storage = get_storage_provider()
+    async with session_scope() as session:
+        asset = await media_service.get_asset(session, uuid.UUID(media_id))
+        if asset is None:
+            logger.warning("process_media_missing_asset", extra={"media_id": media_id})
+            return "missing"
+        if asset.status.value != "processing":
+            # Already done — a duplicate enqueue, or the catch-up sweep got there
+            # first. Processing twice would delete the variants it just made.
+            return asset.status.value
+        asset = await media_service.process_asset(session, storage, asset=asset, settings=settings)
+        return asset.status.value
+
+
+@with_job_context
+async def catch_up_media(ctx: JobContext) -> dict[str, int]:
+    """Process uploads whose job was lost.
+
+    Enqueueing is best-effort by design, so a Redis blip can drop a job. Every few
+    minutes this finds assets still `processing` after a grace period and does the
+    work, so a lost job means a late image rather than one stuck for ever.
+    """
+    settings = get_settings()
+    storage = get_storage_provider()
+    processed = 0
+    async with session_scope() as session:
+        stuck = await media_service.assets_awaiting_processing(
+            session, older_than=timedelta(minutes=2)
+        )
+        for asset in stuck:
+            await media_service.process_asset(session, storage, asset=asset, settings=settings)
+            processed += 1
+    return {"processed": processed}
+
+
+@with_job_context
+async def expire_old_stories(ctx: JobContext) -> dict[str, int]:
+    """Delete stories past their 24 hours, and their images."""
+    storage = get_storage_provider()
+    async with session_scope() as session:
+        result = await expire_stories(session, storage)
+    return {"deleted": result.deleted, "held_for_review": result.held_for_review}
 
 
 def as_worker_task(func: Callable[..., Coroutine[Any, Any, Any]]) -> WorkerCoroutine:

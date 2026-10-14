@@ -264,6 +264,16 @@ class RadiusEngine:
             by_ring[k] = by_ring.get(k, 0) + int(count)
         return by_ring
 
+    async def active_users_within(self, anchor_cell_res8: int, radius_km: float) -> int:
+        """Active users whose home cell lies within `radius_km` of the anchor.
+
+        Used for reach estimates. Same single-query shape as the density walk:
+        one read of the disk, summed in Python.
+        """
+        ring_limit = self._ring_limit_for_km(anchor_cell_res8, radius_km)
+        counts = await self._active_counts_within(anchor_cell_res8, ring_limit)
+        return sum(count for k, count in counts.items() if k >= 0)
+
     # -- Cache ---------------------------------------------------------------
     @staticmethod
     def cache_key(anchor_cell_res8: int) -> str:

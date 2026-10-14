@@ -25,6 +25,7 @@ from enum import StrEnum
 from geoalchemy2 import Geography
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -34,6 +35,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -261,6 +263,15 @@ class Comment(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     into a recursive query."""
 
     body: Mapped[str] = mapped_column(String(2000))
+
+    is_visiting: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    """Whether the author was exploring another area when they wrote this.
+
+    Decision 1.1, rule 3: a visitor's comment shows their home area with a
+    "visiting" marker, so locals can tell a neighbour from somebody passing
+    through. Recorded at write time, because explore state is ephemeral and would
+    be gone by the time anyone read the comment."""
+
     status: Mapped[ContentStatus] = mapped_column(
         _content_status,
         default=ContentStatus.visible,
