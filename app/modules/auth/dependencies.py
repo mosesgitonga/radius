@@ -16,17 +16,20 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, Request, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.db import SessionDep
 from app.core.errors import ForbiddenError, RateLimitedError, UnauthenticatedError
 from app.core.ratelimit import get_rate_limiter
-from app.core.security import decode_access_token
+from app.core.security import AccessTokenClaims, decode_access_token
 from app.modules.auth import service as auth_service
+from app.modules.auth.models import DeviceSession
 from app.modules.users.models import User, UserStatus
 from app.modules.users.service import get_user, touch_last_active
 
@@ -44,16 +47,21 @@ def _extract_bearer_token(request: Request) -> str | None:
     return token or None
 
 
-async def get_current_user(
-    request: Request,
-    session: SessionDep,
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> User:
-    """The authenticated caller, or `UnauthenticatedError`."""
-    token = _extract_bearer_token(request)
-    if token is None:
-        raise UnauthenticatedError("An access token is required")
+@dataclass(frozen=True, slots=True)
+class Authenticated:
+    user: User
+    device_session: DeviceSession
+    claims: AccessTokenClaims
 
+
+async def authenticate_access_token(
+    session: AsyncSession, *, token: str, settings: Settings
+) -> Authenticated:
+    """Verify an access token and everything it names, or `UnauthenticatedError`.
+
+    Shared by HTTP requests and the WebSocket, so the two cannot drift apart on
+    what counts as signed in.
+    """
     claims = decode_access_token(token, settings)
 
     device_session = await auth_service.get_session_for_access(
@@ -74,6 +82,21 @@ async def get_current_user(
         raise UnauthenticatedError("That account no longer exists")
     if user.status == UserStatus.banned:
         raise ForbiddenError("This account has been banned")
+    return Authenticated(user=user, device_session=device_session, claims=claims)
+
+
+async def get_current_user(
+    request: Request,
+    session: SessionDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> User:
+    """The authenticated caller, or `UnauthenticatedError`."""
+    token = _extract_bearer_token(request)
+    if token is None:
+        raise UnauthenticatedError("An access token is required")
+
+    authenticated = await authenticate_access_token(session, token=token, settings=settings)
+    user, device_session = authenticated.user, authenticated.device_session
 
     # Published for the rate limiter, which counts per account when it can,
     # and for routes that need to know which session is the caller's own —

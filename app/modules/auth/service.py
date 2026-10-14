@@ -33,6 +33,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.db import run_after_commit
 from app.core.errors import (
     ConflictError,
     ForbiddenError,
@@ -41,6 +42,7 @@ from app.core.errors import (
 )
 from app.core.providers.sms import SmsProvider
 from app.core.ratelimit import RateLimiter
+from app.core.realtime import SESSION_REVOKED, publish_after_commit
 from app.core.redis import hash_get_all, hash_increment, key_ttl
 from app.core.security import (
     create_access_token,
@@ -395,6 +397,9 @@ async def rotate_refresh_token(
         # situation reuse detection exists to prevent. Verified by
         # `test_reusing_a_token_revokes_the_whole_family`.
         await session.commit()
+        # The explicit commit bypasses the request's own after-commit step, so
+        # the socket-closing announcement is sent here.
+        await run_after_commit(session)
         raise UnauthenticatedError(
             "This session has been ended for your security. Please sign in again."
         )
@@ -423,6 +428,25 @@ async def rotate_refresh_token(
     return tokens
 
 
+def _announce_revoked(
+    session: AsyncSession, *, user_id: uuid.UUID, session_ids: list[uuid.UUID]
+) -> None:
+    """Close open sockets for these sessions once the revocation commits.
+
+    An HTTP request with a revoked session is refused on its next call, but a
+    WebSocket authenticated before the revocation has no next call — it would
+    keep receiving messages until its access token expired. Rotation is not
+    announced: it is routine, and the client re-authenticates its socket in-band.
+    """
+    if session_ids:
+        publish_after_commit(
+            session,
+            [user_id],
+            SESSION_REVOKED,
+            {"session_ids": [str(session_id) for session_id in session_ids]},
+        )
+
+
 async def _revoke_family(
     session: AsyncSession,
     *,
@@ -433,12 +457,17 @@ async def _revoke_family(
     statement = select(DeviceSession).where(
         DeviceSession.family_id == family_id, DeviceSession.revoked_at.is_(None)
     )
-    revoked = 0
-    for device_session in (await session.execute(statement)).scalars():
+    revoked: list[DeviceSession] = list((await session.execute(statement)).scalars())
+    for device_session in revoked:
         device_session.revoked_at = now
         device_session.revoked_reason = reason
-        revoked += 1
-    return revoked
+    if revoked:
+        _announce_revoked(
+            session,
+            user_id=revoked[0].user_id,
+            session_ids=[device_session.id for device_session in revoked],
+        )
+    return len(revoked)
 
 
 async def _evict_oldest_sessions(
@@ -472,6 +501,11 @@ async def _evict_oldest_sessions(
     for device_session in live[:excess]:
         device_session.revoked_at = now
         device_session.revoked_reason = SessionRevocationReason.max_sessions
+    _announce_revoked(
+        session,
+        user_id=user_id,
+        session_ids=[device_session.id for device_session in live[:excess]],
+    )
 
 
 async def logout(session: AsyncSession, *, refresh_token: str, settings: Settings) -> None:
@@ -489,6 +523,7 @@ async def logout(session: AsyncSession, *, refresh_token: str, settings: Setting
 
     device_session.revoked_at = datetime.now(UTC)
     device_session.revoked_reason = SessionRevocationReason.logout
+    _announce_revoked(session, user_id=device_session.user_id, session_ids=[device_session.id])
 
 
 async def logout_all(
@@ -503,14 +538,16 @@ async def logout_all(
         DeviceSession.user_id == user.id, DeviceSession.revoked_at.is_(None)
     )
     now = datetime.now(UTC)
-    revoked = 0
+    revoked_ids: list[uuid.UUID] = []
     for device_session in (await session.execute(statement)).scalars():
         if keep_session_id is not None and device_session.id == keep_session_id:
             continue
         device_session.revoked_at = now
         device_session.revoked_reason = SessionRevocationReason.logout_all
-        revoked += 1
+        revoked_ids.append(device_session.id)
 
+    revoked = len(revoked_ids)
+    _announce_revoked(session, user_id=user.id, session_ids=revoked_ids)
     if revoked:
         await record_audit_event(
             session,
@@ -555,9 +592,12 @@ async def revoke_sessions_for_deleted_account(session: AsyncSession, *, user_id:
         DeviceSession.user_id == user_id, DeviceSession.revoked_at.is_(None)
     )
     now = datetime.now(UTC)
+    revoked_ids: list[uuid.UUID] = []
     for device_session in (await session.execute(statement)).scalars():
         device_session.revoked_at = now
         device_session.revoked_reason = SessionRevocationReason.account_deleted
+        revoked_ids.append(device_session.id)
+    _announce_revoked(session, user_id=user_id, session_ids=revoked_ids)
 
 
 async def count_live_sessions(session: AsyncSession, *, user_id: uuid.UUID) -> int:
