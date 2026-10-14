@@ -41,6 +41,7 @@ os.environ["SECRET_KEY"] = "test-secret-key-at-least-32-bytes-long-for-hs256"
 # reach the network, and must not write into a bucket somebody is using.
 os.environ["STORAGE_PROVIDER"] = "memory"
 os.environ["SMS_PROVIDER"] = "console"
+os.environ["PUSH_PROVIDER"] = "fake"
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
@@ -55,6 +56,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession  #
 from app.core import db as db_module  # noqa: E402
 from app.core import redis as redis_module  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
+from app.core.providers.push import RecordingPushProvider, set_push_provider  # noqa: E402
 from app.core.providers.sms import ConsoleSmsProvider, set_sms_provider  # noqa: E402
 from app.core.providers.storage import MemoryStorageProvider, set_storage_provider  # noqa: E402
 from app.core.queue import RecordingJobQueue, set_queue  # noqa: E402
@@ -420,3 +422,15 @@ def queue() -> Iterator[RecordingJobQueue]:
     set_queue(recorder)
     yield recorder
     set_queue(None)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: push
+# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def push() -> Iterator[RecordingPushProvider]:
+    """Records pushes instead of sending them. Autouse, so no test can reach FCM."""
+    provider = RecordingPushProvider()
+    set_push_provider(provider)
+    yield provider
+    set_push_provider(None)

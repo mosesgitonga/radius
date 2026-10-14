@@ -404,6 +404,11 @@ class Settings(BaseSettings):
 
     notification_retention_days: int = Field(default=90, ge=1, le=730)
 
+    device_token_stale_days: int = Field(default=90, ge=7, le=365)
+    """A device token not re-registered for this long is deleted. The app
+    re-registers on every launch, so a token this old belongs to an uninstalled app
+    or an abandoned phone."""
+
     # -- Validation ----------------------------------------------------------
     @field_validator("database_url")
     @classmethod

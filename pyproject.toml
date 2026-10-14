@@ -109,7 +109,7 @@ disallow_untyped_decorators = false
 [[tool.mypy.overrides]]
 # h3-py ships no py.typed marker, so its return types arrive as Any. The
 # location module wraps every call in an explicit int()/float() for that reason.
-module = ["geoalchemy2.*", "arq.*", "h3.*", "boto3.*", "botocore.*"]
+module = ["geoalchemy2.*", "arq.*", "h3.*", "boto3.*", "botocore.*", "firebase_admin.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
@@ -130,6 +130,9 @@ addopts = "-q --strict-markers --strict-config"
 [tool.coverage.run]
 source = ["app"]
 omit = ["app/workers/settings.py"]
+# SQLAlchemy's async layer runs ORM work in greenlets. Without this, coverage loses
+# track across those switches and reports exercised code as missed.
+concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]
 show_missing = true

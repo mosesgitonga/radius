@@ -14,6 +14,11 @@ htmlcov/
 .env
 .env.*
 !.env.example
+# Firebase service-account keys (FCM_CREDENTIALS_FILE)
+secrets/
+*service-account*.json
+*firebase-adminsdk*.json
+fcm*.json
 
 # Local data
 postgres-data/
