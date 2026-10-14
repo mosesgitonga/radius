@@ -37,7 +37,9 @@ from app.modules.auth import models as _auth_models  # noqa: F401
 from app.modules.feed import models as _feed_models  # noqa: F401
 from app.modules.location import models as _location_models  # noqa: F401
 from app.modules.media import models as _media_models  # noqa: F401
+from app.modules.messaging import models as _messaging_models  # noqa: F401
 from app.modules.moderation import models as _moderation_models  # noqa: F401
+from app.modules.notifications import models as _notifications_models  # noqa: F401
 from app.modules.users import models as _users_models  # noqa: F401
 
 config = context.config
