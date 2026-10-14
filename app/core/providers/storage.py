@@ -142,37 +142,57 @@ class S3StorageProvider:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._client: Any | None = None
+        self._presign_client: Any | None = None
 
     @property
     def client(self) -> Any:
-        """Built on first use, not at construction.
+        """The client for the server's own operations.
 
-        Importing this module must not require credentials — the settings
-        validator checks those — and a client built at import time would make
-        every test that touches the media module depend on boto3's config
-        resolution.
+        Built on first use, not at construction. Importing this module must not
+        require credentials — the settings validator checks those — and a client
+        built at import time would make every test that touches the media module
+        depend on boto3's config resolution.
         """
         if self._client is None:
-            import boto3
-            from botocore.config import Config
-
-            self._client = boto3.client(
-                "s3",
-                region_name=self._settings.storage_region,
-                endpoint_url=self._settings.storage_endpoint_url or None,
-                aws_access_key_id=self._settings.storage_access_key_id,
-                aws_secret_access_key=(self._settings.storage_secret_access_key.get_secret_value()),
-                config=Config(
-                    signature_version="s3v4",
-                    s3={
-                        "addressing_style": (
-                            "path" if self._settings.storage_force_path_style else "auto"
-                        )
-                    },
-                    retries={"max_attempts": 3, "mode": "standard"},
-                ),
-            )
+            self._client = self._build(self._settings.storage_endpoint_url)
         return self._client
+
+    @property
+    def presign_client(self) -> Any:
+        """The client used to sign URLs handed to a phone.
+
+        Separate because the host is part of a SigV4 signature. Where the server
+        and its clients see storage at different addresses — Docker in development
+        — a URL signed for the internal name would be unusable, and rewriting its
+        host afterwards would break the signature.
+        """
+        endpoint = self._settings.storage_presign_endpoint_url
+        if not endpoint or endpoint == self._settings.storage_endpoint_url:
+            return self.client
+        if self._presign_client is None:
+            self._presign_client = self._build(endpoint)
+        return self._presign_client
+
+    def _build(self, endpoint_url: str) -> Any:
+        import boto3
+        from botocore.config import Config
+
+        return boto3.client(
+            "s3",
+            region_name=self._settings.storage_region,
+            endpoint_url=endpoint_url or None,
+            aws_access_key_id=self._settings.storage_access_key_id,
+            aws_secret_access_key=(self._settings.storage_secret_access_key.get_secret_value()),
+            config=Config(
+                signature_version="s3v4",
+                s3={
+                    "addressing_style": (
+                        "path" if self._settings.storage_force_path_style else "auto"
+                    )
+                },
+                retries={"max_attempts": 3, "mode": "standard"},
+            ),
+        )
 
     def presign_upload(
         self, *, storage_key: str, content_type: str, max_bytes: int
@@ -185,7 +205,7 @@ class S3StorageProvider:
         limit is returned here only so the client can refuse early.
         """
         try:
-            url = self.client.generate_presigned_url(
+            url = self.presign_client.generate_presigned_url(
                 "put_object",
                 Params={
                     "Bucket": self._settings.storage_bucket,
@@ -218,7 +238,7 @@ class S3StorageProvider:
             return f"{base}/{storage_key}"
         try:
             return str(
-                self.client.generate_presigned_url(
+                self.presign_client.generate_presigned_url(
                     "get_object",
                     Params={"Bucket": self._settings.storage_bucket, "Key": storage_key},
                     ExpiresIn=self._settings.presign_download_ttl_seconds,
@@ -266,6 +286,21 @@ class S3StorageProvider:
             # A failed delete leaves an orphan, which costs storage but breaks
             # nothing. Logged for the sweeper rather than raised at the caller.
             logger.warning("storage_delete_failed", extra={"storage_key": storage_key})
+
+    def ensure_bucket(self) -> bool:
+        """Create the bucket if it does not exist. For development only.
+
+        Production buckets are provisioned deliberately, with their own access
+        policy and lifecycle rules; an application that creates its own bucket on
+        boot would quietly paper over a misconfigured environment.
+        """
+        bucket = self._settings.storage_bucket
+        try:
+            self.client.head_bucket(Bucket=bucket)
+        except Exception:
+            self.client.create_bucket(Bucket=bucket)
+            return True
+        return False
 
     async def object_exists(self, *, storage_key: str) -> bool:
         def _head() -> bool:

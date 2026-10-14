@@ -43,6 +43,9 @@ api)
     ;;
 api-dev)
     [ "${RUN_MIGRATIONS}" = "true" ] && run_migrations
+    # Development only: create the local bucket if it is missing. The script
+    # refuses outside local and test, so this cannot create a production bucket.
+    python -m scripts.ensure_bucket || echo "entrypoint: bucket bootstrap failed, continuing"
     echo "entrypoint: starting api with reload"
     exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT}" --reload
     ;;

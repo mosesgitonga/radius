@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "myradius-dev",
+      "credentials": [
+        {
+          "accessKey": "myradius-dev",
+          "secretKey": "myradius-dev-secret-not-for-production"
+        }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

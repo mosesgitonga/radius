@@ -57,6 +57,31 @@ services:
       timeout: 3s
       retries: 10
 
+  storage:
+    # S3-compatible object storage for development, so the presigned-upload flow
+    # is exercised for real rather than only in production. SeaweedFS rather than
+    # MinIO: MinIO stopped publishing community images to Docker Hub in 2025, and
+    # this is Apache-licensed and speaks S3 with SigV4 presigning. Production uses
+    # Cloudflare R2; the application code is identical either way.
+    image: chrislusf/seaweedfs:latest
+    restart: unless-stopped
+    command: >-
+      server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+      -master.volumeSizeLimitMB=256 -volume.max=0
+    ports:
+      - "8333:8333"
+    volumes:
+      - storage-data:/data
+      - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      # 127.0.0.1, not localhost: busybox wget resolves localhost to ::1 first,
+      # and SeaweedFS does not listen on IPv6, so the probe would always fail.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/status || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
   api:
     build:
       context: .
@@ -76,6 +101,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      storage:
+        condition: service_healthy
 
   worker:
     build:
@@ -92,6 +119,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      storage:
+        condition: service_healthy
       # Waits for the API container to have applied migrations before starting.
       api:
         condition: service_started
@@ -99,3 +128,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  storage-data:

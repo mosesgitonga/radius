@@ -265,6 +265,15 @@ class Settings(BaseSettings):
     """Set for anything that is not AWS: Cloudflare R2, or MinIO in development.
     Empty means AWS S3's own endpoints."""
 
+    storage_presign_endpoint_url: str = ""
+    """The endpoint *clients* upload to, if different from the one the server uses.
+
+    Only matters where the two networks differ. In Docker the API reaches storage
+    as `http://storage:8333`, which no phone can resolve, so presigned URLs must
+    be signed for `http://localhost:8333` instead — the host is part of a SigV4
+    signature, so a URL cannot simply be rewritten after signing. Empty means the
+    same as `storage_endpoint_url`, which is the case for R2 and S3."""
+
     storage_access_key_id: str = ""
     storage_secret_access_key: SecretStr = SecretStr("")
     storage_public_base_url: str = ""
