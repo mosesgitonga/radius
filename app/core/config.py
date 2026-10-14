@@ -254,6 +254,94 @@ class Settings(BaseSettings):
     """A deletion request stays reversible for this long, then is purged. Guards
     against an account being destroyed in a moment of anger, or by someone else."""
 
+    # -- Object storage ------------------------------------------------------
+    storage_provider: Literal["s3", "memory"] = "memory"
+    """`memory` keeps objects in process, for tests and a bare developer machine.
+    Default so a missing credential cannot silently write to a real bucket."""
+
+    storage_bucket: str = "myradius-media"
+    storage_region: str = "auto"
+    storage_endpoint_url: str = ""
+    """Set for anything that is not AWS: Cloudflare R2, or MinIO in development.
+    Empty means AWS S3's own endpoints."""
+
+    storage_access_key_id: str = ""
+    storage_secret_access_key: SecretStr = SecretStr("")
+    storage_public_base_url: str = ""
+    """Public base URL for serving processed images — a CDN or R2 public bucket.
+    Empty falls back to presigned GETs, which work but cache badly."""
+
+    storage_force_path_style: bool = True
+    """MinIO and R2 want path-style addressing; AWS prefers virtual-hosted."""
+
+    presign_upload_ttl_seconds: int = Field(default=900, ge=60, le=3600)
+    presign_download_ttl_seconds: int = Field(default=3600, ge=60, le=604_800)
+
+    # -- Media ---------------------------------------------------------------
+    media_max_upload_bytes: int = Field(default=12 * 1024 * 1024, ge=1024)
+    """12 MB. Generous enough for a modern phone photo, small enough that the
+    worker is not decoding something pathological."""
+
+    media_max_pixels: int = Field(default=50_000_000, ge=1_000)
+    """Guards against a decompression bomb: a tiny file that expands into
+    gigabytes of pixels. Pillow checks this before it allocates."""
+
+    media_webp_sizes: str = "320,720,1280"
+    """Longest-edge widths, as the brief specifies. Comma-separated so the set is
+    tunable without a code change."""
+
+    media_webp_quality: int = Field(default=80, ge=1, le=100)
+    media_avatar_size: int = Field(default=320, ge=64, le=2048)
+    media_pending_ttl_hours: int = Field(default=24, ge=1, le=720)
+    """An upload that is never completed is swept after this."""
+
+    # -- Posts ---------------------------------------------------------------
+    post_max_body_length: int = Field(default=2000, ge=1, le=20_000)
+    post_max_images: int = Field(default=6, ge=1, le=20)
+
+    post_categories: str = "general,question,recommendation,lost_and_found,alert"
+    """Configurable, as the brief requires, and therefore a plain string column
+    with no database enum: adding a category must not need a migration."""
+
+    # -- Stories -------------------------------------------------------------
+    story_ttl_hours: int = Field(default=24, ge=1, le=168)
+    story_max_text_length: int = Field(default=280, ge=1, le=2000)
+
+    # -- Comments and reactions ----------------------------------------------
+    comment_max_length: int = Field(default=1000, ge=1, le=10_000)
+    reaction_kinds: str = "like,love,helpful,celebrate,sad"
+    """One reaction per user per target; changing it replaces the previous one."""
+
+    # -- Moderation ----------------------------------------------------------
+    report_auto_hide_threshold: int = Field(default=3, ge=1, le=100)
+    """Distinct *trusted* reporters needed to hide content pending review. Low
+    enough to act quickly on something genuinely harmful, high enough that one
+    person cannot silence a neighbour they disagree with."""
+
+    trusted_reporter_min_account_age_days: int = Field(default=7, ge=0, le=365)
+    """Phase 2's stand-in for the verified badge: a reporter counts towards the
+    auto-hide threshold once their account is this old, their phone is verified,
+    and nothing has been upheld against them. Phase 8 replaces this with the badge."""
+
+    # -- Rate limits for new accounts ----------------------------------------
+    new_account_age_hours: int = Field(default=48, ge=0, le=8760)
+    """Below this age an account is "new" and gets the tighter limits below. A
+    throwaway account is the cheapest spam vector there is, and age is the one
+    signal that cannot be faked without waiting."""
+
+    new_account_posts_per_day: int = Field(default=5, ge=0)
+    new_account_comments_per_hour: int = Field(default=10, ge=0)
+    new_account_stories_per_day: int = Field(default=3, ge=0)
+
+    posts_per_day: int = Field(default=30, ge=0)
+    comments_per_hour: int = Field(default=60, ge=0)
+    stories_per_day: int = Field(default=10, ge=0)
+
+    # -- Idempotency ---------------------------------------------------------
+    idempotency_ttl_hours: int = Field(default=24, ge=1, le=168)
+    """How long a stored response is replayed for a repeated key. A day covers
+    any realistic retry on a flaky mobile connection."""
+
     # -- Validation ----------------------------------------------------------
     @field_validator("database_url")
     @classmethod
@@ -323,6 +411,43 @@ class Settings(BaseSettings):
         it would mean nobody can sign up and every code sits in the log."""
         if self.app_env == "production" and self.sms_provider == "console":
             raise ValueError("SMS_PROVIDER must not be 'console' in production")
+        return self
+
+    @model_validator(mode="after")
+    def _require_storage_credentials(self) -> Settings:
+        """Fail at boot rather than at the first upload."""
+        if self.storage_provider == "s3" and not (
+            self.storage_access_key_id and self.storage_secret_access_key.get_secret_value()
+        ):
+            raise ValueError(
+                "STORAGE_ACCESS_KEY_ID and STORAGE_SECRET_ACCESS_KEY are required "
+                "when STORAGE_PROVIDER=s3"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _forbid_memory_storage_in_production(self) -> Settings:
+        """The memory provider loses every image when the process restarts."""
+        if self.app_env == "production" and self.storage_provider == "memory":
+            raise ValueError("STORAGE_PROVIDER must not be 'memory' in production")
+        return self
+
+    @model_validator(mode="after")
+    def _check_media_and_content_lists(self) -> Settings:
+        if not self.media_webp_size_list:
+            raise ValueError("MEDIA_WEBP_SIZES must list at least one width")
+        if not self.post_category_list:
+            raise ValueError("POST_CATEGORIES must list at least one category")
+        if not self.reaction_kind_list:
+            raise ValueError("REACTION_KINDS must list at least one kind")
+        # A new account with a *looser* limit than an established one would make
+        # the age check pointless, and the mistake is easy to make in an env file.
+        if self.new_account_posts_per_day > self.posts_per_day:
+            raise ValueError("NEW_ACCOUNT_POSTS_PER_DAY must not exceed POSTS_PER_DAY")
+        if self.new_account_comments_per_hour > self.comments_per_hour:
+            raise ValueError("NEW_ACCOUNT_COMMENTS_PER_HOUR must not exceed COMMENTS_PER_HOUR")
+        if self.new_account_stories_per_day > self.stories_per_day:
+            raise ValueError("NEW_ACCOUNT_STORIES_PER_DAY must not exceed STORIES_PER_DAY")
         return self
 
     # -- Derived -------------------------------------------------------------
@@ -403,6 +528,24 @@ class Settings(BaseSettings):
     @property
     def refresh_token_ttl(self) -> timedelta:
         return timedelta(days=self.refresh_token_ttl_days)
+
+    @property
+    def media_webp_size_list(self) -> tuple[int, ...]:
+        """WebP widths, smallest first."""
+        sizes = {int(part) for part in self.media_webp_sizes.split(",") if part.strip()}
+        return tuple(sorted(sizes))
+
+    @property
+    def post_category_list(self) -> tuple[str, ...]:
+        return tuple(part.strip() for part in self.post_categories.split(",") if part.strip())
+
+    @property
+    def reaction_kind_list(self) -> tuple[str, ...]:
+        return tuple(part.strip() for part in self.reaction_kinds.split(",") if part.strip())
+
+    @property
+    def story_ttl(self) -> timedelta:
+        return timedelta(hours=self.story_ttl_hours)
 
 
 @lru_cache(maxsize=1)

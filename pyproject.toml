@@ -31,6 +31,11 @@ dependencies = [
     # Used by the Africa's Talking SMS provider, which calls their REST API
     # directly rather than pulling in their synchronous SDK. Also the test client.
     "httpx>=0.28",
+    # Image processing: EXIF stripping and WebP variants.
+    "pillow>=11.0",
+    # S3-compatible storage. Synchronous, which is fine here: presigning is a
+    # local HMAC computation, and the worker transfers objects in a thread.
+    "boto3>=1.35",
 ]
 
 [dependency-groups]
@@ -102,7 +107,7 @@ disallow_untyped_decorators = false
 [[tool.mypy.overrides]]
 # h3-py ships no py.typed marker, so its return types arrive as Any. The
 # location module wraps every call in an explicit int()/float() for that reason.
-module = ["geoalchemy2.*", "arq.*", "h3.*"]
+module = ["geoalchemy2.*", "arq.*", "h3.*", "boto3.*", "botocore.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------

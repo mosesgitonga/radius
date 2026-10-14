@@ -449,3 +449,84 @@ Interactive docs, with examples, at <http://localhost:8000/docs>.
 _None blocking. Three sub-questions raised during planning were answered with the
 recommended values and are recorded as decision 1.1 in `docs/DECISIONS.md`._
 
+
+---
+
+## Phase 2 — Media and neighbourhood feed
+
+**Status:** in progress
+
+### Plan
+
+The first phase where users create content, which makes three things real that were
+only scaffolding before: the radius actually filters something, blocking actually
+hides something, and moderation has something to moderate.
+
+**Dependencies to add** (both named in the brief's stack): `Pillow` for image
+processing and `boto3` for S3-compatible presigning. boto3 is synchronous, which is
+fine for presigning — that is a local HMAC computation, not a network call — and
+the worker's object transfers go through `asyncio.to_thread`.
+
+**Storage**
+
+- `StorageProvider` protocol with two implementations: `S3StorageProvider` (R2, S3,
+  MinIO — all the same API) and `MemoryStorageProvider` for tests, so the suite
+  never touches the network.
+- MinIO added to `docker-compose` for development, so the presigned-upload flow is
+  exercised for real locally rather than only in production.
+
+**Media pipeline**
+
+1. `POST /v1/media/uploads` returns a presigned PUT and a media row in `pending`.
+2. The client uploads straight to storage — the API never proxies image bytes.
+3. `POST /v1/media/{id}/complete` enqueues processing.
+4. The worker validates the real content type from magic bytes (not the client's
+   claim), **strips all EXIF** including GPS, generates WebP at 320/720/1280, and
+   **deletes the original**.
+5. Only processed variants are ever served.
+
+**Models**
+
+- `media.MediaAsset` — owner, purpose, status, content type, dimensions, variant
+  keys, and the original's key until it is discarded.
+- `feed.Post` — author, body, category, its own H3 cells and centroid, status,
+  cached reach estimate and counters, plus a nullable `group_id` for Phase 4.
+- `feed.PostImage` — ordered, up to 6 per post.
+- `feed.Story` — image or text, 24-hour expiry, with `StoryView` for the author's
+  viewer list.
+- `feed.Comment` — one level of replies, enforced by a check on `parent_id`.
+- `feed.Reaction` — one per user per target, on a post or a comment.
+- `moderation.Report` — reporter, target, reason, status, priority.
+- `core.IdempotencyRecord` — the `Idempotency-Key` support deferred from Phase 0.
+
+**Feed query**
+
+`ST_DWithin` against the viewer's radius, newest first, keyset-paginated, excluding
+blocked users and hidden content. Shaped so that ranking can be added later without
+changing the response: the endpoint takes a `sort` parameter with one value today.
+
+**Reach estimate**
+
+Returned on post creation: the active users in the cells whose own radius covers the
+post's location. Approximate and cached, as the brief allows.
+
+**Moderation**
+
+Reports from distinct *trusted* reporters auto-hide content pending review. Trust in
+Phase 2 is account age plus phone verification plus no upheld reports against them;
+Phase 8 swaps in the verified badge.
+
+**Rate limits**
+
+Tighter for new accounts: a configurable age threshold with separate posting,
+commenting and story limits either side of it.
+
+**Workers**
+
+- `process_media` — the pipeline above.
+- `expire_stories` — hourly cleanup.
+
+### Open questions
+
+_None blocking. Choices on reaction kinds, trusted-reporter criteria, and the dev
+storage backend are recorded in `docs/DECISIONS.md`._
