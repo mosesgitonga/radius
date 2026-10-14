@@ -27,15 +27,21 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 logger = logging.getLogger(__name__)
 
-# Formats accepted on upload. Deliberately short: these cover every phone camera
-# and every screenshot, and each one is a format Pillow handles well.
+# Formats accepted on upload. Deliberately short: these cover Android cameras and
+# every screenshot, and each is a format Pillow decodes natively.
 #
 # Not accepted, on purpose: SVG (it is a document that can carry script), TIFF
 # (vast, and a historic source of decoder bugs), and anything animated — an
 # animated avatar is a feature nobody asked for and a decoder surface nobody wants.
-ALLOWED_CONTENT_TYPES: Final[frozenset[str]] = frozenset(
-    {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
-)
+#
+# **HEIC/HEIF is not accepted yet**, and that one is a limitation rather than a
+# choice. Pillow cannot decode it without the `pillow-heif` plugin, which is not in
+# the agreed dependencies. It used to be listed here, which meant a HEIC was
+# accepted at presign, uploaded at the user's expense, then rejected as "could not
+# be read" — the worst of both. It is refused up front now, with the supported list,
+# so the client can convert before spending the user's data. Detection still
+# recognises it, so a HEIC that arrives anyway gets a clear `unsupported_format`.
+ALLOWED_CONTENT_TYPES: Final[frozenset[str]] = frozenset({"image/jpeg", "image/png", "image/webp"})
 
 OUTPUT_CONTENT_TYPE: Final = "image/webp"
 OUTPUT_SUFFIX: Final = ".webp"

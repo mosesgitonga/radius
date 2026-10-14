@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 
 import httpx
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.providers.storage import MemoryStorageProvider
@@ -108,16 +109,20 @@ async def test_confirming_twice_is_safe(
     assert response.json()["status"] == "ready"
 
 
+@pytest.mark.parametrize("content_type", ["image/svg+xml", "image/gif", "image/heic"])
 async def test_an_unsupported_type_is_refused_at_presign(
-    db_session: AsyncSession, authenticate: Authenticate
+    db_session: AsyncSession, authenticate: Authenticate, content_type: str
 ) -> None:
+    """Refused before the upload, not after: the user should not spend data on a
+    file that can never be processed."""
     user = await make_user(db_session, at=NYERI_TOWN)
 
     response = await (await authenticate(user)).post(
-        "/v1/media/uploads", json={"purpose": "post", "content_type": "image/svg+xml"}
+        "/v1/media/uploads", json={"purpose": "post", "content_type": content_type}
     )
 
     assert response.status_code == 400
+    assert "image/jpeg" in response.json()["error"]["details"]["supported"]
 
 
 async def test_a_bad_upload_is_rejected_and_says_why(

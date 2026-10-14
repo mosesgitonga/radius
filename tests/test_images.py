@@ -237,3 +237,16 @@ def test_rejection_reasons_are_safe_to_show() -> None:
 
     assert "Traceback" not in caught.value.reason
     assert "PIL" not in caught.value.reason
+
+
+def test_heic_is_refused_with_a_clear_reason() -> None:
+    """Pillow cannot decode HEIC without a plugin we do not ship. Refusing it as
+    `unsupported_format`, rather than letting it fail as "could not be read",
+    tells the client to convert — before the user spends data on an upload that
+    could never succeed."""
+    heic = bytes([0, 0, 0, 24]) + b"ftypheic" + bytes(200)
+
+    with pytest.raises(ImageRejectedError) as caught:
+        validate_upload(heic, max_bytes=MAX_BYTES, max_pixels=MAX_PIXELS)
+
+    assert caught.value.code == "unsupported_format"
