@@ -430,6 +430,24 @@ async def assets_awaiting_processing(
     )
 
 
+def strip_asset(asset: MediaAsset, *, code: str, reason: str) -> list[str]:
+    """Make an asset unservable, and return the storage keys to delete.
+
+    The row stays, so whatever references it keeps a valid foreign key and a
+    moderator can still see that an image existed. Deleting the objects is left to
+    the caller, who knows whether that should wait for a commit.
+    """
+    keys = asset.variant_keys()
+    if asset.original_key:
+        keys.append(asset.original_key)
+    asset.variants = {}
+    asset.original_key = None
+    asset.status = MediaStatus.rejected
+    asset.rejection_code = code
+    asset.rejection_reason = reason
+    return keys
+
+
 async def purge_owner_media(
     session: AsyncSession, storage: StorageProvider, *, owner_id: uuid.UUID
 ) -> int:
@@ -446,15 +464,10 @@ async def purge_owner_media(
         .all()
     )
     for asset in assets:
-        for key in asset.variant_keys():
+        for key in strip_asset(
+            asset, code="purged", reason="The account that uploaded this was deleted"
+        ):
             await storage.delete_object(storage_key=key)
-        if asset.original_key:
-            await storage.delete_object(storage_key=asset.original_key)
-        asset.variants = {}
-        asset.original_key = None
-        asset.status = MediaStatus.rejected
-        asset.rejection_code = "purged"
-        asset.rejection_reason = "The account that uploaded this was deleted"
     if assets:
         await session.flush()
     return len(assets)

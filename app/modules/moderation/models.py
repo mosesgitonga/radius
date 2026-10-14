@@ -188,6 +188,9 @@ class ReportTargetType(StrEnum):
     comment = "comment"
     story = "story"
     user = "user"
+    message = "message"
+    """Phase 3. Reporting a message shows it to moderators — the one way a private
+    message reaches anyone outside its conversation, and only by a member's choice."""
     listing = "listing"
     """Phase 5."""
     service_post = "service_post"

@@ -59,6 +59,12 @@ class DeviceToken(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
+    device_session_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("device_sessions.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    """The sign-in that registered this token. Pushes go only to tokens whose
+    session is still live, so signing out of a phone stops its notifications at
+    once — otherwise the next person to use a shared phone would see them."""
     token: Mapped[str] = mapped_column(String(4096), unique=True)
     platform: Mapped[str] = mapped_column(String(20))
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

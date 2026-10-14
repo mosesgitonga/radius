@@ -25,6 +25,7 @@ from app.core.db import execute_dml
 from app.core.errors import BadRequestError, NotFoundError
 from app.modules.feed import service as feed_service
 from app.modules.feed.models import Comment, Post, Story
+from app.modules.messaging.models import ConversationMember, MemberStatus, Message
 from app.modules.moderation.audit import record_audit_event
 from app.modules.moderation.models import (
     REPORT_PRIORITY,
@@ -264,6 +265,31 @@ async def _resolve_target_author(
         if await is_blocked_between(session, viewer.id, comment.author_id):
             raise NotFoundError("Comment not found")
         return comment.author_id
+    if target_type == ReportTargetType.message:
+        # Only a member who can see the message may report it. Models, not the
+        # messaging service, because messaging imports this module.
+        message = (
+            await session.execute(
+                select(Message)
+                .join(
+                    ConversationMember,
+                    (ConversationMember.conversation_id == Message.conversation_id)
+                    & (ConversationMember.user_id == viewer.id),
+                )
+                .where(
+                    Message.id == target_id,
+                    Message.deleted_at.is_(None),
+                    Message.sender_id.is_not(None),
+                    ConversationMember.status == MemberStatus.active,
+                    Message.seq > ConversationMember.visible_from_seq,
+                )
+            )
+        ).scalar_one_or_none()
+        if message is None or message.sender_id is None:
+            raise NotFoundError("Message not found")
+        if await is_blocked_between(session, viewer.id, message.sender_id):
+            raise NotFoundError("Message not found")
+        return message.sender_id
     if target_type == ReportTargetType.user:
         target = await get_user(session, target_id)
         if target is None or await is_blocked_between(session, viewer.id, target_id):

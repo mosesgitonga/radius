@@ -164,6 +164,14 @@ class ConversationMember(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     member answers both "how many unread" and "seen up to here", and marking read
     is one UPDATE however many messages arrived."""
 
+    visible_from_seq: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    """Messages at or below this sequence number are not shown to this member.
+
+    Set to the conversation's `last_seq` when someone joins a group chat, so a
+    person added later does not read what was said before they arrived — the
+    members who said it had no idea they would be an audience.
+    """
+
     muted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
 
     __table_args__ = (
@@ -201,9 +209,11 @@ class Message(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
         # Fetching by sequence, and the guarantee that numbers are not reused.
         UniqueConstraint("conversation_id", "seq", name="uq_messages_conversation_id_seq"),
         CheckConstraint("seq > 0", name="message_seq_positive"),
+        # Deleting a message clears its content, so the content rules hold only
+        # while it is live. System messages cannot be deleted.
         CheckConstraint(
-            "(kind = 'text' AND body IS NOT NULL)"
-            " OR (kind = 'image' AND media_id IS NOT NULL)"
+            "(kind = 'text' AND (body IS NOT NULL OR deleted_at IS NOT NULL))"
+            " OR (kind = 'image' AND (media_id IS NOT NULL OR deleted_at IS NOT NULL))"
             " OR (kind = 'system' AND body IS NOT NULL AND sender_id IS NULL)",
             name="message_kind_matches_content",
         ),
