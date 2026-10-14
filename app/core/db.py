@@ -8,7 +8,7 @@ module — in tests, in Alembic, in a one-off script — does not open sockets.
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
@@ -105,9 +105,11 @@ async def get_session() -> AsyncIterator[AsyncSession]:
             yield session
         except Exception:
             await session.rollback()
+            discard_after_commit(session)
             raise
         else:
             await session.commit()
+            await run_after_commit(session)
 
 
 @asynccontextmanager
@@ -118,9 +120,11 @@ async def session_scope() -> AsyncIterator[AsyncSession]:
             yield session
         except Exception:
             await session.rollback()
+            discard_after_commit(session)
             raise
         else:
             await session.commit()
+            await run_after_commit(session)
 
 
 async def check_database() -> bool:
@@ -148,3 +152,41 @@ async def execute_dml(
     """
     result = await session.execute(statement, params)
     return cast("CursorResult[Any]", result).rowcount
+
+
+# ---------------------------------------------------------------------------
+# After-commit callbacks
+# ---------------------------------------------------------------------------
+AFTER_COMMIT_KEY = "after_commit_callbacks"
+
+AfterCommitCallback = Callable[[], Awaitable[None]]
+
+
+def after_commit(session: AsyncSession, callback: AfterCommitCallback) -> None:
+    """Run `callback` once this session's transaction has committed.
+
+    For anything that tells the outside world a write happened — publishing a
+    realtime event, enqueueing a push — because doing it before the commit gets
+    two things wrong. The recipient can be told about a message they then cannot
+    read, since the row is not visible yet. And if the transaction rolls back, they
+    were told about a message that never existed.
+
+    Callbacks are discarded on rollback, run in the order registered, and a failure
+    in one is logged rather than raised: by the time they run the request has
+    already succeeded, and an unavailable Redis must not turn a sent message into
+    an error the client would retry, sending it twice.
+    """
+    session.info.setdefault(AFTER_COMMIT_KEY, []).append(callback)
+
+
+def discard_after_commit(session: AsyncSession) -> None:
+    session.info.pop(AFTER_COMMIT_KEY, None)
+
+
+async def run_after_commit(session: AsyncSession) -> None:
+    callbacks: list[AfterCommitCallback] = session.info.pop(AFTER_COMMIT_KEY, [])
+    for callback in callbacks:
+        try:
+            await callback()
+        except Exception:
+            logger.exception("after_commit_callback_failed")

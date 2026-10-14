@@ -248,11 +248,15 @@ def _install_session_override(application: FastAPI, db_session: AsyncSession) ->
         except Exception:
             if request_scope.is_active:
                 await request_scope.rollback()
+            db_module.discard_after_commit(db_session)
             raise
         else:
             if request_scope.is_active:
                 await request_scope.commit()
             await db_session.commit()
+            # As in production: realtime events and pushes fire only once the
+            # request's writes are committed.
+            await db_module.run_after_commit(db_session)
 
     application.dependency_overrides[db_module.get_session] = override_get_session
 
