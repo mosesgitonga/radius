@@ -68,6 +68,13 @@ class TimestampMixin:
     The Python default gives each ORM insert its own wall-clock time. The server
     default stays so raw SQL and migrations still stamp rows. Found by
     `test_the_feed_is_newest_first`, which created three posts in one transaction.
+
+    `updated_at` follows the same rule, for the same reason, since Phase 3 sorts by
+    it — the inbox, the notification list and sync are all "most recently active
+    first". Found by `test_a_read_notification_is_not_collapsed_into`, whose two
+    notifications tied and came out in either order. A Python `onupdate` also means
+    the new value is known without a round trip, so an updated row is not left
+    with an expired attribute that async code cannot lazily reload.
     """
 
     created_at: Mapped[datetime] = mapped_column(
@@ -79,8 +86,9 @@ class TimestampMixin:
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        default=_utc_now,
         server_default=func.now(),
-        onupdate=func.now(),
+        onupdate=_utc_now,
         nullable=False,
         sort_order=101,
     )
