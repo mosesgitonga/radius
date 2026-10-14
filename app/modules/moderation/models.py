@@ -1,7 +1,13 @@
 """The audit log.
 
-Phase 8 owns moderation proper — the report queue, moderator actions, user
-history. This table arrives in Phase 1 because the Data Protection Act requires an
+Phase 8 owns moderation proper — the queue, moderator actions, user history, the
+admin console. This module grows into it.
+
+Phase 1 brought the audit log. Phase 2 adds reports, the content lifecycle every
+later module shares (`ContentStatus`), and the priority bands that let the Phase 8
+queue order by harm rather than by arrival.
+
+The audit log arrived first because the Data Protection Act requires an
 audit trail "ready for breach investigation" from the moment there is personal
 data to breach, and because data-rights actions are exactly what has to be
 auditable: who asked for an export, who requested deletion, who withdrew consent,
@@ -18,11 +24,23 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import DateTime, Enum, Index, String, Uuid, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.models import Base, UUIDPrimaryKeyMixin
+from app.core.models import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 
 class AuditActorType(StrEnum):
@@ -119,3 +137,148 @@ class AuditEvent(Base, UUIDPrimaryKeyMixin):
 
     def __repr__(self) -> str:  # pragma: no cover — debugging aid
         return f"<AuditEvent {self.action} actor={self.actor_id}>"
+
+
+class ContentStatus(StrEnum):
+    """Whether a piece of user content is shown.
+
+    Defined in the moderation module because moderation owns the decision; the
+    feed and later modules import it rather than each inventing their own states.
+    """
+
+    visible = "visible"
+    hidden_pending_review = "hidden_pending_review"
+    """Auto-hidden after enough trusted reports, awaiting a human. Reversible, and
+    the author can still see their own content — being invisible without being
+    told is worse than being told."""
+    removed = "removed"
+    """Taken down by a moderator. Soft-deleted, because moderation needs the
+    evidence and an appeal needs the content."""
+
+
+class ReportReason(StrEnum):
+    """Why something was reported.
+
+    `job_scam` is separate from `scam` deliberately: the brief requires job scams
+    to be prioritised, and that is only possible if they are distinguishable.
+    """
+
+    spam = "spam"
+    scam = "scam"
+    job_scam = "job_scam"
+    harassment = "harassment"
+    hate_speech = "hate_speech"
+    violence = "violence"
+    sexual_content = "sexual_content"
+    prohibited_item = "prohibited_item"
+    impersonation = "impersonation"
+    misinformation = "misinformation"
+    other = "other"
+
+
+class ReportStatus(StrEnum):
+    pending = "pending"
+    upheld = "upheld"
+    dismissed = "dismissed"
+
+
+class ReportTargetType(StrEnum):
+    post = "post"
+    comment = "comment"
+    story = "story"
+    user = "user"
+    listing = "listing"
+    """Phase 5."""
+    service_post = "service_post"
+    """Phase 6."""
+    event = "event"
+    """Phase 7."""
+    group = "group"
+    """Phase 4."""
+
+
+# Priority bands, so the Phase 8 queue can order by harm rather than by arrival.
+# Safety and fraud first, as the brief requires.
+REPORT_PRIORITY: dict[ReportReason, int] = {
+    ReportReason.violence: 100,
+    ReportReason.job_scam: 90,
+    ReportReason.scam: 85,
+    ReportReason.sexual_content: 80,
+    ReportReason.hate_speech: 75,
+    ReportReason.harassment: 70,
+    ReportReason.impersonation: 50,
+    ReportReason.prohibited_item: 40,
+    ReportReason.misinformation: 30,
+    ReportReason.spam: 20,
+    ReportReason.other: 10,
+}
+
+_content_status = Enum(ContentStatus, name="content_status", native_enum=False, length=32)
+_report_reason = Enum(ReportReason, name="report_reason", native_enum=False, length=32)
+_report_status = Enum(ReportStatus, name="report_status", native_enum=False, length=20)
+_report_target = Enum(ReportTargetType, name="report_target_type", native_enum=False, length=20)
+
+
+class Report(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """One report of one thing by one person.
+
+    The target is a type and a bare UUID rather than a set of nullable foreign
+    keys. Nine target types are already foreseen across the phases, and nine
+    nullable columns with a check constraint that exactly one is set would be
+    worse than this in every way that matters — including that a report should
+    survive the hard deletion of whatever it was about.
+    """
+
+    __tablename__ = "reports"
+
+    reporter_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    target_type: Mapped[ReportTargetType] = mapped_column(_report_target)
+    target_id: Mapped[uuid.UUID] = mapped_column(Uuid, index=True)
+
+    reason: Mapped[ReportReason] = mapped_column(_report_reason)
+    details: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    """Optional free text from the reporter. Capped, because a report is a signal
+    rather than a correspondence."""
+
+    status: Mapped[ReportStatus] = mapped_column(
+        _report_status, default=ReportStatus.pending, server_default=ReportStatus.pending.value
+    )
+    priority: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    """Denormalised from the reason at creation, so the queue can order by it
+    without a CASE expression — and so the bands can be retuned without
+    rewriting history."""
+
+    counted_towards_auto_hide: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    """Whether the reporter was trusted at the time. Recorded rather than
+    recomputed, because trust changes and the decision to hide should remain
+    explicable afterwards."""
+
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    """A moderator, from Phase 8. Not a foreign key for the same reason the audit
+    log's actor is not: the record outlives accounts."""
+
+    resolution_note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+    __table_args__ = (
+        # One report per person per thing. A second report from the same user adds
+        # no information and would let one person reach the auto-hide threshold
+        # alone, which is exactly what the threshold exists to prevent.
+        UniqueConstraint(
+            "reporter_id",
+            "target_type",
+            "target_id",
+            name="uq_reports_reporter_id_target_type_target_id",
+        ),
+        # Counting distinct trusted reports for one target.
+        Index("ix_reports_target_type_target_id", "target_type", "target_id"),
+        # The Phase 8 queue: pending work, worst first, oldest first.
+        Index("ix_reports_status_priority_created_at", "status", "priority", "created_at"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover — debugging aid
+        return f"<Report {self.reason} on {self.target_type}:{self.target_id}>"
