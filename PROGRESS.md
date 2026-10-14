@@ -656,3 +656,74 @@ Download any variant URL and inspect it: there is no EXIF.
   converted server-side; or keep refusing it and have the Flutter app convert to
   JPEG before upload. Android is unaffected either way.
 
+---
+
+## Phase 3 — Messaging and notifications
+
+**Status:** in progress
+
+### Plan
+
+The first phase with realtime delivery, and the first where one user can put
+something directly in front of another — which makes message requests and blocking
+the load-bearing rules, not the transport.
+
+**Dependencies.** `firebase-admin` (named in the brief) for FCM. The tests also use
+the `websockets` client, which is already installed as part of `uvicorn[standard]`;
+it is declared in the dev group so the test suite does not rely on a transitive
+dependency.
+
+**Ordering: a per-conversation sequence, allocated under a row lock.** "Messages
+since cursor" needs an order that matches commit order, and neither timestamps nor a
+global sequence give that — a global sequence value is assigned at insert, so a
+later number can commit first and a syncing client skips the earlier one. Allocating
+`seq` by incrementing the conversation row holds its lock until commit, so within a
+conversation, sequence order *is* commit order.
+
+**Persist first, then publish — after commit.** A new `after_commit` hook in
+`core/db.py` runs callbacks only once the request's transaction has committed, and
+discards them on rollback. Realtime publishes and push jobs go through it, so a
+recipient is never told about a message they cannot yet read, and a rolled-back
+message is never announced.
+
+**Models**
+
+- `Conversation` — kind (direct, group, listing), title, a unique `direct_key` so a
+  pair can only ever have one direct conversation, request state, `last_seq`, and a
+  nullable `listing_id` for Phase 5 and `group_id` for Phase 4.
+- `ConversationMember` — role (owner, admin, member), status (active, invited, left,
+  removed), `last_read_seq`, muted.
+- `Message` — sender, `seq`, body or image, reply-to, soft delete.
+- `DeviceToken`, `NotificationPreference`, `Notification` (with a collapse key and a
+  burst count).
+
+**Message requests.** A direct message to someone with no accepted conversation
+creates the conversation in a `pending` state. The sender may send one message; the
+recipient can accept, decline, or block and report, and replying counts as accepting.
+A declined request cannot be reopened by the sender. Being added to a group chat by
+someone you have no accepted conversation with makes you `invited`, not a member.
+
+**Realtime.** `/v1/ws`, authenticated with the access token in the `Authorization`
+header, or in a first `auth` frame for clients that cannot set headers — never in the
+query string, which reverse proxies log. Each API process runs one hub: it subscribes
+to a Redis channel per locally connected user and fans out to their sockets, so
+delivery works across any number of workers. Presence is a per-user sorted set of
+connection expiries, refreshed by heartbeat.
+
+**Sync.** `GET /v1/sync?since=` lists conversations changed since a cursor, with
+their `last_seq`; the client then fetches messages after its local `seq` per
+conversation. Overlap is harmless, because per-conversation sync is idempotent.
+
+**Notifications.** Device registration, per-type preferences, an in-app list, and
+push from the worker to users who are not connected. Bursts collapse: repeat events
+with the same collapse key update one unread notification ("Kamau and 3 others
+reacted"), and pushes per key are throttled. Message pushes show the sender, not the
+text, unless the user opts in — phones are often shared.
+
+**Blocking.** No direct conversation, request, or message between a blocked pair, in
+either direction. In a shared group chat, each is filtered out of the other's
+delivery and history.
+
+### Open questions
+
+_None blocking. HEIC from Phase 2 is still open._
