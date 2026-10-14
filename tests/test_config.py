@@ -62,9 +62,38 @@ def test_production_with_proper_configuration_boots() -> None:
         storage_provider="s3",
         storage_access_key_id="key",
         storage_secret_access_key="secret",
+        push_provider="fcm",
+        fcm_credentials_file="/run/secrets/fcm.json",
     )
 
     assert settings.is_deployed is True
+
+
+def test_production_refuses_the_fake_push_provider() -> None:
+    """The fake records pushes instead of sending them, so nobody would be told
+    about a message while the app was closed."""
+    with pytest.raises(ValidationError, match="PUSH_PROVIDER"):
+        _settings(
+            app_env="production",
+            secret_key="a-real-secret-of-at-least-32-bytes-length",
+            sms_provider="africastalking",
+            africastalking_username="u",
+            africastalking_api_key="k",
+            storage_provider="s3",
+            storage_access_key_id="key",
+            storage_secret_access_key="secret",
+            push_provider="fake",
+        )
+
+
+def test_fcm_requires_credentials() -> None:
+    with pytest.raises(ValidationError, match="FCM_CREDENTIALS_FILE"):
+        _settings(push_provider="fcm")
+
+
+def test_a_new_account_message_limit_looser_than_the_established_one_is_refused() -> None:
+    with pytest.raises(ValidationError, match="NEW_ACCOUNT_MESSAGE_REQUESTS_PER_DAY"):
+        _settings(new_account_message_requests_per_day=50, message_requests_per_day=20)
 
 
 def test_production_refuses_in_memory_storage() -> None:
@@ -77,6 +106,8 @@ def test_production_refuses_in_memory_storage() -> None:
             africastalking_username="u",
             africastalking_api_key="k",
             storage_provider="memory",
+            push_provider="fcm",
+            fcm_credentials_file="/run/secrets/fcm.json",
         )
 
 

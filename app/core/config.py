@@ -351,6 +351,59 @@ class Settings(BaseSettings):
     """How long a stored response is replayed for a repeated key. A day covers
     any realistic retry on a flaky mobile connection."""
 
+    # -- Messaging -----------------------------------------------------------
+    message_max_length: int = Field(default=4000, ge=1, le=20_000)
+    group_chat_member_limit: int = Field(default=256, ge=2, le=5000)
+    """The brief asks for a configurable limit. 256 covers an estate committee or
+    a chama comfortably; larger gatherings belong in a group (Phase 4)."""
+
+    group_chat_title_max_length: int = Field(default=80, ge=1, le=200)
+
+    messages_per_minute: int = Field(default=30, ge=1)
+    new_account_messages_per_minute: int = Field(default=10, ge=1)
+    message_requests_per_day: int = Field(default=20, ge=1)
+    new_account_message_requests_per_day: int = Field(default=5, ge=1)
+    """A message request is the one way a stranger can reach someone, so it is the
+    first thing a spammer reaches for. A new account gets a handful a day."""
+
+    # -- Realtime ------------------------------------------------------------
+    ws_auth_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    """How long a socket may stay open before authenticating. Long enough for a
+    slow handshake on 3G, short enough that idle unauthenticated sockets cannot pile
+    up and exhaust the server."""
+
+    ws_heartbeat_seconds: float = Field(default=25.0, gt=0, le=300)
+    """Below the 30-60 second idle timeouts common on mobile carrier NATs, so a
+    connection is not silently dropped while the app sits open."""
+
+    presence_ttl_seconds: int = Field(default=60, ge=10, le=600)
+    """A connection counts as online until this long after its last heartbeat. A
+    socket that dies without closing stops counting within a minute, so the user
+    starts getting pushes again."""
+
+    sync_overlap_seconds: int = Field(default=30, ge=0, le=3600)
+    """`GET /v1/sync` looks this far behind the client's cursor. Conversations are
+    re-listed harmlessly, because per-conversation sync by sequence is idempotent;
+    without the overlap, a change committed out of timestamp order could be missed."""
+
+    # -- Notifications -------------------------------------------------------
+    push_provider: Literal["fake", "fcm"] = "fake"
+    """`fake` records pushes instead of sending them. The default, so a missing
+    credential cannot cause a real notification to a real phone."""
+
+    fcm_credentials_file: str = ""
+    """Path to a Firebase service-account JSON file. Never commit the file itself."""
+
+    push_throttle_seconds: int = Field(default=60, ge=0, le=3600)
+    """At most one push per collapse key in this window. Ten reactions in a minute
+    become one notification, not ten buzzes."""
+
+    notification_collapse_window_minutes: int = Field(default=60, ge=1, le=1440)
+    """Repeat events with the same collapse key within this window update one
+    unread in-app notification ("Kamau and 3 others reacted") instead of adding rows."""
+
+    notification_retention_days: int = Field(default=90, ge=1, le=730)
+
     # -- Validation ----------------------------------------------------------
     @field_validator("database_url")
     @classmethod
@@ -457,6 +510,24 @@ class Settings(BaseSettings):
             raise ValueError("NEW_ACCOUNT_COMMENTS_PER_HOUR must not exceed COMMENTS_PER_HOUR")
         if self.new_account_stories_per_day > self.stories_per_day:
             raise ValueError("NEW_ACCOUNT_STORIES_PER_DAY must not exceed STORIES_PER_DAY")
+        return self
+
+    @model_validator(mode="after")
+    def _check_messaging_limits(self) -> Settings:
+        if self.new_account_messages_per_minute > self.messages_per_minute:
+            raise ValueError("NEW_ACCOUNT_MESSAGES_PER_MINUTE must not exceed MESSAGES_PER_MINUTE")
+        if self.new_account_message_requests_per_day > self.message_requests_per_day:
+            raise ValueError(
+                "NEW_ACCOUNT_MESSAGE_REQUESTS_PER_DAY must not exceed MESSAGE_REQUESTS_PER_DAY"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _check_push_provider(self) -> Settings:
+        if self.push_provider == "fcm" and not self.fcm_credentials_file:
+            raise ValueError("FCM_CREDENTIALS_FILE is required when PUSH_PROVIDER=fcm")
+        if self.app_env == "production" and self.push_provider == "fake":
+            raise ValueError("PUSH_PROVIDER must not be 'fake' in production")
         return self
 
     # -- Derived -------------------------------------------------------------

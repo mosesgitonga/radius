@@ -36,6 +36,7 @@ dependencies = [
     # S3-compatible storage. Synchronous, which is fine here: presigning is a
     # local HMAC computation, and the worker transfers objects in a thread.
     "boto3>=1.35",
+    "firebase-admin>=6.5",
 ]
 
 [dependency-groups]
@@ -45,6 +46,7 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
+    "websockets>=13",
 ]
 
 [build-system]
