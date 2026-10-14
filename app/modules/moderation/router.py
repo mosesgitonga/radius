@@ -9,17 +9,15 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.core.db import get_session
+from app.core.db import SessionDep
 from app.modules.auth.dependencies import CurrentUser, user_rate_limit
 from app.modules.moderation import service as moderation_service
 from app.modules.moderation.schemas import ReportIn, ReportOut
 
 router = APIRouter(tags=["moderation"])
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 

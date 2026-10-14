@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.core.db import get_session
+from app.core.db import SessionDep
 from app.core.errors import ForbiddenError, NotFoundError
 from app.core.providers.storage import StorageProvider, get_storage_provider
 from app.core.redis import get_redis
@@ -40,7 +40,6 @@ from app.modules.users.schemas import (
 
 router = APIRouter(tags=["users"])
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 RedisDep = Annotated[Redis, Depends(get_redis)]
 StorageDep = Annotated[StorageProvider, Depends(get_storage_provider)]

@@ -10,8 +10,9 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
+from fastapi import Depends
 from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import (
@@ -110,6 +111,21 @@ async def get_session() -> AsyncIterator[AsyncSession]:
         else:
             await session.commit()
             await run_after_commit(session)
+
+
+SessionDep = Annotated[AsyncSession, Depends(get_session, scope="function")]
+"""The request's session. **Always use this, never `Depends(get_session)`.**
+
+`scope="function"` is what makes the commit happen before the response is sent.
+FastAPI's default for a dependency with `yield` is `"request"`, whose exit code
+runs *after* the response has gone out — so for Phases 0 to 2 every write was
+committed after the client had already been told it succeeded. A commit that then
+failed left the client holding a 201 for nothing, and a client that read straight
+back, through another worker, could miss its own write. Found in Phase 3, when a
+push job queued after commit was sometimes not yet in Redis when the client got
+its response. One alias for every route keeps the scope identical everywhere, so
+a request never resolves two different sessions.
+"""
 
 
 @asynccontextmanager

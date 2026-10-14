@@ -11,7 +11,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.core.db import get_session
+from app.core.db import SessionDep
 from app.core.errors import ErrorEnvelope
 from app.core.idempotency import IDEMPOTENCY_HEADER, execute_idempotently
 from app.core.pagination import PageParams, page_params
@@ -46,7 +46,6 @@ from app.modules.users.models import User
 
 router = APIRouter(tags=["feed"])
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 RedisDep = Annotated[Redis, Depends(get_redis)]
 StorageDep = Annotated[StorageProvider, Depends(get_storage_provider)]

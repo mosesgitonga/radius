@@ -6,10 +6,9 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.core.db import get_session
+from app.core.db import SessionDep
 from app.core.providers.storage import StorageProvider, get_storage_provider
 from app.core.queue import JobQueue, get_queue
 from app.modules.auth.dependencies import ActiveUser, CurrentUser, user_rate_limit
@@ -25,7 +24,6 @@ from app.modules.media.views import image_variants
 
 router = APIRouter(tags=["media"])
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 StorageDep = Annotated[StorageProvider, Depends(get_storage_provider)]
 QueueDep = Annotated[JobQueue, Depends(get_queue)]

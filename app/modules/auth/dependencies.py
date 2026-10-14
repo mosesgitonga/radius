@@ -20,10 +20,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, Request, Response
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.core.db import get_session
+from app.core.db import SessionDep
 from app.core.errors import ForbiddenError, RateLimitedError, UnauthenticatedError
 from app.core.ratelimit import get_rate_limiter
 from app.core.security import decode_access_token
@@ -47,7 +46,7 @@ def _extract_bearer_token(request: Request) -> str | None:
 
 async def get_current_user(
     request: Request,
-    session: Annotated[AsyncSession, Depends(get_session)],
+    session: SessionDep,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> User:
     """The authenticated caller, or `UnauthenticatedError`."""
@@ -91,7 +90,7 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 
 async def get_optional_user(
     request: Request,
-    session: Annotated[AsyncSession, Depends(get_session)],
+    session: SessionDep,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> User | None:
     """The caller if they are signed in, otherwise None.

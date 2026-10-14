@@ -8,10 +8,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from redis.asyncio import Redis
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import RadiusFeature, Settings, get_settings
-from app.core.db import get_session
+from app.core.db import SessionDep
 from app.core.redis import get_redis
 from app.modules.auth.dependencies import ActiveUser, CurrentUser, user_rate_limit
 from app.modules.location import service as location_service
@@ -29,7 +28,6 @@ from app.modules.users.schemas import AreaLabelOut
 
 router = APIRouter(tags=["location"])
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 RedisDep = Annotated[Redis, Depends(get_redis)]
 

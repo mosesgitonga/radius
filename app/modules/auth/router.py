@@ -12,10 +12,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, status
 from redis.asyncio import Redis
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.core.db import get_session
+from app.core.db import SessionDep
 from app.core.errors import ConflictError
 from app.core.providers.sms import SmsProvider, get_sms_provider
 from app.core.ratelimit import RateLimiter, get_rate_limiter, rate_limit
@@ -44,7 +43,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 RedisDep = Annotated[Redis, Depends(get_redis)]
 SmsDep = Annotated[SmsProvider, Depends(get_sms_provider)]
