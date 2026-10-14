@@ -28,7 +28,6 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -39,10 +38,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.models import Base, SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from app.core.models import Base, SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin, db_enum
 from app.modules.moderation.models import ContentStatus
 
-_content_status = Enum(ContentStatus, name="content_status", native_enum=False, length=32)
+_content_status = db_enum(ContentStatus, name="content_status", length=32)
 
 
 class StoryKind(StrEnum):
@@ -50,7 +49,7 @@ class StoryKind(StrEnum):
     text = "text"
 
 
-_story_kind = Enum(StoryKind, name="story_kind", native_enum=False, length=20)
+_story_kind = db_enum(StoryKind, name="story_kind", length=20)
 
 
 class LocatedContentMixin:

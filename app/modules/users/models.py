@@ -18,7 +18,6 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -30,7 +29,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.models import Base, SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin
+from app.core.models import Base, SoftDeleteMixin, TimestampMixin, UUIDPrimaryKeyMixin, db_enum
 
 # How many days of home-presence history the badge rule looks at. The mask is
 # this many bits wide, which is the entire location history the system keeps.
@@ -60,8 +59,8 @@ class ConsentType(StrEnum):
 # enum type. Adding a value to a native enum needs ALTER TYPE, which cannot run
 # inside a transaction on older servers and is awkward to reverse; a check
 # constraint is an ordinary, reversible migration.
-_user_status = Enum(UserStatus, name="user_status", native_enum=False, length=32)
-_consent_type = Enum(ConsentType, name="consent_type", native_enum=False, length=32)
+_user_status = db_enum(UserStatus, name="user_status", length=32)
+_consent_type = db_enum(ConsentType, name="consent_type", length=32)
 
 
 class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
@@ -110,13 +109,16 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     """Drives the active-user counts the radius engine is built on."""
 
     avatar_media_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("media_assets.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("media_assets.id", ondelete="SET NULL", use_alter=True), nullable=True
     )
     """The current avatar. Declared in Phase 1 without a constraint because the
     media table did not exist; Phase 2 adds the foreign key — exactly the cheap,
     constraint-only migration the brief asked the data model to allow for.
 
-    `SET NULL`, so removing an asset clears the avatar rather than failing."""
+    `SET NULL`, so removing an asset clears the avatar rather than failing.
+    `use_alter`, because users and media_assets reference each other: the
+    constraint is added after both tables exist, which is also how migration
+    0005 created it."""
 
     # -- Home location -------------------------------------------------------
     # Four resolutions of the same cell, denormalised on purpose. Deriving the

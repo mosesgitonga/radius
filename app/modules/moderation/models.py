@@ -27,7 +27,6 @@ from typing import Any
 from sqlalchemy import (
     Boolean,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -40,7 +39,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.models import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.core.models import Base, TimestampMixin, UUIDPrimaryKeyMixin, db_enum
 
 
 class AuditActorType(StrEnum):
@@ -89,8 +88,8 @@ class AuditAction(StrEnum):
     content_auto_hidden = "content_auto_hidden"
 
 
-_actor_type = Enum(AuditActorType, name="audit_actor_type", native_enum=False, length=20)
-_action = Enum(AuditAction, name="audit_action", native_enum=False, length=48)
+_actor_type = db_enum(AuditActorType, name="audit_actor_type", length=20)
+_action = db_enum(AuditAction, name="audit_action", length=48)
 
 
 class AuditEvent(Base, UUIDPrimaryKeyMixin):
@@ -215,10 +214,10 @@ REPORT_PRIORITY: dict[ReportReason, int] = {
     ReportReason.other: 10,
 }
 
-_content_status = Enum(ContentStatus, name="content_status", native_enum=False, length=32)
-_report_reason = Enum(ReportReason, name="report_reason", native_enum=False, length=32)
-_report_status = Enum(ReportStatus, name="report_status", native_enum=False, length=20)
-_report_target = Enum(ReportTargetType, name="report_target_type", native_enum=False, length=20)
+_content_status = db_enum(ContentStatus, name="content_status", length=32)
+_report_reason = db_enum(ReportReason, name="report_reason", length=32)
+_report_status = db_enum(ReportStatus, name="report_status", length=20)
+_report_target = db_enum(ReportTargetType, name="report_target_type", length=20)
 
 
 class Report(Base, UUIDPrimaryKeyMixin, TimestampMixin):

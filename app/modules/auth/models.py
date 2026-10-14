@@ -24,10 +24,10 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Uuid, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.models import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.core.models import Base, TimestampMixin, UUIDPrimaryKeyMixin, db_enum
 
 
 class SessionRevocationReason(StrEnum):
@@ -47,9 +47,7 @@ class SessionRevocationReason(StrEnum):
     """Revoked by a moderator, from Phase 8."""
 
 
-_revocation_reason = Enum(
-    SessionRevocationReason, name="session_revocation_reason", native_enum=False, length=32
-)
+_revocation_reason = db_enum(SessionRevocationReason, name="session_revocation_reason", length=32)
 
 
 class DeviceSession(Base, UUIDPrimaryKeyMixin, TimestampMixin):

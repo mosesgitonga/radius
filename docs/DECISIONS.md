@@ -527,6 +527,18 @@ constraint is an ordinary, reversible migration. And the brief requires new town
 and categories to work from configuration and seed data alone, which a database
 enum would quietly prevent.
 
+**Correction, Phase 3.** As first written, this entry was not true: the CHECK
+constraints did not exist. SQLAlchemy has not emitted them by default since 1.4,
+and `create_constraint=True` was never set, so for the whole of Phases 1 and 2
+every enum column accepted any string. This came to light when a direct insert of
+`status = 'definitely_not_a_status'` into `users` succeeded; the ORM would only
+have noticed on the next read of that row, by failing it. Every enum column now
+goes through `app.core.models.db_enum`, which sets the flag. Migration 0006 adds
+the fourteen missing constraints. `tests/test_schema_integrity.py` checks that
+every enum column has a constraint allowing exactly the values its Python enum
+declares, so a value added without a migration fails in CI rather than in
+production.
+
 ### 1.17 Per-user rate limiting lives in the auth module
 
 **Choice.** `auth.dependencies.user_rate_limit` wraps the core limiter for

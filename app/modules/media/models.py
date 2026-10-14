@@ -16,7 +16,6 @@ from typing import Any
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -25,7 +24,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.models import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.core.models import Base, TimestampMixin, UUIDPrimaryKeyMixin, db_enum
 
 
 class MediaStatus(StrEnum):
@@ -49,14 +48,16 @@ class MediaPurpose(StrEnum):
     avatar = "avatar"
     post = "post"
     story = "story"
+    message = "message"
+    """An image sent in a conversation."""
     listing = "listing"
     """Phase 5. Declared now so the enum does not need changing then."""
     event_cover = "event_cover"
     """Phase 7."""
 
 
-_media_status = Enum(MediaStatus, name="media_status", native_enum=False, length=20)
-_media_purpose = Enum(MediaPurpose, name="media_purpose", native_enum=False, length=20)
+_media_status = db_enum(MediaStatus, name="media_status", length=20)
+_media_purpose = db_enum(MediaPurpose, name="media_purpose", length=20)
 
 
 class MediaAsset(Base, UUIDPrimaryKeyMixin, TimestampMixin):

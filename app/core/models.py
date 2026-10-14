@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from enum import StrEnum
 
-from sqlalchemy import DateTime, MetaData, Uuid, func
+from sqlalchemy import DateTime, Enum, MetaData, Uuid, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # Explicit constraint and index names. Without this, PostgreSQL invents names,
@@ -95,3 +96,32 @@ class SoftDeleteMixin:
     @property
     def is_deleted(self) -> bool:
         return self.deleted_at is not None
+
+
+def db_enum(enum_class: type[StrEnum], *, name: str, length: int) -> Enum:
+    """A closed set of values, enforced by the database.
+
+    Rendered as VARCHAR plus a CHECK constraint, not a native PostgreSQL enum type:
+    adding a value to a native enum needs `ALTER TYPE`, which is awkward to reverse,
+    while changing a CHECK constraint is an ordinary migration.
+
+    `create_constraint=True` is the part that matters, and it was missing for the
+    whole of Phases 1 and 2. SQLAlchemy has not emitted the constraint by default
+    since 1.4, so every status, reason and kind column accepted any string at all
+    — found when a direct insert of `status = 'definitely_not_a_status'` into
+    `users` succeeded. The ORM would only have noticed on the next *read* of that
+    row, by failing it. Every enum column goes through this helper so the mistake
+    cannot be made one column at a time.
+
+    Values, not member names, are stored, so the database holds exactly the strings
+    the API speaks.
+    """
+    return Enum(
+        enum_class,
+        name=name,
+        native_enum=False,
+        create_constraint=True,
+        length=length,
+        values_callable=lambda members: [member.value for member in members],
+        validate_strings=True,
+    )
