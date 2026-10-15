@@ -484,6 +484,22 @@ _PUSH_TEXT: dict[NotificationType, tuple[str, str]] = {
         "{actor} reacted to your {target}",
         "{actor} and {others} reacted to your {target}",
     ),
+    NotificationType.group_invite: (
+        "{actor} invited you to a group",
+        "{actor} invited you to a group",
+    ),
+    NotificationType.group_join_request: (
+        "{actor} asked to join your group",
+        "{actor} and {others} asked to join your group",
+    ),
+    NotificationType.group_join_approved: (
+        "{actor} approved your request to join",
+        "{actor} approved your request to join",
+    ),
+    NotificationType.group_post_approved: (
+        "{actor} approved your post",
+        "{actor} approved your post",
+    ),
 }
 
 

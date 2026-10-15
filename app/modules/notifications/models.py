@@ -44,6 +44,11 @@ class NotificationType(StrEnum):
     comment = "comment"
     reply = "reply"
     reaction = "reaction"
+    group_invite = "group_invite"
+    group_join_request = "group_join_request"
+    """To a group's admins."""
+    group_join_approved = "group_join_approved"
+    group_post_approved = "group_post_approved"
 
 
 class DeviceToken(Base, UUIDPrimaryKeyMixin, TimestampMixin):

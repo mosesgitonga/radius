@@ -561,3 +561,12 @@ async def test_purging_an_account_erases_its_messages_and_devices(
     ).json()["items"]
     assert [(item["deleted"], item["body"]) for item in shown] == [(True, None), (False, "Poa")]
     assert uuid.UUID(conversation_id)
+
+
+def test_every_in_app_type_has_push_text() -> None:
+    """A type added without wording would fail in the worker, not in a request."""
+    from app.modules.notifications.service import _PUSH_TEXT, IN_APP_TYPES, render_activity
+
+    assert set(IN_APP_TYPES) <= set(_PUSH_TEXT)
+    for kind in IN_APP_TYPES:
+        assert render_activity(kind, actor_name="Kamau", others=2)

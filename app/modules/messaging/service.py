@@ -1103,7 +1103,102 @@ async def _load_group(
     )
     if conversation.kind != ConversationKind.group:
         raise BadRequestError("That is not a group chat")
+    if conversation.group_id is not None:
+        # A group's linked chat follows the group: who is in it, and what it is
+        # called, are decided there.
+        raise BadRequestError(
+            "This chat belongs to a group; manage it from the group",
+            details={"group_id": str(conversation.group_id)},
+        )
     return conversation, member
+
+
+# ---------------------------------------------------------------------------
+# A group's linked chat
+# ---------------------------------------------------------------------------
+async def create_linked_chat(
+    session: AsyncSession,
+    *,
+    group_id: uuid.UUID,
+    title: str,
+    owner_id: uuid.UUID,
+    member_ids: Sequence[uuid.UUID],
+) -> Conversation:
+    """A group chat whose membership mirrors a group's.
+
+    No invitations and no member limit: everyone in it is already in the group,
+    which is the consent the invitation rule exists to get. Everyone sees the
+    whole history, since the chat starts empty.
+    """
+    conversation = Conversation(
+        kind=ConversationKind.group,
+        state=ConversationState.active,
+        title=title[:200],
+        created_by_id=owner_id,
+        group_id=group_id,
+    )
+    session.add(conversation)
+    await session.flush()
+    session.add_all(
+        ConversationMember(
+            conversation_id=conversation.id,
+            user_id=member_id,
+            role=MemberRole.owner if member_id == owner_id else MemberRole.member,
+        )
+        for member_id in dict.fromkeys(member_ids)
+    )
+    await session.flush()
+    await _append_system_message(session, conversation, SystemEvent.created, actor_id=owner_id)
+    return conversation
+
+
+async def set_linked_membership(
+    session: AsyncSession, *, conversation_id: uuid.UUID, user_id: uuid.UUID, active: bool
+) -> None:
+    """Add someone to a group's chat as they join the group, or take them out as
+    they leave, are removed or are banned. Joining starts their history there."""
+    conversation = (
+        await session.execute(
+            select(Conversation)
+            .where(Conversation.id == conversation_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if conversation is None:
+        return
+    member = await _membership_of(session, conversation.id, user_id)
+    if active:
+        if member is not None and member.status == MemberStatus.active:
+            return
+        if member is None:
+            member = ConversationMember(conversation_id=conversation.id, user_id=user_id)
+            session.add(member)
+        member.status = MemberStatus.active
+        member.role = MemberRole.member
+        member.visible_from_seq = conversation.last_seq
+        await session.flush()
+        await _append_system_message(
+            session, conversation, SystemEvent.member_joined, user_id=str(user_id)
+        )
+    else:
+        if member is None or member.status != MemberStatus.active:
+            return
+        member.status = MemberStatus.removed
+        await session.flush()
+        await _append_system_message(
+            session, conversation, SystemEvent.member_left, user_id=str(user_id)
+        )
+    _announce_conversation(session, [user_id], conversation)
+
+
+async def rename_linked_chat(
+    session: AsyncSession, *, conversation_id: uuid.UUID, title: str
+) -> None:
+    conversation = await session.get(Conversation, conversation_id)
+    if conversation is not None and conversation.title != title:
+        conversation.title = title[:200]
+        await session.flush()
 
 
 async def add_members(
