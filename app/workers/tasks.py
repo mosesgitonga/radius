@@ -32,6 +32,7 @@ from app.core.providers.push import get_push_provider
 from app.core.providers.storage import get_storage_provider
 from app.core.redis import get_redis
 from app.modules.feed.tasks import expire_stories
+from app.modules.groups import service as groups_service
 from app.modules.location.tasks import refresh_cell_activity, roll_home_presence
 from app.modules.media import service as media_service
 from app.modules.messaging import service as messaging_service
@@ -162,6 +163,7 @@ async def run_retention(ctx: JobContext) -> dict[str, int]:
         tokens_removed = await notifications_service.delete_stale_device_tokens(
             session, settings=settings
         )
+        invite_links_removed = await groups_service.delete_old_invite_links(session)
     return {
         "accounts_purged": purged.accounts_purged,
         "expired_sessions_deleted": sessions_removed,
@@ -169,6 +171,7 @@ async def run_retention(ctx: JobContext) -> dict[str, int]:
         "idempotency_records_purged": idempotency_purged,
         "notifications_purged": notifications_purged,
         "stale_device_tokens_deleted": tokens_removed,
+        "old_invite_links_deleted": invite_links_removed,
     }
 
 

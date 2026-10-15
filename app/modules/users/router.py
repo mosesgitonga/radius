@@ -19,6 +19,7 @@ from app.core.redis import get_redis
 from app.modules.auth import service as auth_service
 from app.modules.auth.dependencies import ActiveUser, CurrentUser, user_rate_limit
 from app.modules.feed import service as feed_service
+from app.modules.groups import service as groups_service
 from app.modules.location import cells
 from app.modules.location import service as location_service
 from app.modules.media import service as media_service
@@ -319,6 +320,7 @@ async def export_my_data(
     # service cannot do it itself, because the feed imports the users service.
     export["content"] = await feed_service.export_author_content(session, user_id=user.id)
     export["media"] = await media_service.export_owner_media(session, owner_id=user.id)
+    export["groups"] = await groups_service.export_user_groups(session, user_id=user.id)
     export["messaging"] = await messaging_service.export_user_messages(session, user_id=user.id)
     export["notifications"] = await notifications_service.export_user_notifications(
         session, user_id=user.id

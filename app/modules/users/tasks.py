@@ -21,6 +21,7 @@ from app.core.providers.storage import StorageProvider
 from app.modules.auth import service as auth_service
 from app.modules.auth.models import DeviceSession
 from app.modules.feed import service as feed_service
+from app.modules.groups import service as groups_service
 from app.modules.media import service as media_service
 from app.modules.messaging import service as messaging_service
 from app.modules.notifications import service as notifications_service
@@ -78,6 +79,9 @@ async def purge_deleted_accounts(
         # Messages before media: the media purge strips every image the account
         # uploaded, message images included, so messaging only clears text here.
         await messaging_service.purge_user_messages(session, None, user_id=user.id)
+        # Groups after messages: leaving a group takes the person out of its
+        # linked chat, which must find their chat membership still there.
+        await groups_service.purge_user_groups(session, user_id=user.id)
         await notifications_service.purge_user_notifications(session, user_id=user.id)
         if storage is not None:
             await media_service.purge_owner_media(session, storage, owner_id=user.id)
