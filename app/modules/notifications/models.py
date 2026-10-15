@@ -50,6 +50,10 @@ class NotificationType(StrEnum):
     group_join_approved = "group_join_approved"
     group_post_approved = "group_post_approved"
     listing_inquiry = "listing_inquiry"
+    service_inquiry = "service_inquiry"
+    """Someone's first message about a service post."""
+    review_received = "review_received"
+    review_reply = "review_reply"
     """A buyer's first message about a seller's listing."""
 
 

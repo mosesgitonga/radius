@@ -27,6 +27,7 @@ import app.modules.media.models
 import app.modules.messaging.models
 import app.modules.moderation.models
 import app.modules.notifications.models
+import app.modules.services.models
 import app.modules.users.models  # noqa: F401
 from app.core.models import Base
 

@@ -86,6 +86,8 @@ class AuditAction(StrEnum):
     user_unblocked = "user_unblocked"
     report_submitted = "report_submitted"
     content_auto_hidden = "content_auto_hidden"
+    content_flagged = "content_flagged"
+    """Held for review by a heuristic — Phase 6's job-scam check."""
 
     # Groups — admins acting on other people
     group_deleted = "group_deleted"
@@ -198,6 +200,8 @@ class ReportTargetType(StrEnum):
     story = "story"
     user = "user"
     message = "message"
+    review = "review"
+    """Phase 6."""
     """Phase 3. Reporting a message shows it to moderators — the one way a private
     message reaches anyone outside its conversation, and only by a member's choice."""
     listing = "listing"

@@ -500,6 +500,18 @@ _PUSH_TEXT: dict[NotificationType, tuple[str, str]] = {
         "{actor} approved your post",
         "{actor} approved your post",
     ),
+    NotificationType.service_inquiry: (
+        "{actor} contacted you about your post",
+        "{actor} and {others} contacted you about your post",
+    ),
+    NotificationType.review_received: (
+        "{actor} left you a review",
+        "{actor} and {others} left you reviews",
+    ),
+    NotificationType.review_reply: (
+        "{actor} replied to your review",
+        "{actor} replied to your review",
+    ),
     NotificationType.listing_inquiry: (
         "{actor} asked about your listing",
         "{actor} and {others} asked about your listing",

@@ -40,8 +40,10 @@ class ConversationKind(StrEnum):
     direct = "direct"
     group = "group"
     listing = "listing"
-    """Buyer and seller, from Phase 5. The kind exists now so the data model does
-    not need changing then, as the brief asks."""
+    """Buyer and seller, about one listing."""
+    service = "service"
+    """About one service post: a provider, a need, or a job. Reviews require an
+    accepted one of these, or of a listing conversation."""
 
 
 class ConversationState(StrEnum):
@@ -120,6 +122,11 @@ class Conversation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
     """For a buyer-seller conversation about a listing. `created_by_id` is the buyer:
     one conversation per listing per buyer, by the partial unique index below."""
+    service_post_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("service_posts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    """For a conversation about a service post. As for listings, `created_by_id` is
+    the person who made contact, and there is one conversation per post per person."""
     group_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("groups.id", ondelete="CASCADE"), nullable=True, index=True
     )
@@ -148,6 +155,13 @@ class Conversation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
             "created_by_id",
             unique=True,
             postgresql_where=text("kind = 'listing'"),
+        ),
+        Index(
+            "uq_conversations_service_post_id_created_by_id",
+            "service_post_id",
+            "created_by_id",
+            unique=True,
+            postgresql_where=text("kind = 'service'"),
         ),
     )
 

@@ -474,6 +474,47 @@ class Settings(BaseSettings):
     containing one is refused with the term named, so an honest seller can rephrase.
     Configurable because the list is a policy decision, and policy changes."""
 
+    # -- Jobs and services ---------------------------------------------------
+    service_categories: str = (
+        "plumbing,electrical,laundry,house_help,tutoring,delivery,mechanics,salon_barber,"
+        "tailoring,construction,catering,photography,phone_it_repair,cleaning,other"
+    )
+    """The brief's seeded list — mama fua is `laundry`, boda boda is `delivery`,
+    fundi is `construction` — and configurable like every other category list."""
+
+    service_title_max_length: int = Field(default=120, ge=10, le=300)
+    service_description_max_length: int = Field(default=4000, ge=0, le=20_000)
+    service_detail_max_length: int = Field(default=200, ge=10, le=1000)
+    """Rate info, availability, pay notes: short free text, not essays."""
+    service_post_ttl_days: int = Field(default=30, ge=1, le=365)
+    """Seeking and hiring posts expire; an offering is a standing profile and does
+    not."""
+    service_max_travel_km: int = Field(default=50, ge=1, le=200)
+
+    service_posts_per_day: int = Field(default=10, ge=1)
+    new_account_service_posts_per_day: int = Field(default=2, ge=1)
+    service_inquiries_per_day: int = Field(default=50, ge=1)
+    new_account_service_inquiries_per_day: int = Field(default=10, ge=1)
+
+    hiring_min_account_age_days: int = Field(default=14, ge=0, le=365)
+    """An account must be this old, with a verified phone, to post a job. Fake job
+    offers are the commonest scam in this market, and a throwaway account is how
+    they are posted."""
+
+    job_scam_phrases: str = (
+        "registration fee,application fee,processing fee,training fee,medical fee,"
+        "interview fee,placement fee,security deposit,pay to apply,pay before,pay first,"
+        "send money,send mpesa,deposit to secure,secure your slot,secure the job,"
+        "ada ya usajili,ada ya maombi,ada ya mafunzo,ada ya usaili,pesa ya usajili,"
+        "lipa kwanza,tuma pesa,tuma mpesa,lipia nafasi,kiingilio"
+    )
+    """Phrases that demand money from a job seeker, in English and Swahili. A hiring
+    post containing one is *held for review*, not refused: "we pay your registration
+    fee" is honest, and a person should decide (decision 6.4)."""
+
+    review_body_max_length: int = Field(default=2000, ge=0, le=10_000)
+    reviews_per_day: int = Field(default=20, ge=1)
+
     # -- Validation ----------------------------------------------------------
     @field_validator("database_url")
     @classmethod
@@ -595,6 +636,16 @@ class Settings(BaseSettings):
         if self.new_account_listing_inquiries_per_day > self.listing_inquiries_per_day:
             raise ValueError(
                 "NEW_ACCOUNT_LISTING_INQUIRIES_PER_DAY must not exceed LISTING_INQUIRIES_PER_DAY"
+            )
+        if not self.service_category_list:
+            raise ValueError("SERVICE_CATEGORIES must list at least one category")
+        if self.new_account_service_posts_per_day > self.service_posts_per_day:
+            raise ValueError(
+                "NEW_ACCOUNT_SERVICE_POSTS_PER_DAY must not exceed SERVICE_POSTS_PER_DAY"
+            )
+        if self.new_account_service_inquiries_per_day > self.service_inquiries_per_day:
+            raise ValueError(
+                "NEW_ACCOUNT_SERVICE_INQUIRIES_PER_DAY must not exceed SERVICE_INQUIRIES_PER_DAY"
             )
         if self.group_invite_link_default_days > self.group_invite_link_max_days:
             raise ValueError(
@@ -724,6 +775,14 @@ class Settings(BaseSettings):
             for part in self.marketplace_prohibited_terms.split(",")
             if part.strip()
         )
+
+    @property
+    def service_category_list(self) -> tuple[str, ...]:
+        return tuple(part.strip() for part in self.service_categories.split(",") if part.strip())
+
+    @property
+    def job_scam_phrase_list(self) -> tuple[str, ...]:
+        return tuple(part.strip() for part in self.job_scam_phrases.split(",") if part.strip())
 
     @property
     def reaction_kind_list(self) -> tuple[str, ...]:
