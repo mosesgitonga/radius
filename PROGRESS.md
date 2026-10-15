@@ -1703,3 +1703,105 @@ curl -X PUT localhost:8000/v1/events/$EID/rsvp -H "Authorization: Bearer $B" \
 
 - **HEIC support**, carried from Phase 2.
 - **Development `SECRET_KEY`** (minor), carried from Phase 3.
+
+---
+
+## Phase 8 — Trust, safety and launch hardening
+
+**Status:** in progress
+
+### Plan
+
+The brief's "done when" is "ready for the Nyeri launch". That is a judgement, so this
+phase makes it checkable: every item below ends in a test, a measured number or a
+rehearsed procedure, listed in the phase summary.
+
+**Dependencies (approved).**
+- **`sentry-sdk`** for error tracking. It is active only when `SENTRY_DSN` is set,
+  and every event is scrubbed by the same redaction rules as the logs.
+- **`prometheus-client`** for metrics: per-route request counts and latency
+  histograms, plus worker job counters.
+
+**1. Verified-neighbour badge**, computed daily by the worker. The starting rule,
+configurable:
+- **Earned:** a verified phone, an account at least 14 days old, home presence on at
+  least 10 of the last 14 days (the Phase 1 presence mask), and no upheld report
+  against the user in 90 days;
+- **or vouched:** vouches from 2 verified neighbours living in the same res-7 area.
+
+A vouch is a row anyone verified can give or withdraw. The worker revokes a badge
+when the rule stops holding. A moderator can revoke a badge and lock it, so the
+worker cannot simply re-award it the next morning.
+
+**2. Staff and the moderation API.** Staff are a separate population, never users:
+- **Accounts:** a `staff_accounts` table with roles `admin` and `moderator`.
+- **Sign-in:** email, a password hashed with the standard library's scrypt, and a
+  mandatory TOTP code (RFC 6238, also standard library).
+- **Tokens:** a separate type, rejected by every user endpoint; user tokens are
+  rejected by every staff endpoint.
+- **Endpoints**, under `/v1/admin`:
+  - **The report queue:** grouped by target and ordered by priority — violence and
+    job scams first — then by age. Held content (the job-scam holds, auto-hides)
+    is in the same queue.
+  - **Actions:** remove, restore, warn, suspend, ban, restrict, and dismiss or
+    uphold reports.
+  - **A user's history:** reports by and against them, warnings, and actions.
+  - **The audit log**, which records every staff action with actor type
+    `moderator`.
+  - **Staff management**, for admins.
+
+**3. Restrictions and ban lists.**
+
+- **A restricted account** is held to new-account limits whatever its age. It can't
+  send message requests or post jobs, and its posts are held for review.
+- **Who restricts:** a moderator, or automatically when distinct trusted reporters
+  report the *person*. A person is still never auto-hidden (decision 2.9); being
+  restricted is different, because it slows them down without silencing them.
+- **Ban lists** cover phone numbers and devices. Both are keyed hashes, so the list
+  is not itself a list of numbers.
+  - **Device IDs:** clients send an installation ID at sign-in, stored hashed on the
+    session.
+  - **Banning a person** adds their number and every device they signed in from.
+  - **Refusal:** sign-in from a banned phone or device fails with the same message
+    as any failed code.
+
+**4. Data protection completeness.**
+- **A schema test** walks every table with a column pointing at `users`. It fails
+  unless each table is either reached by the purge or listed, with a reason, as
+  deliberately retained (the audit log, reports).
+- **Hard purge:** a retention job removes soft-deleted content older than 90 days —
+  posts, comments, stories, listings, service posts, messages, reviews, events,
+  groups — unless it is under a pending report. This was deferred from Phases 2–7.
+- **The audit log and resolved reports** are kept for two years, then purged.
+- **`DATA_MAP.md`** is completed: staff, vouches, warnings, moderation actions, ban
+  lists.
+
+**5. Performance.**
+- **Seed data:** a script generates 50,000 users around Nyeri and 500,000 posts,
+  plus listings, events and service posts at proportionate scale, in bulk SQL.
+- **Measurement:** a benchmark times the feed and marketplace queries for a sample
+  of users, and reports p50 and p95. The target is a p95 under 200 ms.
+- **Indexes:** `EXPLAIN (ANALYZE, BUFFERS)` for each key query, with fixes, and the
+  before-and-after numbers recorded.
+
+**6. Operations.**
+- **Deployment:** a review of the production image, `docker-compose.prod.yml`, and a
+  Caddy reverse-proxy config (TLS, WebSockets, real client IP), with
+  `docs/DEPLOYMENT.md` for a single VPS.
+- **Backups:** nightly `pg_dump` to S3-compatible storage with retention. A restore
+  script, and a restore test that is actually run: dump, restore into a scratch
+  database, compare row counts.
+- **Monitoring:** Sentry and Prometheus wired into the API and worker.
+- **Logs and secrets:** log retention set in the Docker logging driver; secrets
+  supplied through files and the environment, never baked into images.
+
+**7. Security review.**
+- **`docs/SECURITY.md`:** the OWASP API Security Top 10 (2023), each risk mapped
+  to the controls and tests that address it, with gaps fixed or recorded.
+- **`tests/test_authorization.py`:** nobody can read another person's DMs, a
+  private group, a private event or its venue, or a precise location — every
+  route, in one place.
+
+### Open questions
+
+_None blocking. HEIC from Phase 2 is still open._

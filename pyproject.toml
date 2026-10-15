@@ -38,6 +38,8 @@ dependencies = [
     "boto3>=1.35",
     "firebase-admin>=6.5",
     "tzdata>=2026.5",
+    "sentry-sdk>=2.72.0",
+    "prometheus-client>=0.26.0",
 ]
 
 [dependency-groups]
