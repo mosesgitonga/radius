@@ -37,6 +37,7 @@ dependencies = [
     # local HMAC computation, and the worker transfers objects in a thread.
     "boto3>=1.35",
     "firebase-admin>=6.5",
+    "tzdata>=2026.5",
 ]
 
 [dependency-groups]

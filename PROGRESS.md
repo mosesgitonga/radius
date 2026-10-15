@@ -1512,3 +1512,96 @@ curl -X POST localhost:8000/v1/reviews -H "Authorization: Bearer $B" -H 'Content
 
 - **HEIC support**, carried from Phase 2.
 - **Development `SECRET_KEY`** (minor), carried from Phase 3.
+
+---
+
+## Phase 7 — Events
+
+**Status:** in progress
+
+### Plan
+
+**Dependency.** `tzdata`, approved: the IANA time-zone database packaged for
+Python. Windows has none of its own, so without it `zoneinfo` cannot resolve
+`Africa/Nairobi` in the test environment. The zone is a setting,
+`EVENT_TIMEZONE` (default `Africa/Nairobi`), so nothing is hard-coded to Kenya.
+
+**Times.**
+- **Storage:** times are stored in UTC.
+- **Input:** a time with no offset is read as local time in `EVENT_TIMEZONE`,
+  which is how a person types "Saturday 6 pm".
+- **Output:** every response gives both the UTC instant and the local time with
+  its offset.
+- **Date filters:** "today" and "this weekend" are computed in local time — today
+  is from now until local midnight; the weekend is Saturday 00:00 to Monday 00:00,
+  or from now if it is already the weekend.
+
+**Models**
+
+- `Event`:
+  - title, description, and type (party, church, sports, harambee, clean-up,
+    meetup, other);
+  - start and end;
+  - a venue name and venue details (address, directions), plus the venue's cell
+    and centroid for discovery;
+  - a cover image (the `event_cover` media purpose, declared in Phase 2);
+  - an optional capacity;
+  - the organiser — a user, and optionally the group they organise it for;
+  - visibility, an approval mode, attendee-list visibility, status (scheduled or
+    cancelled), counts, and moderation status.
+- **The venue's cell comes from coordinates the organiser picks on a map.** They
+  are converted to a res-9 cell on receipt and discarded, as for everything else.
+  No coordinates are stored, and none are returned.
+- `EventRsvp`: one row per person per event.
+  - **Response:** going, interested or not going — or none yet, for someone
+    invited who has not answered.
+  - **Approval:** approved, pending or declined, for events that need it.
+- `EventReminderSent`: one row per event, person and reminder offset, so a
+  reminder is sent at most once whatever the worker does.
+
+**Visibility.**
+- **Public:** discoverable within the events radius (twice the feed radius,
+  2–30 km, with a user filter up to 50 km), and readable by anyone.
+- **Group:** only for a group-organised event; readable by the group's active
+  members, and listed in the group.
+- **Private:** invite-only, by direct invitation or a shareable link (stored
+  hashed, like group links).
+
+**Location privacy (the acceptance rule).** For a **private** event, the venue name
+and details are returned only to the organiser and to *accepted* attendees — an
+approved RSVP of going or interested. Everyone else gets the area label from the
+venue's cell, and the venue fields are null. Public and group events show the
+venue to anyone who can see the event.
+
+**RSVPs.**
+- **Responses:** going, interested or not going.
+- **Approval mode:** each RSVP waits for the organiser.
+- **Capacity:** limits "going".
+- **Attendee-list visibility:** everyone who can see the event, attendees only, or
+  the organiser only.
+
+**Reminders.** A worker sweep every minute sends each "going" attendee a reminder
+at each configured offset before the start (`EVENT_REMINDER_OFFSETS_MINUTES`,
+default `1440,60`). The text uses local time: "Harambee starts tomorrow at 18:00".
+- **Stale reminders are skipped:** an offset is due once its moment has passed,
+  and stops being due when the next, smaller offset is. Someone who RSVPs three
+  hours before gets the one-hour reminder, not a stale "tomorrow".
+- **No duplicates:** the sent-reminder table makes it idempotent.
+
+**Changes and cancellations** — a new time, a new venue, or cancelling — notify
+everyone who RSVP'd. Edits to the title or description do not.
+
+**Browse.** `GET /v1/events` lists upcoming public events in the radius, soonest
+first, filtered by type and by `when` (today, this weekend, upcoming) or a date
+range. `GET /v1/groups/{id}/events` lists a group's events.
+
+**Group-organised events** need a group admin; a new permission,
+`manage_events`, is added to the Phase 4 table and covered by its matrix.
+
+**Carried over from Phases 5 and 6.**
+- **Listing-expiry reminders:** a seller is told a day before a listing expires.
+- **Review prompts:** a buyer named on a sale is invited to review the seller.
+
+### Open questions
+
+_None blocking. HEIC from Phase 2 is still open._
