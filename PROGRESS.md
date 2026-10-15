@@ -1708,7 +1708,7 @@ curl -X PUT localhost:8000/v1/events/$EID/rsvp -H "Authorization: Bearer $B" \
 
 ## Phase 8 — Trust, safety and launch hardening
 
-**Status:** in progress
+**Status:** complete and verified on 2026-10-15
 
 ### Plan
 
@@ -1802,6 +1802,143 @@ worker cannot simply re-award it the next morning.
   private group, a private event or its venue, or a precise location — every
   route, in one place.
 
+### Built
+
+**Staff and the moderation console** (decisions 8.1–8.3).
+- **Staff accounts:** separate from users, with roles admin and moderator.
+- **Sign-in:** email, a scrypt password and a TOTP code, all three in one request.
+  Codes are good once, failures lock the account, and every failure gets the same
+  answer.
+- **Tokens and bootstrap:** staff tokens are refused by user endpoints and the other
+  way round. `scripts/create_admin.py` creates the first admin.
+- **The console**, under `/v1/admin`:
+  - one prioritised queue of reports and held content;
+  - content detail with images;
+  - remove, restore and resolve;
+  - warn, suspend, restrict and ban;
+  - badge revoke and lock;
+  - a person's history;
+  - the audit log;
+  - phone and device ban lists.
+- **The person affected** is told, and reads their standing at `GET /v1/me/standing`.
+
+**Restrictions and bans** (8.4, 8.5).
+- **Restricted accounts** get new-account limits, no first contact, no job posts,
+  and new posts held for review.
+- **Automatic restriction:** enough trusted reports against a person restrict them,
+  and never hide them.
+- **Ban lists** hold keyed hashes. A banned number is sent nothing, and a banned
+  device fails sign-in like an expired code.
+- **Installation IDs:** clients send one at sign-in (`device_id`), stored hashed.
+- **Suspensions** with an end date lift on their own, swept hourly.
+
+**The verified-neighbour badge** (8.6).
+- **Recomputed nightly**, earned or vouched, with a moderator lock.
+- **Vouching:** `PUT` and `DELETE /v1/users/{id}/vouch`.
+
+**Data protection** (8.7, 8.8).
+- **Hard purge** of old deleted and removed content, with its images, held while
+  any report it would cascade to is pending.
+- **Message evidence** is erased, and the tombstone kept.
+- **Two-year expiry** of audit events, resolved reports, warnings, and the consents
+  of purged accounts.
+- **The purge registry and its test**, which found that blocks were never deleted on
+  purge. They are now.
+- **Coverage:** the export and the purge cover all new data, and the data map is
+  complete.
+
+**Performance** (8.9).
+- `scripts/seed_perf.py`: 50,000 users, 500,000 posts and proportionate listings,
+  services and events, in two minutes.
+- `scripts/bench.py` and `scripts/explain.py`.
+- Spherical radius checks through one shared predicate, and no parallel plans for
+  API connections.
+
+**Operations** (8.10, 8.11).
+- Sentry, scrubbed like the logs.
+- Prometheus: route-template request metrics behind `METRICS_TOKEN`, summed across
+  Gunicorn workers, plus worker job counters and a last-success time per task.
+- `docker-compose.prod.yml` and a Caddyfile.
+- Image review fixes: scripts and seeds are now in the image, and Gunicorn's
+  unredacted access log is gone.
+- Backups with off-site copies, and a restore test.
+- `docs/DEPLOYMENT.md`.
+
+**Security.** `docs/SECURITY.md` maps the OWASP API Top 10 (2023) to controls and
+tests, with six open items. `tests/test_authorization.py` covers every route on a
+private thing.
+
+**Dependencies.** `sentry-sdk` and `prometheus-client`, approved.
+
+**Schema.** Migration 0013 adds:
+- staff accounts and sessions, warnings, the two ban lists and vouches;
+- the users' suspension, restriction and badge-lock columns;
+- `device_sessions.device_id_hash`;
+- 20 new audit actions.
+
+**Endpoints:** 32 new (29 under `/v1/admin`), 180 in total across 145 paths.
+
+### Verified
+
+| Check | Result |
+| --- | --- |
+| `pytest` | **1124 passed**, **92% coverage**; the new modules 90–100% |
+| `ruff` + `mypy` (strict, app, tests and scripts) | clean |
+| Migrations | 0012 ↔ 0013 down and up; `alembic check` clean; 0013 applied to the development and performance databases |
+| Privacy scan, OpenAPI, purge registry, authorization matrix | all pass |
+
+**The brief's "ready for launch", made checkable:**
+
+| Item | Evidence |
+| --- | --- |
+| Staff and moderation | `tests/test_staff.py` (31) and `tests/test_moderation_console.py` (22). **Live:** the first admin bootstrapped in the container, signed in with a real authenticator code, opened the queue and the audit log. A replayed code got 401, and the bootstrap refused a second run |
+| Badge | `tests/test_badge.py` (10). **At scale:** 4,354 badges awarded across 50,000 users in 3.0 s; a second run changed nothing, in 0.2 s |
+| Data protection | `tests/test_retention.py` (7) and `tests/test_data_registry.py` (4); every new field is in the export and the purge |
+| Authorization | `tests/test_authorization.py`: an outsider is refused on all 55 routes on private things; no secret text in any response; no location key in any response |
+| Performance | Linux container, 200 users, sequential, end to end: feed p95 **168 ms**, feed page 2 167, marketplace newest 107, search 153, nearest 169. Target p95 < 200 ms: **met**. The feed query's median went from 72 to 60 ms |
+| Backups | `scripts/backup.sh` and `scripts/restore_test.sh` run against the development stack: 41 tables, 8,709 rows restored and matching. A truncated dump fails the test, and the scratch database is dropped either way. The off-site copy round-trips byte for byte |
+| Deployment | The runtime image builds and serves under Gunicorn with three workers. Metrics sum across them. `docker-compose.prod.yml` and the Caddyfile validate |
+| Observability | `tests/test_observability.py` (8): Sentry scrubbing, metrics behind the token, route templates rather than paths, job metrics |
+
+### Defects found, all fixed
+
+1. **Blocks were never deleted on purge**, though documented since Phase 1. Found by
+   the new registry test.
+2. **Gunicorn's access log wrote full URLs, query strings included**, past our
+   redaction. It's removed; the application already logs each request, redacted.
+3. **`/metrics` would have reported a random Gunicorn worker.** Multiprocess mode is
+   now on, and dead workers are cleaned up.
+4. **The runtime image had no `scripts/` or `seeds/`**, so the admin bootstrap and
+   area seeding could not run in production.
+5. **Route labels.** This FastAPI version mounts included routers lazily, so a
+   route's own path lacks its prefix. Metrics labels are now rebuilt from the
+   matched path.
+6. **The dev containers predated the new dependencies.** They're rebuilt; the API's
+   reload had been failing on the import.
+
+### Deferred
+
+With reasoning in `docs/DECISIONS.md`:
+- appeals;
+- encrypting TOTP secrets at rest;
+- device attestation;
+- managed PostgreSQL.
+
+### How to try it
+
+```bash
+docker compose up --build
+docker compose exec api python -m scripts.create_admin --email you@example.com --name "You"
+# sign in with the printed password and a code from an authenticator app:
+curl -X POST localhost:8000/v1/admin/auth/sign-in -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","password":"…","code":"123456"}'
+curl localhost:8000/v1/admin/queue -H "Authorization: Bearer $STAFF"
+curl localhost:8000/v1/me/standing -H "Authorization: Bearer $USER"
+```
+
 ### Open questions
 
-_None blocking. HEIC from Phase 2 is still open._
+- **Registration with the Data Protection Commissioner** is still to be done by the
+  controller before launch. It is a legal filing, not software.
+- **HEIC support**, carried from Phase 2.
+- **Development `SECRET_KEY`** (minor), carried from Phase 3.
