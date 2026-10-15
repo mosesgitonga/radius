@@ -26,6 +26,8 @@ from app.core.errors import BadRequestError, NotFoundError
 from app.modules.feed import service as feed_service
 from app.modules.feed.models import Comment, Post, Story
 from app.modules.groups import access as group_access
+from app.modules.marketplace import access as listing_access
+from app.modules.marketplace.models import Listing
 from app.modules.messaging.models import ConversationMember, MemberStatus, Message
 from app.modules.moderation.audit import record_audit_event
 from app.modules.moderation.models import (
@@ -185,6 +187,7 @@ async def _find_report(
 # way to silence a neighbour. Reports against users always wait for a human.
 _HIDEABLE: dict[ReportTargetType, Any] = {
     ReportTargetType.post: Post,
+    ReportTargetType.listing: Listing,
     ReportTargetType.comment: Comment,
     ReportTargetType.story: Story,
 }
@@ -291,6 +294,11 @@ async def _resolve_target_author(
         if await is_blocked_between(session, viewer.id, message.sender_id):
             raise NotFoundError("Message not found")
         return message.sender_id
+    if target_type == ReportTargetType.listing:
+        listing = await listing_access.visible_listing(
+            session, listing_id=target_id, viewer_id=viewer.id
+        )
+        return listing.seller_id
     if target_type == ReportTargetType.group:
         # Anyone who can see a group's profile may report it; the owner answers
         # for it. A group being reported is not auto-hidden: hiding a whole

@@ -206,7 +206,12 @@ async def create_post(
 
 
 async def estimate_reach(
-    session: AsyncSession, redis: Redis, *, cell_res8: int, settings: Settings
+    session: AsyncSession,
+    redis: Redis,
+    *,
+    cell_res8: int,
+    settings: Settings,
+    feature: RadiusFeature = RadiusFeature.feed,
 ) -> int:
     """Roughly how many active neighbours can see a post at this location.
 
@@ -221,7 +226,7 @@ async def estimate_reach(
     and an exact figure would be a precise count of who lives nearby.
     """
     engine = RadiusEngine(session, redis, settings)
-    radius = await engine.radius_for(RadiusFeature.feed, cell_res8)
+    radius = await engine.radius_for(feature, cell_res8)
     active = await engine.active_users_within(cell_res8, radius.radius_km)
     return int(round(active, -1))
 

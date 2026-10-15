@@ -28,6 +28,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.feed.router import router as feed_router
 from app.modules.groups.router import router as groups_router
 from app.modules.location.router import router as location_router
+from app.modules.marketplace.router import router as marketplace_router
 from app.modules.media.router import router as media_router
 from app.modules.messaging.router import router as messaging_router
 from app.modules.messaging.socket import router as socket_router
@@ -94,6 +95,13 @@ TAGS_METADATA = [
         ),
     },
     {
+        "name": "marketplace",
+        "description": (
+            "Listings nearby, search, saved listings, chatting with sellers, and marking "
+            "items sold. Listings show an approximate pickup area, never a location."
+        ),
+    },
+    {
         "name": "messaging",
         "description": (
             "Direct and group conversations, message requests, and sync. The realtime "
@@ -150,8 +158,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def build_v1_router(settings: Settings) -> APIRouter:
     """The versioned client API.
 
-    Module routers are mounted here as each phase lands them. The marketplace
-    arrives in Phase 5, services in Phase 6, events in Phase 7.
+    Module routers are mounted here as each phase lands them. Services arrive in
+    Phase 6, events in Phase 7.
     """
     router = APIRouter(prefix=settings.api_prefix, responses=COMMON_ERROR_RESPONSES)
     router.include_router(auth_router)
@@ -160,6 +168,7 @@ def build_v1_router(settings: Settings) -> APIRouter:
     router.include_router(media_router)
     router.include_router(feed_router)
     router.include_router(groups_router)
+    router.include_router(marketplace_router)
     router.include_router(messaging_router)
     router.include_router(socket_router)
     router.include_router(notifications_router)
