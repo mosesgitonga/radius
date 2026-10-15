@@ -33,6 +33,7 @@ from app.modules.marketplace.router import router as marketplace_router
 from app.modules.media.router import router as media_router
 from app.modules.messaging.router import router as messaging_router
 from app.modules.messaging.socket import router as socket_router
+from app.modules.moderation.admin_router import router as admin_moderation_router
 from app.modules.moderation.router import router as moderation_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.services.router import reviews_router
@@ -145,6 +146,21 @@ TAGS_METADATA = [
             "only area labels and distance bands come out."
         ),
     },
+    {
+        "name": "admin: staff",
+        "description": (
+            "Staff sign-in — email, password and an authenticator code — and staff "
+            "accounts. Staff tokens only: a user token is refused here, and a staff "
+            "token everywhere else."
+        ),
+    },
+    {
+        "name": "admin: moderation",
+        "description": (
+            "The moderation queue, actions on content and accounts, a person's "
+            "history, the audit log and the ban lists."
+        ),
+    },
 ]
 
 # Attached to every `/v1` route so the error envelope is documented once rather
@@ -202,6 +218,7 @@ def build_v1_router(settings: Settings) -> APIRouter:
     router.include_router(notifications_router)
     router.include_router(moderation_router)
     router.include_router(staff_router)
+    router.include_router(admin_moderation_router)
     return router
 
 

@@ -59,6 +59,7 @@ from app.modules.location.service import (
 )
 from app.modules.media.models import MediaPurpose
 from app.modules.media.service import claim_assets_for
+from app.modules.moderation.holds import hold_if_restricted
 from app.modules.moderation.models import ContentStatus
 from app.modules.notifications import service as notifications_service
 from app.modules.notifications.models import NotificationType
@@ -189,6 +190,7 @@ async def create_post(
     ]
     session.add(post)
     await session.flush()
+    await hold_if_restricted(session, author=author, content=post, target_type="post")
 
     reach = (
         group.member_count

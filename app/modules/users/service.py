@@ -22,10 +22,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.db import execute_dml
 from app.core.errors import BadRequestError, ConflictError, NotFoundError
 from app.modules.moderation.audit import record_audit_event
 from app.modules.moderation.models import AuditAction, AuditActorType
@@ -35,6 +36,7 @@ from app.modules.users.models import (
     ConsentType,
     User,
     UserStatus,
+    Vouch,
 )
 
 logger = logging.getLogger(__name__)
@@ -413,6 +415,15 @@ async def export_user_data(
         )
     ).all()
 
+    vouched_for = list(
+        (
+            await session.execute(select(Vouch.vouchee_id).where(Vouch.voucher_id == user.id))
+        ).scalars()
+    )
+    vouches_received = int(
+        await session.scalar(select(func.count(Vouch.id)).where(Vouch.vouchee_id == user.id)) or 0
+    )
+
     await record_audit_event(
         session,
         action=AuditAction.data_exported,
@@ -429,6 +440,11 @@ async def export_user_data(
             "phone_number": user.phone_number,
             "display_name": user.display_name,
             "status": str(user.status),
+            "suspended_until": user.suspended_until.isoformat() if user.suspended_until else None,
+            "restricted_until": (
+                user.restricted_until.isoformat() if user.restricted_until else None
+            ),
+            "restriction_reason": user.restriction_reason,
             "member_since": user.created_at.isoformat() if user.created_at else None,
             "phone_verified_at": (
                 user.phone_verified_at.isoformat() if user.phone_verified_at else None
@@ -461,6 +477,10 @@ async def export_user_data(
                 "location history is kept. Explore-mode locations are held "
                 "temporarily in memory and are never written to the database."
             ),
+        },
+        "vouches": {
+            "given_to": [str(vouchee_id) for vouchee_id in vouched_for],
+            "received": vouches_received,
         },
         "verified_neighbour": {
             "is_verified": user.is_verified_neighbour,
@@ -516,8 +536,22 @@ async def purge_user(session: AsyncSession, *, user: User) -> None:
     user.home_presence_updated_on = None
     user.is_verified_neighbour = False
     user.verified_neighbour_at = None
+    user.badge_locked_at = None
+    user.restricted_until = None
+    user.restriction_reason = None
+    user.suspended_until = None
     user.status = UserStatus.banned
     user.deleted_at = datetime.now(UTC)
+
+    # Blocks and vouches, in both directions: who someone blocked, or vouched for,
+    # is about them as much as about the other person.
+    await execute_dml(
+        session, delete(Block).where(or_(Block.blocker_id == user.id, Block.blocked_id == user.id))
+    )
+    await execute_dml(
+        session,
+        delete(Vouch).where(or_(Vouch.voucher_id == user.id, Vouch.vouchee_id == user.id)),
+    )
 
     await record_audit_event(
         session,

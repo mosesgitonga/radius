@@ -156,3 +156,30 @@ class DeletionStatusOut(BaseModel):
             }
         }
     )
+
+
+class StandingWarningOut(BaseModel):
+    id: uuid.UUID
+    reason: str
+    created_at: datetime
+
+
+class StandingOut(BaseModel):
+    """Where the account stands with the moderators. Everything a person needs to
+    know about a decision about them — never who reported them."""
+
+    status: UserStatus
+    suspended_until: datetime | None = Field(
+        description="When a suspension lifts on its own; null while suspended means until lifted."
+    )
+    restricted: bool
+    restricted_until: datetime | None
+    restriction_reason: str | None
+    is_verified_neighbour: bool
+    vouches_received: int
+    warnings: list[StandingWarningOut]
+
+
+class VouchOut(BaseModel):
+    vouchee_id: uuid.UUID
+    vouched: bool

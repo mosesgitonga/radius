@@ -65,6 +65,16 @@ class DeviceIn(BaseModel):
 
     device_name: str | None = Field(default=None, max_length=100, examples=["Pixel 6a"])
     device_platform: Literal["android", "ios", "web", "other"] | None = None
+    device_id: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=128,
+        description=(
+            "A random ID the app generates once per installation and keeps. Stored "
+            "only as a keyed hash, so that a ban can reach the devices an account "
+            "used. Never shown back, and never used to sign anyone in."
+        ),
+    )
 
 
 class OtpVerifyIn(PhoneNumberIn, DeviceIn):

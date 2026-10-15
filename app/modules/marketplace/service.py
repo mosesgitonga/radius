@@ -48,6 +48,7 @@ from app.modules.media.models import MediaPurpose
 from app.modules.media.service import claim_assets_for
 from app.modules.messaging import service as messaging_service
 from app.modules.messaging.models import Conversation, ConversationKind
+from app.modules.moderation.holds import hold_if_restricted
 from app.modules.moderation.models import ContentStatus
 from app.modules.notifications import service as notifications_service
 from app.modules.notifications.models import NotificationType
@@ -203,6 +204,7 @@ async def create_listing(
     listing.images = await _images(session, seller=seller, media_ids=media_ids, settings=settings)
     session.add(listing)
     await session.flush()
+    await hold_if_restricted(session, author=seller, content=listing, target_type="listing")
 
     reach = await estimate_reach(
         session,

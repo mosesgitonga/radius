@@ -32,6 +32,7 @@ from app.modules.auth import service as auth_service
 from app.modules.auth.models import DeviceSession
 from app.modules.users.models import User, UserStatus
 from app.modules.users.service import get_user, touch_last_active
+from app.modules.users.standing import is_restricted, is_suspended
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +141,7 @@ async def get_active_user(user: CurrentUser) -> User:
     access on purpose: they are still entitled to see why they were suspended and
     to export their data, and taking that away would be a punishment nobody chose.
     """
-    if user.status == UserStatus.suspended:
+    if is_suspended(user):
         raise ForbiddenError(
             "This account is suspended and cannot post or send messages",
             details={"status": str(user.status)},
@@ -203,7 +204,10 @@ def current_session_id(request: Request) -> uuid.UUID | None:
 
 
 def is_new_account(user: User, settings: Settings) -> bool:
-    """Whether an account is still inside its probation window."""
+    """Whether an account is still inside its probation window — or restricted,
+    which holds it to the same limits whatever its age."""
+    if is_restricted(user):
+        return True
     age = datetime.now(UTC) - user.created_at
     return age < timedelta(hours=settings.new_account_age_hours)
 

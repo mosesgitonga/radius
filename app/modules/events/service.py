@@ -51,6 +51,7 @@ from app.modules.location.service import AnchorMode, resolve_anchor
 from app.modules.marketplace.models import Listing, ListingAvailability
 from app.modules.media.models import MediaPurpose
 from app.modules.media.service import claim_assets_for
+from app.modules.moderation.holds import hold_if_restricted
 from app.modules.moderation.models import ContentStatus
 from app.modules.notifications import service as notifications_service
 from app.modules.notifications.models import NotificationType
@@ -207,6 +208,7 @@ async def create_event(
         event.cover_media_id = asset.id
     session.add(event)
     await session.flush()
+    await hold_if_restricted(session, author=organiser, content=event, target_type="event")
     # The organiser is going to their own event, and is reminded like anyone else.
     session.add(EventRsvp(event_id=event.id, user_id=organiser.id, response=RsvpResponse.going))
     await session.flush()

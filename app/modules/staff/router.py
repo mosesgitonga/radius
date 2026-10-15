@@ -76,13 +76,21 @@ async def sign_in(
 
 
 @router.post(
-    "/auth/sign-out", status_code=status.HTTP_204_NO_CONTENT, summary="End this staff session"
+    "/auth/sign-out",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="End this staff session",
+    description="The token stops working at once.",
 )
 async def sign_out(caller: StaffCallerDep, session: SessionDep) -> None:
     await staff_service.sign_out(session, caller.session)
 
 
-@router.get("/me", response_model=StaffOut, summary="The signed-in staff member")
+@router.get(
+    "/me",
+    response_model=StaffOut,
+    summary="The signed-in staff member",
+    description="Who the staff token belongs to, and their role.",
+)
 async def me(staff: CurrentStaff) -> StaffOut:
     return StaffOut.of(staff, now=datetime.now(UTC))
 
@@ -109,7 +117,12 @@ async def change_password(
     )
 
 
-@router.get("/staff", response_model=list[StaffOut], summary="List staff accounts (admin)")
+@router.get(
+    "/staff",
+    response_model=list[StaffOut],
+    summary="List staff accounts (admin)",
+    description="Every moderator and admin, oldest first, with whether each is locked or disabled.",
+)
 async def list_staff(admin: AdminStaff, session: SessionDep) -> list[StaffOut]:
     now = datetime.now(UTC)
     return [StaffOut.of(account, now=now) for account in await staff_service.list_accounts(session)]
@@ -137,7 +150,15 @@ async def create_staff(
     return _issued(issued)
 
 
-@router.patch("/staff/{staff_id}", response_model=StaffOut, summary="Update a staff account")
+@router.patch(
+    "/staff/{staff_id}",
+    response_model=StaffOut,
+    summary="Update a staff account (admin)",
+    description=(
+        "Rename, change the role, or disable. Disabling ends the account's sessions. "
+        "The last admin cannot be demoted or disabled, and nobody can disable themselves."
+    ),
+)
 async def update_staff(
     staff_id: uuid.UUID, payload: StaffUpdateIn, admin: AdminStaff, session: SessionDep
 ) -> StaffOut:

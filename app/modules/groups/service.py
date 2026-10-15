@@ -345,6 +345,15 @@ async def delete_group(session: AsyncSession, *, actor: User, group_id: uuid.UUI
     await _soft_delete(session, view.group, actor_id=actor.id)
 
 
+async def remove_group_for_moderation(session: AsyncSession, *, group_id: uuid.UUID) -> bool:
+    """A moderator takes a reported group down: deleted as if by its owner."""
+    group = await session.get(Group, group_id, with_for_update=True)
+    if group is None or group.deleted_at is not None:
+        return False
+    await _soft_delete(session, group, actor_id=None)
+    return True
+
+
 async def _soft_delete(session: AsyncSession, group: Group, *, actor_id: uuid.UUID | None) -> None:
     group.deleted_at = datetime.now(UTC)
     if group.chat_conversation_id is not None:

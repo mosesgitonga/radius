@@ -72,6 +72,7 @@ from app.modules.notifications import service as notifications_service
 from app.modules.notifications.models import NotificationType
 from app.modules.users import service as users_service
 from app.modules.users.models import User, UserStatus
+from app.modules.users.standing import is_restricted
 
 logger = logging.getLogger(__name__)
 
@@ -543,7 +544,15 @@ async def _check_request_allowance(
     Checked here rather than as a route dependency because only the service knows
     whether a given send is a request. Asking about a listing has its own, larger
     allowance: reaching sellers is what the marketplace is for.
+
+    A restricted account starts no new conversations at all. It can still reply in
+    the ones it has.
     """
+    if is_restricted(user):
+        raise ForbiddenError(
+            "Your account is restricted and cannot start new conversations for now",
+            details={"reason": "restricted"},
+        )
     new = is_new_account(user, settings)
     if kind == ConversationKind.service:
         bucket = "service_inquiry"
@@ -847,6 +856,31 @@ async def delete_message(
         },
     )
     return message
+
+
+async def remove_message_for_moderation(session: AsyncSession, *, message_id: uuid.UUID) -> bool:
+    """A moderator takes a reported message down. It reads as "message deleted"
+    to the conversation; its content is kept, as evidence, until retention."""
+    message = await session.get(Message, message_id)
+    if message is None or message.deleted_at is not None:
+        return False
+    conversation = await session.get(Conversation, message.conversation_id, with_for_update=True)
+    if conversation is None:  # pragma: no cover — the message cascades with it
+        return False
+    message.deleted_at = datetime.now(UTC)
+    conversation.updated_at = datetime.now(UTC)
+    await session.flush()
+    publish_after_commit(
+        session,
+        await audience(session, conversation.id, actor_id=None),
+        MESSAGE_DELETED,
+        {
+            "conversation_id": str(conversation.id),
+            "seq": message.seq,
+            "message_id": str(message.id),
+        },
+    )
+    return True
 
 
 async def _under_review(session: AsyncSession, message_id: uuid.UUID) -> bool:

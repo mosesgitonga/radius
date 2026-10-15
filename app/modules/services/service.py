@@ -33,11 +33,13 @@ from app.modules.location.service import Anchor, AnchorMode, home_location_colum
 from app.modules.messaging import service as messaging_service
 from app.modules.messaging.models import Conversation, ConversationKind
 from app.modules.moderation.audit import record_audit_event
+from app.modules.moderation.holds import hold_if_restricted
 from app.modules.moderation.models import AuditAction, AuditActorType, ContentStatus
 from app.modules.services import access
 from app.modules.services.models import JobType, PayPeriod, ServiceKind, ServicePost
 from app.modules.users.models import User, UserStatus
 from app.modules.users.service import blocked_user_ids
+from app.modules.users.standing import is_restricted
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +64,7 @@ ALL_KIND_FIELDS = frozenset().union(*KIND_FIELDS.values())
 def can_hire(user: User, settings: Settings, now: datetime | None = None) -> bool:
     """The trust threshold for posting a job: a verified phone and an account old
     enough — or the verified-neighbour badge, which implies both and more."""
-    if user.status != UserStatus.active:
+    if user.status != UserStatus.active or is_restricted(user, now):
         return False
     if user.is_verified_neighbour:
         return True
@@ -236,6 +238,7 @@ async def create_post(
             details={"reason": "duplicate_offering", "post_id": str(existing)},
         ) from None
     await _hold_if_suspicious(session, post, settings)
+    await hold_if_restricted(session, author=author, content=post, target_type="service_post")
     await session.refresh(post)
     return post
 

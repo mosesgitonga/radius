@@ -559,6 +559,10 @@ _PUSH_TEXT: dict[NotificationType, tuple[str, str]] = {
         "{actor} asked about your listing",
         "{actor} and {others} asked about your listing",
     ),
+    NotificationType.account_notice: (
+        "A message about your account",
+        "A message about your account",
+    ),
 }
 
 

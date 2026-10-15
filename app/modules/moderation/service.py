@@ -153,6 +153,8 @@ async def submit_report(
         auto_hidden = await _maybe_auto_hide(
             session, target_type=target_type, target_id=target_id, settings=settings
         )
+    if trusted and target_type == ReportTargetType.user:
+        await _maybe_auto_restrict(session, user_id=target_id, settings=settings)
 
     await record_audit_event(
         session,
@@ -246,6 +248,47 @@ async def _maybe_auto_hide(
         )
         logger.info("content_auto_hidden", extra={"target_type": str(target_type)})
     return bool(hidden)
+
+
+async def _maybe_auto_restrict(
+    session: AsyncSession, *, user_id: uuid.UUID, settings: Settings
+) -> bool:
+    """Restrict a person once enough distinct trusted neighbours have reported them.
+
+    Never a suspension and never hiding: decision 2.9 stands, a person is not
+    silenced on reports alone. Restricting slows them — new-account limits, no
+    first contact, posts held — until a moderator looks, and lapses on its own.
+    An existing, longer restriction is left as it is.
+    """
+    trusted_reports = await session.scalar(
+        select(func.count(Report.id)).where(
+            Report.target_type == ReportTargetType.user,
+            Report.target_id == user_id,
+            Report.counted_towards_auto_hide.is_(True),
+            Report.status == ReportStatus.pending,
+        )
+    )
+    if (trusted_reports or 0) < settings.report_auto_restrict_threshold:
+        return False
+    user = await session.get(User, user_id, with_for_update=True)
+    if user is None:
+        return False
+    until = datetime.now(UTC) + timedelta(days=settings.auto_restrict_days)
+    if user.restricted_until is not None and user.restricted_until >= until:
+        return False
+    already = user.restricted_until is not None and user.restricted_until > datetime.now(UTC)
+    user.restricted_until = until
+    user.restriction_reason = user.restriction_reason if already else "automatic: reports"
+    await record_audit_event(
+        session,
+        action=AuditAction.user_restricted,
+        actor_type=AuditActorType.system,
+        target_type="user",
+        target_id=user_id,
+        context={"trusted_reports": int(trusted_reports or 0), "automatic": True},
+    )
+    logger.info("user_auto_restricted")
+    return True
 
 
 async def _resolve_target_author(

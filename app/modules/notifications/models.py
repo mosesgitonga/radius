@@ -50,6 +50,7 @@ class NotificationType(StrEnum):
     group_join_approved = "group_join_approved"
     group_post_approved = "group_post_approved"
     listing_inquiry = "listing_inquiry"
+    """A buyer's first message about a seller's listing."""
     service_inquiry = "service_inquiry"
     """Someone's first message about a service post."""
     review_received = "review_received"
@@ -64,7 +65,9 @@ class NotificationType(StrEnum):
     event_reminder = "event_reminder"
     event_updated = "event_updated"
     event_cancelled = "event_cancelled"
-    """A buyer's first message about a seller's listing."""
+    account_notice = "account_notice"
+    """From the moderators: a warning, a suspension, a restriction, content taken
+    down. The `data` says which; the push carries the wording."""
 
 
 class DeviceToken(Base, UUIDPrimaryKeyMixin, TimestampMixin):

@@ -15,7 +15,7 @@ from redis.asyncio import Redis
 
 from app.core.config import Settings, get_settings
 from app.core.db import SessionDep
-from app.core.errors import ConflictError
+from app.core.errors import ConflictError, UnauthenticatedError
 from app.core.providers.sms import SmsProvider, get_sms_provider
 from app.core.ratelimit import RateLimiter, get_rate_limiter, rate_limit
 from app.core.redis import get_redis
@@ -36,6 +36,7 @@ from app.modules.auth.schemas import (
     SignupOut,
     TokenPairOut,
 )
+from app.modules.moderation import banlist
 from app.modules.users import service as users_service
 from app.modules.users.models import ConsentType
 
@@ -82,6 +83,7 @@ def _to_token_pair(pair: auth_service.TokenPair) -> TokenPairOut:
 )
 async def request_otp(
     payload: OtpRequestIn,
+    session: SessionDep,
     redis: RedisDep,
     sms: SmsDep,
     limiter: LimiterDep,
@@ -89,7 +91,12 @@ async def request_otp(
 ) -> OtpRequestOut:
     phone_number = normalise_phone_number(payload.phone_number)
     challenge = await auth_service.request_otp(
-        redis, sms, limiter, phone_number=phone_number, settings=settings
+        redis,
+        sms,
+        limiter,
+        phone_number=phone_number,
+        settings=settings,
+        banned=await banlist.is_phone_banned(session, phone_number, settings),
     )
     return OtpRequestOut(
         expires_in_seconds=challenge.expires_in_seconds,
@@ -133,6 +140,7 @@ async def verify_otp(
         settings=settings,
         device_name=payload.device_name,
         device_platform=payload.device_platform,
+        device_id=payload.device_id,
     )
 
     if verified.tokens is not None:
@@ -171,6 +179,11 @@ async def signup(
     phone_number = await auth_service.consume_signup_token(
         redis, token=payload.signup_token, settings=settings
     )
+    device_id_hash = banlist.device_hash(payload.device_id, settings) if payload.device_id else None
+    if await banlist.is_device_banned(session, device_id_hash):
+        raise UnauthenticatedError(
+            "That signup session has expired. Please verify your number again."
+        )
 
     # The token is single-use and already consumed, so a race between two
     # simultaneous signups cannot create two accounts. This covers the other
@@ -199,6 +212,7 @@ async def signup(
         settings=settings,
         device_name=payload.device_name,
         device_platform=payload.device_platform,
+        device_id_hash=device_id_hash,
     )
     return SignupOut(tokens=_to_token_pair(tokens), user_id=user.id)
 

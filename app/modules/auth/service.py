@@ -29,11 +29,11 @@ from datetime import UTC, datetime
 from typing import Final
 
 from redis.asyncio import Redis
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.core.db import run_after_commit
+from app.core.db import execute_dml, run_after_commit
 from app.core.errors import (
     ConflictError,
     ForbiddenError,
@@ -54,6 +54,7 @@ from app.core.security import (
     verify_secret,
 )
 from app.modules.auth.models import DeviceSession, SessionRevocationReason
+from app.modules.moderation import banlist
 from app.modules.moderation.audit import record_audit_event
 from app.modules.moderation.models import AuditAction
 from app.modules.users.models import User, UserStatus
@@ -133,8 +134,12 @@ async def request_otp(
     *,
     phone_number: str,
     settings: Settings,
+    banned: bool = False,
 ) -> OtpChallenge:
     """Issue and send a code.
+
+    A `banned` number gets the same limits and the same answer, and no code: the
+    ban is not disclosed, and no SMS is paid for.
 
     Two limits apply here and one on the route. The per-IP daily cap is a route
     dependency; the per-number daily cap and the resend cooldown are enforced
@@ -164,6 +169,14 @@ async def request_otp(
         raise RateLimitedError(
             "A code was sent recently. Please wait before asking for another.",
             retry_after_seconds=int(remaining),
+        )
+
+    if banned:
+        await redis.set(cooldown_key, "1", ex=settings.otp_resend_cooldown_seconds)
+        logger.info("otp_request_refused", extra={"reason": "banned"})
+        return OtpChallenge(
+            expires_in_seconds=settings.otp_ttl_seconds,
+            resend_after_seconds=settings.otp_resend_cooldown_seconds,
         )
 
     code = generate_numeric_code(settings.otp_length)
@@ -211,8 +224,13 @@ async def verify_otp(
     settings: Settings,
     device_name: str | None = None,
     device_platform: str | None = None,
+    device_id: str | None = None,
 ) -> VerifiedPhone:
-    """Check a code and either sign the user in or let them sign up."""
+    """Check a code and either sign the user in or let them sign up.
+
+    A banned device is refused after the code checks out, with the answer an
+    expired code gets, so a ban reads as nothing more than a failed sign-in.
+    """
     key = _otp_key(phone_number, settings)
     stored = await hash_get_all(redis, key)
     if not stored:
@@ -240,6 +258,13 @@ async def verify_otp(
     # Correct: consume it, so a captured code cannot be replayed.
     await redis.delete(key)
 
+    device_id_hash = banlist.device_hash(device_id, settings) if device_id else None
+    if await banlist.is_device_banned(session, device_id_hash) or await banlist.is_phone_banned(
+        session, phone_number, settings
+    ):
+        logger.info("otp_verify_refused", extra={"reason": "banned"})
+        raise UnauthenticatedError("That code is not valid or has expired")
+
     user = await _find_active_user(session, phone_number)
     if user is None:
         signup_token = generate_opaque_token()
@@ -257,6 +282,7 @@ async def verify_otp(
         settings=settings,
         device_name=device_name,
         device_platform=device_platform,
+        device_id_hash=device_id_hash,
     )
     await touch_last_active(session, user.id)
     return VerifiedPhone(phone_number=phone_number, tokens=tokens, signup_token=None)
@@ -306,6 +332,7 @@ async def issue_tokens(
     device_name: str | None = None,
     device_platform: str | None = None,
     family_id: uuid.UUID | None = None,
+    device_id_hash: str | None = None,
 ) -> TokenPair:
     """Create a device session and its token pair.
 
@@ -322,6 +349,7 @@ async def issue_tokens(
         family_id=family_id or uuid.uuid4(),
         device_name=device_name,
         device_platform=device_platform,
+        device_id_hash=device_id_hash,
         expires_at=refresh_token_expiry(settings, now),
         last_used_at=now,
     )
@@ -422,6 +450,7 @@ async def rotate_refresh_token(
         device_name=device_name or device_session.device_name,
         device_platform=device_platform or device_session.device_platform,
         family_id=device_session.family_id,
+        device_id_hash=device_session.device_id_hash,
     )
     device_session.replaced_by_id = tokens.session_id
     await touch_last_active(session, user.id)
@@ -597,7 +626,30 @@ async def revoke_sessions_for_deleted_account(session: AsyncSession, *, user_id:
         device_session.revoked_at = now
         device_session.revoked_reason = SessionRevocationReason.account_deleted
         revoked_ids.append(device_session.id)
+    # Every session's installation hash, not only the live ones: it links the
+    # account to a device, and a purged account has nothing left to ban.
+    await execute_dml(
+        session,
+        update(DeviceSession)
+        .where(DeviceSession.user_id == user_id, DeviceSession.device_id_hash.is_not(None))
+        .values(device_id_hash=None),
+    )
     _announce_revoked(session, user_id=user_id, session_ids=revoked_ids)
+
+
+async def revoke_sessions_for_moderation(session: AsyncSession, *, user_id: uuid.UUID) -> int:
+    """Sign a banned account out everywhere, at once — open sockets included."""
+    statement = select(DeviceSession).where(
+        DeviceSession.user_id == user_id, DeviceSession.revoked_at.is_(None)
+    )
+    now = datetime.now(UTC)
+    revoked_ids: list[uuid.UUID] = []
+    for device_session in (await session.execute(statement)).scalars():
+        device_session.revoked_at = now
+        device_session.revoked_reason = SessionRevocationReason.admin_action
+        revoked_ids.append(device_session.id)
+    _announce_revoked(session, user_id=user_id, session_ids=revoked_ids)
+    return len(revoked_ids)
 
 
 async def count_live_sessions(session: AsyncSession, *, user_id: uuid.UUID) -> int:

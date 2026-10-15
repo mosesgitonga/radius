@@ -37,8 +37,11 @@ from app.modules.groups import service as groups_service
 from app.modules.location.tasks import refresh_cell_activity, roll_home_presence
 from app.modules.media import service as media_service
 from app.modules.messaging import service as messaging_service
+from app.modules.moderation import console as moderation_console
+from app.modules.moderation import retention as moderation_retention
 from app.modules.notifications import service as notifications_service
 from app.modules.notifications.models import NotificationType
+from app.modules.users import badge
 from app.modules.users.tasks import delete_expired_sessions, purge_deleted_accounts
 
 logger = logging.getLogger(__name__)
@@ -143,8 +146,31 @@ async def roll_presence(ctx: JobContext) -> dict[str, int]:
 
 
 @with_job_context
+async def recompute_badges(ctx: JobContext) -> dict[str, int]:
+    """Nightly: award and withdraw the verified-neighbour badge.
+
+    Rolls the presence masks first, so the rule reads today's window even if the
+    roll job did not run.
+    """
+    settings = get_settings()
+    async with task_session(ctx) as session:
+        await roll_home_presence(session)
+        run = await badge.recompute_badges(session, settings=settings)
+    return {"awarded": run.awarded, "revoked": run.revoked}
+
+
+@with_job_context
+async def lift_suspensions(ctx: JobContext) -> dict[str, int]:
+    """Hourly: reactivate accounts whose suspension has ended."""
+    async with task_session(ctx) as session:
+        lifted = await moderation_console.lift_expired_suspensions(session)
+    return {"lifted": lifted}
+
+
+@with_job_context
 async def run_retention(ctx: JobContext) -> dict[str, int]:
-    """Purge accounts past their grace period, and sweep stale sessions.
+    """Purge accounts past their grace period, sweep stale sessions, and hard-delete
+    content and records past their retention.
 
     One job rather than two, because both are daily retention work over the same
     tables and splitting them would double the schedule for no benefit.
@@ -165,6 +191,8 @@ async def run_retention(ctx: JobContext) -> dict[str, int]:
             session, settings=settings
         )
         invite_links_removed = await groups_service.delete_old_invite_links(session)
+        content = await moderation_retention.purge_old_content(session, storage, settings=settings)
+        records = await moderation_retention.purge_old_records(session, settings=settings)
     return {
         "accounts_purged": purged.accounts_purged,
         "expired_sessions_deleted": sessions_removed,
@@ -173,6 +201,8 @@ async def run_retention(ctx: JobContext) -> dict[str, int]:
         "notifications_purged": notifications_purged,
         "stale_device_tokens_deleted": tokens_removed,
         "old_invite_links_deleted": invite_links_removed,
+        **{f"purged_{name}": count for name, count in content.items()},
+        **{f"expired_{name}": count for name, count in records.items()},
     }
 
 

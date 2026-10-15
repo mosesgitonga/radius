@@ -28,9 +28,12 @@ from app.modules.media import service as media_service
 from app.modules.media.schemas import ImageVariantOut
 from app.modules.media.views import image_variants
 from app.modules.messaging import service as messaging_service
+from app.modules.moderation import retention as moderation_retention
+from app.modules.moderation.models import ModerationWarning
 from app.modules.notifications import service as notifications_service
 from app.modules.services import reviews as reviews_service
 from app.modules.services import service as services_service
+from app.modules.users import badge
 from app.modules.users import service as users_service
 from app.modules.users.models import Block, User
 from app.modules.users.schemas import (
@@ -43,7 +46,11 @@ from app.modules.users.schemas import (
     MeOut,
     ProfileUpdateIn,
     PublicProfileOut,
+    StandingOut,
+    StandingWarningOut,
+    VouchOut,
 )
+from app.modules.users.standing import is_restricted
 
 router = APIRouter(tags=["users"])
 
@@ -303,6 +310,69 @@ async def unblock_user(user_id: uuid.UUID, user: CurrentUser, session: SessionDe
 
 
 # ---------------------------------------------------------------------------
+# Standing and vouches
+# ---------------------------------------------------------------------------
+@router.get(
+    "/me/standing",
+    response_model=StandingOut,
+    summary="My account's standing",
+    description=(
+        "Suspension, restriction, the badge, and any warnings from the moderators. "
+        "Readable while suspended: knowing why is part of being told."
+    ),
+)
+async def get_standing(user: CurrentUser, session: SessionDep) -> StandingOut:
+    warnings = (
+        await session.execute(
+            select(ModerationWarning)
+            .where(ModerationWarning.user_id == user.id)
+            .order_by(ModerationWarning.created_at.desc())
+            .limit(50)
+        )
+    ).scalars()
+    return StandingOut(
+        status=user.status,
+        suspended_until=user.suspended_until,
+        restricted=is_restricted(user),
+        restricted_until=user.restricted_until,
+        restriction_reason=user.restriction_reason,
+        is_verified_neighbour=user.is_verified_neighbour,
+        vouches_received=await badge.vouches_received_count(session, user.id),
+        warnings=[
+            StandingWarningOut(id=w.id, reason=w.reason, created_at=w.created_at) for w in warnings
+        ],
+    )
+
+
+@router.put(
+    "/users/{user_id}/vouch",
+    response_model=VouchOut,
+    summary="Vouch for a neighbour",
+    description=(
+        "Verified neighbours only. Vouches from enough verified neighbours in the "
+        "same area earn the badge; whether you share an area is not checked here, "
+        "so vouching never reveals where anyone lives. Idempotent."
+    ),
+)
+async def vouch_for(
+    user_id: uuid.UUID, user: ActiveUser, session: SessionDep, settings: SettingsDep
+) -> VouchOut:
+    await badge.vouch(session, voucher=user, vouchee_id=user_id, settings=settings)
+    return VouchOut(vouchee_id=user_id, vouched=True)
+
+
+@router.delete(
+    "/users/{user_id}/vouch",
+    response_model=VouchOut,
+    summary="Withdraw a vouch",
+    description="Succeeds whether or not there was a vouch to withdraw.",
+)
+async def withdraw_vouch(user_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> VouchOut:
+    await badge.withdraw_vouch(session, voucher=user, vouchee_id=user_id)
+    return VouchOut(vouchee_id=user_id, vouched=False)
+
+
+# ---------------------------------------------------------------------------
 # Data rights
 # ---------------------------------------------------------------------------
 @router.get(
@@ -333,11 +403,16 @@ async def export_my_data(
     export["notifications"] = await notifications_service.export_user_notifications(
         session, user_id=user.id
     )
+    export["moderation"] = await moderation_retention.export_user_moderation(
+        session, user_id=user.id
+    )
     export["not_held"] = [
         item for item in export["not_held"] if item != "message content (no messaging yet)"
     ] + [
         "image metadata (EXIF, including GPS, is removed from every upload)",
         "who you were online with, or when: presence is held in memory for a minute",
+        "the installation ID your app sends: only a keyed hash of it is stored",
+        "who reported you: reports are shown to moderators only",
     ]
     return export
 
