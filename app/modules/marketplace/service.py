@@ -9,27 +9,25 @@ back to the top, not reposting.
 
 from __future__ import annotations
 
-import base64
 import hashlib
-import json
 import logging
-import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from redis.asyncio import Redis
-from sqlalchemy import Select, and_, case, delete, func, literal, or_, select, tuple_, update
+from sqlalchemy import Select, delete, func, literal, select, tuple_, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import RadiusFeature, Settings
 from app.core.db import execute_dml
-from app.core.errors import BadRequestError, ConflictError, InvalidCursorError
+from app.core.errors import BadRequestError, ConflictError
 from app.core.pagination import PageParams, decode_cursor, encode_cursor, paginate
+from app.core.search import matching_phrases, normalise, prefix_tsquery
 from app.modules.feed.service import estimate_reach
-from app.modules.location import cells
+from app.modules.location import bands, cells
 from app.modules.location.radius import RadiusEngine
 from app.modules.location.service import (
     Anchor,
@@ -58,34 +56,14 @@ logger = logging.getLogger(__name__)
 
 ListingSort = Literal["relevance", "newest", "nearest", "price_asc", "price_desc"]
 MAX_SEARCH_RESULTS = 50
-MAX_QUERY_TERMS = 8
 BROWSABLE = (ListingAvailability.available, ListingAvailability.reserved)
-
-_NON_WORD = re.compile(r"[^0-9a-zÀ-ɏ]+")
-_QUERY_TERM = re.compile(r"[0-9a-zÀ-ɏ]+")
 
 
 # ---------------------------------------------------------------------------
 # Text rules
 # ---------------------------------------------------------------------------
-def normalise(text: str) -> str:
-    """Lower case, punctuation to spaces, spaces collapsed. "iPhone 11, 64GB!!" and
-    "iphone 11 64gb" are the same listing."""
-    return " ".join(_NON_WORD.sub(" ", text.lower()).split())
-
-
 def content_hash(title: str, description: str) -> str:
     return hashlib.sha256(f"{normalise(title)}\n{normalise(description)}".encode()).hexdigest()
-
-
-def prohibited_term(text: str, terms: tuple[str, ...]) -> str | None:
-    """The first prohibited term appearing as a whole word or phrase, if any."""
-    haystack = f" {normalise(text)} "
-    for term in terms:
-        needle = normalise(term)
-        if needle and f" {needle} " in haystack:
-            return term
-    return None
 
 
 def _clean(value: str | None, *, field: str, max_length: int, required: bool) -> str:
@@ -123,8 +101,9 @@ def _check_category(category: str, settings: Settings) -> str:
 
 
 def _check_allowed(title: str, description: str, settings: Settings) -> None:
-    term = prohibited_term(f"{title} {description}", settings.prohibited_term_list)
-    if term is not None:
+    matches = matching_phrases(f"{title} {description}", settings.prohibited_term_list)
+    if matches:
+        term = matches[0]
         raise BadRequestError(
             "This item cannot be listed on MyRadius",
             details={"reason": "prohibited_item", "term": term},
@@ -167,11 +146,6 @@ async def _images(
         session, media_ids=media_ids, owner_id=seller.id, purpose=MediaPurpose.listing
     )
     return [ListingImage(media_id=asset.id, position=index) for index, asset in enumerate(assets)]
-
-
-def _coarse_wkt(cell_res8: int) -> str:
-    latitude, longitude = cells.cell_centroid(cell_res8)
-    return f"SRID=4326;POINT({longitude} {latitude})"
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +195,7 @@ async def create_listing(
         price_kes=_check_price(pricing, price_kes, settings),
         expires_at=datetime.now(UTC) + timedelta(days=settings.listing_ttl_days),
         content_hash=digest,
-        coarse_centroid=_coarse_wkt(int(location["cell_res8"])),  # type: ignore[call-overload]
+        coarse_centroid=bands.coarse_wkt(int(location["cell_res8"])),  # type: ignore[call-overload]
         **location,
     )
     listing.images = await _images(session, seller=seller, media_ids=media_ids, settings=settings)
@@ -395,44 +369,6 @@ class BrowsePage:
     anchor: Anchor
 
 
-def _ts_query(query: str) -> str | None:
-    """Prefix-match every word: "sof cush" finds "sofa cushions". Built from
-    letters and digits only, so nothing a user types reaches the parser as syntax."""
-    terms = _QUERY_TERM.findall(query.lower())[:MAX_QUERY_TERMS]
-    if not terms:
-        return None
-    return " & ".join(f"{term}:*" for term in terms)
-
-
-def _bucket_expression(anchor: Anchor) -> Any:
-    """The distance band as an ordinal, from the listing's coarse cell to the
-    viewer's coarse cell — the same cells, and the same boundaries, as the band
-    shown. Spherical, to agree with the band computed from H3."""
-    distance = func.ST_Distance(
-        Listing.coarse_centroid,
-        func.ST_GeogFromText(_coarse_wkt(anchor.cell_res8)),
-        False,
-    )
-    return case(
-        *((distance < bound, index) for index, (bound, _bucket) in enumerate(cells.BUCKET_BOUNDS)),
-        else_=len(cells.BUCKET_BOUNDS),
-    )
-
-
-def _encode_nearest(bucket: int, created_at: datetime, listing_id: uuid.UUID) -> str:
-    payload = json.dumps([bucket, created_at.isoformat(), str(listing_id)]).encode()
-    return base64.urlsafe_b64encode(payload).decode().rstrip("=")
-
-
-def _decode_nearest(cursor: str) -> tuple[int, datetime, uuid.UUID]:
-    try:
-        padded = cursor + "=" * (-len(cursor) % 4)
-        bucket, created, listing_id = json.loads(base64.urlsafe_b64decode(padded))
-        return int(bucket), datetime.fromisoformat(created), uuid.UUID(listing_id)
-    except (ValueError, TypeError) as exc:
-        raise InvalidCursorError from exc
-
-
 async def browse(
     session: AsyncSession,
     redis: Redis,
@@ -466,7 +402,7 @@ async def browse(
     if min_price is not None and max_price is not None and min_price > max_price:
         raise BadRequestError("The minimum price is above the maximum")
 
-    bucket = _bucket_expression(anchor).label("bucket")
+    bucket = bands.band_expression(Listing.coarse_centroid, anchor).label("bucket")
     statement: Select[Any] = select(Listing, bucket).where(
         Listing.deleted_at.is_(None),
         Listing.status == ContentStatus.visible,
@@ -488,7 +424,7 @@ async def browse(
     if max_price is not None:
         statement = statement.where(Listing.price_kes <= max_price)
 
-    ts_query = _ts_query(query) if query else None
+    ts_query = prefix_tsquery(query) if query else None
     search = func.to_tsquery("simple", literal(ts_query)) if ts_query else None
     if search is not None:
         statement = statement.where(Listing.search_vector.op("@@")(search))
@@ -510,27 +446,21 @@ async def browse(
             )
         ).all()
     elif chosen == "nearest":
-        epoch = func.extract("epoch", Listing.created_at)
         if params.cursor:
-            last_bucket, last_created, last_id = _decode_nearest(params.cursor)
             statement = statement.where(
-                or_(
-                    bucket > last_bucket,
-                    and_(
-                        bucket == last_bucket,
-                        tuple_(Listing.created_at, Listing.id) < tuple_(last_created, last_id),
-                    ),
-                )
+                bands.after_cursor(bucket, Listing.created_at, Listing.id, params.cursor)
             )
         rows = (
             await session.execute(
-                statement.order_by(bucket.asc(), epoch.desc(), Listing.id.desc()).limit(limit + 1)
+                statement.order_by(*bands.ordering(bucket, Listing.created_at, Listing.id)).limit(
+                    limit + 1
+                )
             )
         ).all()
         if len(rows) > limit:
             rows = rows[:limit]
             last, last_bucket_value = rows[-1]
-            next_cursor = _encode_nearest(int(last_bucket_value), last.created_at, last.id)
+            next_cursor = bands.encode_cursor(int(last_bucket_value), last.created_at, last.id)
     else:
         sort_column = Listing.created_at if chosen == "newest" else Listing.price_kes
         descending = chosen != "price_asc"
@@ -551,7 +481,7 @@ async def browse(
             next_cursor = encode_cursor(getattr(last, sort_column.key), last.id)
 
     listings = [row[0] for row in rows]
-    buckets = {row[0].id: cells.BUCKET_ORDER[int(row[1])] for row in rows}
+    buckets = {row[0].id: bands.bucket_for(int(row[1])) for row in rows}
     return BrowsePage(
         listings=listings,
         buckets=buckets,
