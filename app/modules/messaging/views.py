@@ -18,7 +18,6 @@ from app.modules.feed.views import author_view, load_assets, load_users
 from app.modules.media.views import image_variants
 from app.modules.messaging.models import (
     Conversation,
-    ConversationKind,
     ConversationMember,
     ConversationState,
     MemberStatus,
@@ -32,7 +31,7 @@ from app.modules.messaging.schemas import (
     MessageOut,
     ReplyRefOut,
 )
-from app.modules.messaging.service import decode_system_body
+from app.modules.messaging.service import TWO_PARTY, decode_system_body
 from app.modules.users.models import User
 from app.modules.users.service import blocked_user_ids
 
@@ -155,7 +154,7 @@ async def conversation_views(
         ).all()
     )
 
-    direct_ids = [c.id for c in conversations if c.kind == ConversationKind.direct]
+    direct_ids = [c.id for c in conversations if c.kind in TWO_PARTY]
     others: dict[uuid.UUID, ConversationMember] = {}
     if direct_ids:
         others = {
@@ -213,6 +212,7 @@ async def conversation_views(
                 id=conversation.id,
                 kind=conversation.kind,
                 title=conversation.title,
+                listing_id=conversation.listing_id,
                 state=_view_state(conversation, viewer),
                 my_role=member.role,
                 my_status=member.status,

@@ -500,6 +500,10 @@ _PUSH_TEXT: dict[NotificationType, tuple[str, str]] = {
         "{actor} approved your post",
         "{actor} approved your post",
     ),
+    NotificationType.listing_inquiry: (
+        "{actor} asked about your listing",
+        "{actor} and {others} asked about your listing",
+    ),
 }
 
 

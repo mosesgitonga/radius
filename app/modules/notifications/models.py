@@ -49,6 +49,8 @@ class NotificationType(StrEnum):
     """To a group's admins."""
     group_join_approved = "group_join_approved"
     group_post_approved = "group_post_approved"
+    listing_inquiry = "listing_inquiry"
+    """A buyer's first message about a seller's listing."""
 
 
 class DeviceToken(Base, UUIDPrimaryKeyMixin, TimestampMixin):

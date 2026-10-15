@@ -110,6 +110,9 @@ class ConversationOut(BaseModel):
     id: uuid.UUID
     kind: ConversationKind
     title: str | None = None
+    listing_id: uuid.UUID | None = Field(
+        default=None, description="For a conversation about a listing."
+    )
     state: ConversationViewState = Field(
         description=(
             "From the caller's side. A request the caller sent stays `request_sent` "
