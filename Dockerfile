@@ -77,6 +77,10 @@ WORKDIR /srv/app
 COPY --chown=root:root alembic.ini ./
 COPY --chown=root:root app ./app
 COPY --chown=root:root migrations ./migrations
+# Operational scripts: the first-admin bootstrap, area seeding, off-site backups.
+COPY --chown=root:root scripts ./scripts
+# Area polygons, for `python -m scripts.seed_areas` on a new deployment.
+COPY --chown=root:root seeds ./seeds
 COPY --chown=root:root docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 

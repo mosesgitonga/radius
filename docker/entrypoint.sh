@@ -28,8 +28,17 @@ api)
     # replica, set RUN_MIGRATIONS=false and run `migrate` as a separate step, or
     # concurrent containers will race on the same upgrade.
     [ "${RUN_MIGRATIONS}" = "true" ] && run_migrations
+    # Each Gunicorn worker is a process with its own metrics; this directory is
+    # where they meet, so /metrics reports the whole API rather than whichever
+    # worker answered. Emptied on start: stale files would double-count.
+    export PROMETHEUS_MULTIPROC_DIR="${PROMETHEUS_MULTIPROC_DIR:-/tmp/prometheus}"
+    rm -rf "${PROMETHEUS_MULTIPROC_DIR}"
+    mkdir -p "${PROMETHEUS_MULTIPROC_DIR}"
     echo "entrypoint: starting api with ${WEB_CONCURRENCY} workers"
+    # No Gunicorn access log: the application writes one line per request
+    # itself, redacted and without the query string. Gunicorn's would be neither.
     exec gunicorn app.main:app \
+        --config python:app.core.gunicorn_hooks \
         --worker-class uvicorn_worker.UvicornWorker \
         --workers "${WEB_CONCURRENCY}" \
         --bind "0.0.0.0:${PORT}" \
@@ -38,7 +47,6 @@ api)
         --keep-alive 5 \
         --max-requests 2000 \
         --max-requests-jitter 200 \
-        --access-logfile - \
         --error-logfile -
     ;;
 api-dev)

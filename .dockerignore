@@ -16,3 +16,5 @@ docs/
 postgres-data/
 redis-data/
 *.md
+backups/
+secrets/

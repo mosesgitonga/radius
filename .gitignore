@@ -30,3 +30,6 @@ redis-data/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Database dumps from scripts/backup.sh: personal data, never committed.
+backups/

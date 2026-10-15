@@ -1,0 +1,40 @@
+# Caddy in front of the API: TLS, HTTP/2 and 3, WebSockets, and the real client IP.
+#
+# TLS certificates are issued and renewed automatically for {$API_DOMAIN}.
+# WebSocket upgrades (/v1/ws) are proxied without any extra configuration.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# Metrics are scraped on the internal network, never through the front door.
+	@metrics path /metrics
+	respond @metrics 404
+
+	# Images go straight to object storage by presigned URL; nothing the API
+	# accepts comes close to this.
+	request_body {
+		max_size 1MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	reverse_proxy api:8000 {
+		# Overwrite, never append: the API takes the leftmost X-Forwarded-For
+		# entry as the client, so a client-supplied header must not survive.
+		header_up X-Forwarded-For {remote_host}
+		health_uri /health
+		health_interval 30s
+	}
+
+	# No access log here: the API logs each request itself, redacted.
+}

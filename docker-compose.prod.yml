@@ -1,0 +1,120 @@
+# Production stack for a single VPS. See docs/DEPLOYMENT.md.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Differences from the development file, each deliberate:
+#   - the `runtime` image: no dev dependencies, no bind mount, non-root, Gunicorn;
+#   - only Caddy publishes ports (80 and 443). PostgreSQL, Redis, the API and the
+#     worker are reachable on the internal network only;
+#   - no object-storage container: production uses Cloudflare R2;
+#   - logs go to journald, whose retention the host sets (30 days, as the data
+#     map promises) — Docker's default json-file driver keeps logs forever;
+#   - secrets come from .env.production on the host (mode 600, never committed,
+#     never copied into an image: .dockerignore excludes every .env file).
+
+name: myradius
+
+x-logging: &logging
+  driver: journald
+  options:
+    tag: "myradius-{{.Name}}"
+
+x-app: &app
+  build:
+    context: .
+    target: runtime
+  image: myradius-api:latest
+  restart: unless-stopped
+  env_file: .env.production
+  volumes:
+    # Credential files (the Firebase service account), mode 600 on the host.
+    # Mounted read-only rather than baked into the image.
+    - ./secrets:/run/secrets/myradius:ro
+  logging: *logging
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env.production}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env.production}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    logging: *logging
+    depends_on:
+      - api
+
+  api:
+    <<: *app
+    command: ["api"]
+    environment:
+      # Behind Caddy, which sets X-Forwarded-For itself (see the Caddyfile).
+      TRUST_FORWARDED_FOR: "true"
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-3}
+
+  worker:
+    <<: *app
+    command: ["worker"]
+    healthcheck:
+      # The API's healthcheck is HTTP; the worker has no port, so ask arq
+      # whether the worker is still refreshing its health key in Redis.
+      test: ["CMD", "arq", "--check", "app.workers.settings.WorkerSettings"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  postgres:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    shm_size: 256mb
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
+    volumes:
+      - redis-data:/data
+    logging: *logging
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:
+  caddy-data:
+  caddy-config:

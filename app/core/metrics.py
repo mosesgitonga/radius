@@ -17,16 +17,19 @@ Nothing labelled here identifies a person.
 from __future__ import annotations
 
 import hmac
+import os
 import time
 from typing import Final
 
 from fastapi import APIRouter, Request, Response
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
+    CollectorRegistry,
     Counter,
     Gauge,
     Histogram,
     generate_latest,
+    multiprocess,
 )
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -127,4 +130,9 @@ async def metrics(request: Request) -> Response:
     if not hmac.compare_digest(supplied.encode(), expected.encode()):
         # The same answer as no endpoint at all: a wrong token learns nothing.
         raise NotFoundError()
+    if os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
+        # Under Gunicorn: add up every worker process, not just this one.
+        registry = CollectorRegistry()
+        multiprocess.MultiProcessCollector(registry)  # type: ignore[no-untyped-call]
+        return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
