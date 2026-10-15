@@ -33,6 +33,8 @@ class GroupAction(StrEnum):
     ban_members = "ban_members"
     edit_settings = "edit_settings"
     enable_chat = "enable_chat"
+    manage_events = "manage_events"
+    """Organise events on the group's behalf, including group-only ones."""
     appoint_moderators = "appoint_moderators"
     appoint_admins = "appoint_admins"
     transfer_ownership = "transfer_ownership"
@@ -52,6 +54,7 @@ MINIMUM_ROLE: dict[GroupAction, GroupRole] = {
     GroupAction.ban_members: GroupRole.admin,
     GroupAction.edit_settings: GroupRole.admin,
     GroupAction.enable_chat: GroupRole.admin,
+    GroupAction.manage_events: GroupRole.admin,
     GroupAction.appoint_moderators: GroupRole.admin,
     GroupAction.appoint_admins: GroupRole.owner,
     GroupAction.transfer_ownership: GroupRole.owner,

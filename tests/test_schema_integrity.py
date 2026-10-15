@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.core.idempotency
 import app.modules.auth.models
+import app.modules.events.models
 import app.modules.feed.models
 import app.modules.groups.models
 import app.modules.location.models

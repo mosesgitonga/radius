@@ -107,6 +107,11 @@ class Listing(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Locate
 
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     renewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expiry_reminded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """When the seller was told this listing is about to expire. Cleared on renewal,
+    so the next term gets its own reminder."""
 
     status: Mapped[ContentStatus] = mapped_column(
         _content_status,

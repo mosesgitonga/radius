@@ -15,6 +15,7 @@ from datetime import timedelta
 from enum import StrEnum
 from functools import lru_cache
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -515,6 +516,29 @@ class Settings(BaseSettings):
     review_body_max_length: int = Field(default=2000, ge=0, le=10_000)
     reviews_per_day: int = Field(default=20, ge=1)
 
+    # -- Events --------------------------------------------------------------
+    event_timezone: str = "Africa/Nairobi"
+    """The zone event times are entered and shown in, and reminders are worded in.
+    A setting, not a constant: nothing here is specific to Kenya."""
+
+    event_title_max_length: int = Field(default=120, ge=10, le=300)
+    event_description_max_length: int = Field(default=4000, ge=0, le=20_000)
+    event_venue_name_max_length: int = Field(default=200, ge=10, le=500)
+    event_venue_details_max_length: int = Field(default=1000, ge=0, le=5000)
+    event_max_duration_days: int = Field(default=14, ge=1, le=90)
+    event_max_capacity: int = Field(default=100_000, ge=1)
+
+    event_reminder_offsets_minutes: str = "1440,60"
+    """How long before an event "going" attendees are reminded: a day and an hour,
+    by default. Comma-separated minutes."""
+
+    events_per_day: int = Field(default=5, ge=1)
+    new_account_events_per_day: int = Field(default=1, ge=1)
+    event_invites_per_day: int = Field(default=200, ge=1)
+
+    listing_expiry_reminder_hours: int = Field(default=24, ge=1, le=168)
+    """When a seller is told their listing is about to expire."""
+
     # -- Validation ----------------------------------------------------------
     @field_validator("database_url")
     @classmethod
@@ -647,6 +671,14 @@ class Settings(BaseSettings):
             raise ValueError(
                 "NEW_ACCOUNT_SERVICE_INQUIRIES_PER_DAY must not exceed SERVICE_INQUIRIES_PER_DAY"
             )
+        if not self.event_reminder_offset_list:
+            raise ValueError("EVENT_REMINDER_OFFSETS_MINUTES must list at least one offset")
+        if self.new_account_events_per_day > self.events_per_day:
+            raise ValueError("NEW_ACCOUNT_EVENTS_PER_DAY must not exceed EVENTS_PER_DAY")
+        try:
+            ZoneInfo(self.event_timezone)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"EVENT_TIMEZONE {self.event_timezone!r} is not a known zone") from exc
         if self.group_invite_link_default_days > self.group_invite_link_max_days:
             raise ValueError(
                 "GROUP_INVITE_LINK_DEFAULT_DAYS must not exceed GROUP_INVITE_LINK_MAX_DAYS"
@@ -783,6 +815,18 @@ class Settings(BaseSettings):
     @property
     def job_scam_phrase_list(self) -> tuple[str, ...]:
         return tuple(part.strip() for part in self.job_scam_phrases.split(",") if part.strip())
+
+    @property
+    def event_reminder_offset_list(self) -> tuple[int, ...]:
+        """Largest first: a day before, then an hour before."""
+        offsets = {
+            int(part) for part in self.event_reminder_offsets_minutes.split(",") if part.strip()
+        }
+        return tuple(sorted((offset for offset in offsets if offset > 0), reverse=True))
+
+    @property
+    def event_zone(self) -> ZoneInfo:
+        return ZoneInfo(self.event_timezone)
 
     @property
     def reaction_kind_list(self) -> tuple[str, ...]:

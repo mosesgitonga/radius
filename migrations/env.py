@@ -34,6 +34,7 @@ from app.core import idempotency as _idempotency_model  # noqa: F401
 from app.core.config import get_settings
 from app.core.models import Base
 from app.modules.auth import models as _auth_models  # noqa: F401
+from app.modules.events import models as _events_models  # noqa: F401
 from app.modules.feed import models as _feed_models  # noqa: F401
 from app.modules.groups import models as _groups_models  # noqa: F401
 from app.modules.location import models as _location_models  # noqa: F401
