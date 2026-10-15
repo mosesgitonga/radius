@@ -129,6 +129,9 @@ async def post_views(
                 reaction_count=post.reaction_count,
                 my_reaction=mine.get(post.id),
                 status=post.status,
+                group_id=post.group_id,
+                approval_status=post.approval_status,
+                pinned=post.pinned_at is not None,
                 created_at=post.created_at,
             )
         )

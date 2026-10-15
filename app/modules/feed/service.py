@@ -40,12 +40,15 @@ from app.core.pagination import PageParams, paginate
 from app.modules.feed.models import (
     Comment,
     Post,
+    PostApproval,
     PostImage,
     Reaction,
     Story,
     StoryKind,
     StoryView,
 )
+from app.modules.groups import access as group_access
+from app.modules.groups.models import ROLE_RANK, Group, GroupRole
 from app.modules.location.radius import RadiusEngine, RadiusResult
 from app.modules.location.service import (
     Anchor,
@@ -138,8 +141,16 @@ async def create_post(
     category: str,
     media_ids: list[uuid.UUID],
     settings: Settings,
+    group: Group | None = None,
+    needs_approval: bool = False,
 ) -> tuple[Post, int]:
-    """Create a post, and estimate who can see it."""
+    """Create a post, and estimate who can see it.
+
+    With `group`, the post belongs to that group and never reaches the
+    neighbourhood feed; the caller (the groups service) has already checked the
+    author may post there and decided whether it needs approval. Its "reach" is
+    then the group's membership, not a radius.
+    """
     location = _require_home(author)
 
     cleaned = body.strip()
@@ -165,14 +176,25 @@ async def create_post(
         session, media_ids=media_ids, owner_id=author.id, purpose=MediaPurpose.post
     )
 
-    post = Post(author_id=author.id, body=cleaned, category=category, **location)
+    post = Post(
+        author_id=author.id,
+        body=cleaned,
+        category=category,
+        group_id=group.id if group is not None else None,
+        approval_status=PostApproval.pending if needs_approval else None,
+        **location,
+    )
     post.images = [
         PostImage(media_id=asset.id, position=position) for position, asset in enumerate(assets)
     ]
     session.add(post)
     await session.flush()
 
-    reach = await estimate_reach(session, redis, cell_res8=post.cell_res8, settings=settings)
+    reach = (
+        group.member_count
+        if group is not None
+        else await estimate_reach(session, redis, cell_res8=post.cell_res8, settings=settings)
+    )
     post.reach_estimate = reach
     await session.flush()
 
@@ -213,17 +235,49 @@ async def get_post(session: AsyncSession, *, viewer: User, post_id: uuid.UUID) -
 
     Radius is deliberately not checked here: a post somebody shared by link should
     open. The radius governs what is *surfaced* in the feed, not what may be read.
+
+    A group post is readable by whoever may read its group — anyone for a public
+    group, members for a private one, never someone banned. A post still awaiting
+    its group's approval, or rejected, is seen only by its author and the group's
+    moderators.
     """
     post = (
         await session.execute(select(Post).where(Post.id == post_id, Post.deleted_at.is_(None)))
     ).scalar_one_or_none()
-    if post is None or post.group_id is not None:
+    if post is None:
         raise NotFoundError("Post not found")
+    if post.group_id is not None:
+        await _require_group_read(session, post=post, viewer=viewer)
     if not visible_to(post.status, author_id=post.author_id, viewer_id=viewer.id):
         raise NotFoundError("Post not found")
     if await is_blocked_between(session, viewer.id, post.author_id):
         raise NotFoundError("Post not found")
     return post
+
+
+async def _require_group_read(session: AsyncSession, *, post: Post, viewer: User) -> None:
+    assert post.group_id is not None  # noqa: S101 — callers check
+    try:
+        view = await group_access.readable_group(
+            session, group_id=post.group_id, viewer_id=viewer.id
+        )
+    except NotFoundError:
+        raise NotFoundError("Post not found") from None
+    if post.approval_status in (None, PostApproval.approved) or post.author_id == viewer.id:
+        return
+    role = view.role
+    if role is None or ROLE_RANK[role] < ROLE_RANK[GroupRole.moderator]:
+        raise NotFoundError("Post not found")
+
+
+async def require_can_engage(session: AsyncSession, *, post: Post, viewer: User) -> None:
+    """Comment or react on a post. Outside groups, seeing is enough; in a group, you
+    must be an active, unmuted member, and the post must be approved."""
+    if post.group_id is None:
+        return
+    await group_access.require_participation(session, group_id=post.group_id, viewer_id=viewer.id)
+    if post.approval_status not in (None, PostApproval.approved):
+        raise ConflictError("This post is waiting for the group's approval")
 
 
 async def delete_post(session: AsyncSession, *, viewer: User, post_id: uuid.UUID) -> None:
@@ -297,6 +351,7 @@ async def add_comment(
     settings: Settings,
 ) -> Comment:
     post = await get_post(session, viewer=author, post_id=post_id)
+    await require_can_engage(session, post=post, viewer=author)
 
     cleaned = body.strip()
     if not cleaned:
@@ -580,11 +635,13 @@ async def _reaction_target(
         raise BadRequestError("React to exactly one post or comment")
     if post_id is not None:
         post = await get_post(session, viewer=viewer, post_id=post_id)
+        await require_can_engage(session, post=post, viewer=viewer)
         return Post, post.id
     assert comment_id is not None  # noqa: S101 — narrowed above
     comment = await _visible_comment(session, viewer=viewer, comment_id=comment_id)
     # Reacting to a comment also requires being able to see the post it is on.
-    await get_post(session, viewer=viewer, post_id=comment.post_id)
+    post = await get_post(session, viewer=viewer, post_id=comment.post_id)
+    await require_can_engage(session, post=post, viewer=viewer)
     return Comment, comment.id
 
 

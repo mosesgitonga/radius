@@ -25,6 +25,7 @@ from app.core.db import execute_dml
 from app.core.errors import BadRequestError, NotFoundError
 from app.modules.feed import service as feed_service
 from app.modules.feed.models import Comment, Post, Story
+from app.modules.groups import access as group_access
 from app.modules.messaging.models import ConversationMember, MemberStatus, Message
 from app.modules.moderation.audit import record_audit_event
 from app.modules.moderation.models import (
@@ -290,6 +291,14 @@ async def _resolve_target_author(
         if await is_blocked_between(session, viewer.id, message.sender_id):
             raise NotFoundError("Message not found")
         return message.sender_id
+    if target_type == ReportTargetType.group:
+        # Anyone who can see a group's profile may report it; the owner answers
+        # for it. A group being reported is not auto-hidden: hiding a whole
+        # community on reports alone is a decision for a person.
+        view = await group_access.visible_group(session, group_id=target_id, viewer_id=viewer.id)
+        if view.group.owner_id is None:
+            raise NotFoundError("Group not found")
+        return view.group.owner_id
     if target_type == ReportTargetType.user:
         target = await get_user(session, target_id)
         if target is None or await is_blocked_between(session, viewer.id, target_id):

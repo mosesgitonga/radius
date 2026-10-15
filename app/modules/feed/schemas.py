@@ -13,6 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.modules.feed.models import PostApproval
 from app.modules.location.cells import DistanceBucket
 from app.modules.media.schemas import ImageVariantOut
 from app.modules.moderation.models import ContentStatus
@@ -65,6 +66,16 @@ class PostOut(BaseModel):
             "being told is worse than being told."
         )
     )
+    group_id: uuid.UUID | None = Field(default=None, description="Set for a post in a group.")
+    approval_status: PostApproval | None = Field(
+        default=None,
+        description=(
+            "Group posts only, in groups that approve posts. The author and the "
+            "group's moderators see `pending` and `rejected`; everyone else sees "
+            "only approved posts."
+        ),
+    )
+    pinned: bool = False
     created_at: datetime
 
 
