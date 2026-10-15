@@ -1143,3 +1143,87 @@ curl -X POST localhost:8000/v1/groups/$GID/invite-links -H "Authorization: Beare
   app send JPEG.
 - **Development `SECRET_KEY`** (minor), carried from Phase 3: the dev default is
   29 bytes.
+
+---
+
+## Phase 5 — Marketplace
+
+**Status:** in progress
+
+### Plan
+
+**Models**
+
+- `Listing`:
+  - title, description and category (configurable);
+  - condition (`new`, `like_new`, `good`, `fair`, `for_parts`);
+  - pricing (`fixed`, `negotiable` or `free`) and `price_kes` in whole shillings (0
+    when free, so price sorting needs no special case);
+  - `availability` (`available`, `reserved`, `sold`), plus `sold_to_id` and
+    `sold_at`;
+  - `expires_at`, 30 days out and renewable;
+  - `status` — the platform's moderation state, named as on posts so the existing
+    auto-hide works unchanged;
+  - a `content_hash` for duplicate detection, and a generated full-text vector.
+- **Location**, as for posts: the seller's home cell and centroid at listing time.
+  Also the centre of its coarse (res-8) cell, so "nearest" sorting is computed from
+  the same coarse cells as the distance band shown. That is the trilateration rule
+  (brief 6.4.3): ordering must not leak more precision than the band does.
+- `ListingImage` (up to eight, in order; the `listing` media purpose already
+  exists) and `SavedListing`.
+- `conversations.listing_id` becomes a foreign key. A partial unique index allows
+  one listing conversation per listing per buyer.
+
+**Browse and search.** `GET /v1/listings` covers listings that are:
+- within the marketplace radius (twice the feed radius, 2–30 km), or the user's
+  own filter, up to 50 km;
+- available or reserved, unexpired, visible, and not from anyone blocked.
+
+Full-text search uses PostgreSQL `tsvector` with the `simple` configuration,
+because listings mix English and Swahili, and an English stemmer would mangle
+"mtumba" while helping little. It does prefix matching, so "sof" finds "sofa".
+Filters are category, condition and price range. Sorting:
+- `newest`;
+- `nearest`, by distance band, then newest;
+- `price_asc` and `price_desc`;
+- `relevance`, the default when searching, which returns one page.
+
+The first four use keyset pagination.
+
+**Chat with the seller.** `POST /v1/listings/{id}/chat` opens the buyer's one
+conversation about that listing (kind `listing`). It follows the message-request
+rule: the buyer may send one message until the seller replies, which is what makes
+it "accepted". That matters in Phase 6, where a review needs an accepted
+conversation tied to the listing. Unlike a direct request, it lands in the seller's
+inbox rather than their requests folder: the seller invited it by listing the item.
+There is a separate daily limit for inquiries, tighter for new accounts. Blocking
+applies as everywhere.
+
+**Selling.** The seller sets `available`, `reserved` or `sold`. Marking it sold
+may name the buyer, who must be someone with a conversation about the listing. That
+is the "design for reviews" hook: Phase 6 will know who bought from whom without a
+migration. Renewing pushes `expires_at` 30 days out. Expired and sold listings
+leave browse, but stay readable by link, and in the seller's own list.
+
+**Anti-abuse.**
+
+- **Daily listing limits**, tighter for new accounts.
+- **A configurable prohibited-items list.** A listing whose title or description
+  contains a listed term is refused, and the response names the term, so an honest
+  seller can rephrase.
+- **Duplicate detection.** The same seller re-listing the same title and
+  description — normalised for case, spacing and punctuation — while the original
+  is still live gets a 409 pointing at the original. That is "renew it, don't
+  repost it".
+- **Reports** on listings use the existing auto-hide.
+
+**Privacy.** A listing shows its area label and a distance band. The exact pickup
+point is arranged in chat. Responses carry no cell, centroid or distance in metres.
+
+**Data rights.** Export covers a seller's listings and the user's saved listings.
+Purge soft-deletes listings (their images go with the media purge) and deletes
+saved listings.
+
+### Open questions
+
+_None blocking. HEIC from Phase 2 is still open._
