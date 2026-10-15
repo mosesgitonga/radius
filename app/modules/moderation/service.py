@@ -40,6 +40,9 @@ from app.modules.moderation.models import (
     ReportStatus,
     ReportTargetType,
 )
+from app.modules.services import access as services_access
+from app.modules.services import ratings
+from app.modules.services.models import Review, ServicePost
 from app.modules.users.models import User, UserStatus
 from app.modules.users.service import get_user, is_blocked_between
 
@@ -188,6 +191,8 @@ async def _find_report(
 _HIDEABLE: dict[ReportTargetType, Any] = {
     ReportTargetType.post: Post,
     ReportTargetType.listing: Listing,
+    ReportTargetType.service_post: ServicePost,
+    ReportTargetType.review: Review,
     ReportTargetType.comment: Comment,
     ReportTargetType.story: Story,
 }
@@ -224,6 +229,9 @@ async def _maybe_auto_hide(
         .where(model.id == target_id, model.status == ContentStatus.visible)
         .values(status=ContentStatus.hidden_pending_review, hidden_at=datetime.now(UTC)),
     )
+    if hidden and target_type == ReportTargetType.review:
+        # A hidden review no longer counts towards its subject's rating.
+        await ratings.recompute_for_review(session, target_id)
     if hidden:
         await record_audit_event(
             session,
@@ -294,6 +302,16 @@ async def _resolve_target_author(
         if await is_blocked_between(session, viewer.id, message.sender_id):
             raise NotFoundError("Message not found")
         return message.sender_id
+    if target_type == ReportTargetType.service_post:
+        service_post = await services_access.visible_post(
+            session, post_id=target_id, viewer_id=viewer.id
+        )
+        return service_post.author_id
+    if target_type == ReportTargetType.review:
+        review = await services_access.visible_review(
+            session, review_id=target_id, viewer_id=viewer.id
+        )
+        return review.reviewer_id
     if target_type == ReportTargetType.listing:
         listing = await listing_access.visible_listing(
             session, listing_id=target_id, viewer_id=viewer.id

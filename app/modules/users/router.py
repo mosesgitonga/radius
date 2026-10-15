@@ -28,6 +28,8 @@ from app.modules.media.schemas import ImageVariantOut
 from app.modules.media.views import image_variants
 from app.modules.messaging import service as messaging_service
 from app.modules.notifications import service as notifications_service
+from app.modules.services import reviews as reviews_service
+from app.modules.services import service as services_service
 from app.modules.users import service as users_service
 from app.modules.users.models import Block, User
 from app.modules.users.schemas import (
@@ -323,6 +325,8 @@ async def export_my_data(
     export["media"] = await media_service.export_owner_media(session, owner_id=user.id)
     export["groups"] = await groups_service.export_user_groups(session, user_id=user.id)
     export["marketplace"] = await marketplace_service.export_user_listings(session, user_id=user.id)
+    export["services"] = await services_service.export_user_posts(session, user_id=user.id)
+    export["reviews"] = await reviews_service.export_user_reviews(session, user_id=user.id)
     export["messaging"] = await messaging_service.export_user_messages(session, user_id=user.id)
     export["notifications"] = await notifications_service.export_user_notifications(
         session, user_id=user.id

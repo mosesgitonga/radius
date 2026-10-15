@@ -34,6 +34,8 @@ from app.modules.messaging.router import router as messaging_router
 from app.modules.messaging.socket import router as socket_router
 from app.modules.moderation.router import router as moderation_router
 from app.modules.notifications.router import router as notifications_router
+from app.modules.services.router import reviews_router
+from app.modules.services.router import router as services_router
 from app.modules.users.router import router as users_router
 
 logger = logging.getLogger(__name__)
@@ -102,6 +104,20 @@ TAGS_METADATA = [
         ),
     },
     {
+        "name": "services",
+        "description": (
+            "Providers offering services, people seeking them, and jobs — with guard "
+            "rails against job scams."
+        ),
+    },
+    {
+        "name": "reviews",
+        "description": (
+            "Ratings and reviews, allowed only after an accepted conversation about a "
+            "listing or service."
+        ),
+    },
+    {
         "name": "messaging",
         "description": (
             "Direct and group conversations, message requests, and sync. The realtime "
@@ -158,8 +174,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def build_v1_router(settings: Settings) -> APIRouter:
     """The versioned client API.
 
-    Module routers are mounted here as each phase lands them. Services arrive in
-    Phase 6, events in Phase 7.
+    Module routers are mounted here as each phase lands them. Events arrive in
+    Phase 7, payments in Phase 9.
     """
     router = APIRouter(prefix=settings.api_prefix, responses=COMMON_ERROR_RESPONSES)
     router.include_router(auth_router)
@@ -169,6 +185,8 @@ def build_v1_router(settings: Settings) -> APIRouter:
     router.include_router(feed_router)
     router.include_router(groups_router)
     router.include_router(marketplace_router)
+    router.include_router(services_router)
+    router.include_router(reviews_router)
     router.include_router(messaging_router)
     router.include_router(socket_router)
     router.include_router(notifications_router)

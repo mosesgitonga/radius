@@ -26,6 +26,8 @@ from app.modules.marketplace import service as marketplace_service
 from app.modules.media import service as media_service
 from app.modules.messaging import service as messaging_service
 from app.modules.notifications import service as notifications_service
+from app.modules.services import reviews as reviews_service
+from app.modules.services import service as services_service
 from app.modules.users.models import User
 from app.modules.users.service import purge_user
 
@@ -84,6 +86,8 @@ async def purge_deleted_accounts(
         # linked chat, which must find their chat membership still there.
         await groups_service.purge_user_groups(session, user_id=user.id)
         await marketplace_service.purge_user_listings(session, user_id=user.id)
+        await services_service.purge_user_posts(session, user_id=user.id)
+        await reviews_service.purge_user_reviews(session, user_id=user.id)
         await notifications_service.purge_user_notifications(session, user_id=user.id)
         if storage is not None:
             await media_service.purge_owner_media(session, storage, owner_id=user.id)
