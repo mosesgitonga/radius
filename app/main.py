@@ -20,7 +20,10 @@ from app.core.db import dispose_engine
 from app.core.errors import ErrorEnvelope, register_exception_handlers
 from app.core.health import router as health_router
 from app.core.logging import configure_logging
+from app.core.metrics import MetricsMiddleware
+from app.core.metrics import router as metrics_router
 from app.core.middleware import RequestContextMiddleware
+from app.core.observability import init_sentry
 from app.core.queue import close_queue
 from app.core.realtime import close_hub
 from app.core.redis import close_redis
@@ -225,6 +228,7 @@ def build_v1_router(settings: Settings) -> APIRouter:
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings, service="api")
+    init_sentry(settings, service="api")
 
     app = FastAPI(
         title=f"{settings.app_name} API",
@@ -253,8 +257,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_headers=["*"],
             expose_headers=["X-Request-ID"],
         )
+    # Outermost, so the time measured is the time the client waited.
+    app.add_middleware(MetricsMiddleware)
 
     app.include_router(health_router)
+    app.include_router(metrics_router)
     app.include_router(build_v1_router(settings))
 
     return app

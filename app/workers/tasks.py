@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import asynccontextmanager
@@ -28,6 +29,7 @@ from app.core.config import get_settings
 from app.core.context import new_request_id, reset_request_id, set_request_id
 from app.core.db import session_scope
 from app.core.idempotency import purge_expired as purge_idempotency_records
+from app.core.metrics import record_job
 from app.core.providers.push import get_push_provider
 from app.core.providers.storage import get_storage_provider
 from app.core.redis import get_redis
@@ -67,13 +69,16 @@ def with_job_context[**P, R](
         job_id = str(ctx.get("job_id") or new_request_id())
         token = set_request_id(job_id)
         started = datetime.now(UTC)
+        clock = time.perf_counter()
         logger.info("task_started", extra={"task": func.__name__})
         try:
             result = await func(ctx, *args, **kwargs)
         except Exception:
+            record_job(func.__name__, outcome="failure", seconds=time.perf_counter() - clock)
             logger.exception("task_failed", extra={"task": func.__name__})
             raise
         else:
+            record_job(func.__name__, outcome="success", seconds=time.perf_counter() - clock)
             logger.info(
                 "task_finished",
                 extra={

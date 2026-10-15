@@ -18,10 +18,12 @@ from arq import cron
 from arq.connections import RedisSettings
 from arq.cron import CronJob
 from arq.typing import WorkerCoroutine
+from prometheus_client import start_http_server
 
 from app.core.config import get_settings
 from app.core.db import dispose_engine
 from app.core.logging import configure_logging
+from app.core.observability import init_sentry
 from app.core.redis import close_redis
 from app.workers.tasks import (
     as_worker_task,
@@ -43,7 +45,12 @@ logger = logging.getLogger(__name__)
 
 
 async def on_startup(ctx: dict[str, object]) -> None:
-    configure_logging(get_settings(), service="worker")
+    settings = get_settings()
+    configure_logging(settings, service="worker")
+    init_sentry(settings, service="worker")
+    if settings.worker_metrics_port:
+        # Its own port, scraped on the internal network only.
+        start_http_server(settings.worker_metrics_port)
     logger.info("worker_starting")
 
 
