@@ -32,6 +32,7 @@ from app.modules.messaging.schemas import (
     ReplyRefOut,
 )
 from app.modules.messaging.service import TWO_PARTY, decode_system_body
+from app.modules.services.models import ServiceKind, ServicePost
 from app.modules.users.models import User
 from app.modules.users.service import blocked_user_ids
 
@@ -98,6 +99,31 @@ async def message_views(
             )
         )
     return views
+
+
+JOB_SAFETY_NOTICE = (
+    "Never pay to get a job. Genuine employers do not ask for registration, "
+    "training or application fees. Report anyone who does. / Usilipe pesa ili "
+    "upate kazi. Waajiri halali hawaombi ada ya usajili, mafunzo au maombi."
+)
+"""Bilingual, because the scams it warns against arrive in both languages."""
+
+
+async def _hiring_posts(
+    session: AsyncSession, conversations: Sequence[Conversation]
+) -> set[uuid.UUID]:
+    ids = {c.service_post_id for c in conversations if c.service_post_id is not None}
+    if not ids:
+        return set()
+    return set(
+        (
+            await session.execute(
+                select(ServicePost.id).where(
+                    ServicePost.id.in_(ids), ServicePost.kind == ServiceKind.hiring
+                )
+            )
+        ).scalars()
+    )
 
 
 def _view_state(conversation: Conversation, viewer: User) -> ConversationViewState:
@@ -183,6 +209,8 @@ async def conversation_views(
             ).scalars()
         }
 
+    hiring = await _hiring_posts(session, conversations)
+
     hidden = await blocked_user_ids(session, viewer.id)
     visible_last = [
         message
@@ -213,6 +241,10 @@ async def conversation_views(
                 kind=conversation.kind,
                 title=conversation.title,
                 listing_id=conversation.listing_id,
+                service_post_id=conversation.service_post_id,
+                safety_notice=(
+                    JOB_SAFETY_NOTICE if conversation.service_post_id in hiring else None
+                ),
                 state=_view_state(conversation, viewer),
                 my_role=member.role,
                 my_status=member.status,

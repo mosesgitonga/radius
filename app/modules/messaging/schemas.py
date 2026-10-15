@@ -113,6 +113,15 @@ class ConversationOut(BaseModel):
     listing_id: uuid.UUID | None = Field(
         default=None, description="For a conversation about a listing."
     )
+    service_post_id: uuid.UUID | None = Field(
+        default=None, description="For a conversation about a service, need or job."
+    )
+    safety_notice: str | None = Field(
+        default=None,
+        description=(
+            "Shown at the top of the conversation, always. Set for conversations about a job."
+        ),
+    )
     state: ConversationViewState = Field(
         description=(
             "From the caller's side. A request the caller sent stays `request_sent` "
