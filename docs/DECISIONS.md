@@ -1473,3 +1473,136 @@ items stay in browse because a reservation often falls through.
   Perceptual hashing of photos is a Phase 8 hardening item if needed.
 - **Holding prohibited-term matches for review** instead of refusing them, once
   Phase 8's moderation queue exists.
+
+---
+
+## Phase 6 — Jobs, services and reviews
+
+### 6.1 Offering, seeking and hiring share one table
+
+**Choice.** `ServicePost` has a `kind`. Each kind's own fields are optional
+columns, held to that kind by check constraints, and the API refuses another
+kind's fields with a 400 naming them. One live offering per provider per category
+is enforced by a partial unique index.
+
+**Reasoning.** The three share everything that matters: author, category, place,
+text, moderation and search. Three tables would mean three search indexes, three
+radius queries and three moderation paths for what are, to a neighbour, three
+kinds of the same notice. Refusing stray fields, rather than dropping them, tells
+a client it has a bug. One offering per category means a provider updates their
+profile instead of posting five copies of it.
+
+### 6.2 Search and band sorting are shared code
+
+**Choice.** Text normalisation, phrase matching and `tsquery` building moved to
+`core/search.py`, and band sorting and its cursor to `location/bands.py`. The
+marketplace and services both use them.
+
+**Reasoning.** The second user of the same logic is the moment to share it. The
+prohibited-items check and the job-scam check now cannot disagree about what
+counts as a match, and the trilateration rule for "nearest" (5.2) lives in one
+place.
+
+### 6.3 Posting a job needs a trust threshold
+
+**Choice.** A `hiring` post needs an active account, a verified phone and an
+account at least `HIRING_MIN_ACCOUNT_AGE_DAYS` (14) old. The verified-neighbour
+badge (Phase 8) passes regardless. A refusal is a 403 with
+`details.reason = hiring_trust_threshold`. Offering and seeking have no
+threshold.
+
+**Reasoning.** Fake job adverts are the commonest scam in this market, and they
+are posted from throwaway accounts. Age is the one signal that cannot be faked
+without waiting. Offering and seeking are left open because they are how honest
+people start out.
+
+### 6.4 Fee demands hold a job post; they do not refuse it
+
+**Choice.** `JOB_SCAM_PHRASES` lists English and Swahili phrases that ask a job
+seeker for money — "registration fee", "pay to apply", "ada ya usajili", "tuma
+pesa", "lipa kwanza" and others. A hiring post containing one is created as
+`hidden_pending_review`:
+- **Who sees it:** only its author, who is shown `held_for`, the matching phrases.
+- **What a moderator gets:** the phrases recorded on the post, and a
+  `content_flagged` audit event.
+- **Edits:** editing the phrases out does not release it; only a moderator does.
+  Editing a phrase in holds a live post.
+
+**Reasoning.** Unlike the marketplace's prohibited items (5.4), these phrases
+appear in honest posts too — "we pay your registration fee" — so refusing would
+turn away real employers. Holding errs safe without losing them, and a person
+decides. If editing could release a hold, it would just teach a scammer which
+words to avoid.
+
+### 6.5 The job safety notice is a field, not a message
+
+**Choice.** Every conversation about a hiring post carries `safety_notice`. The
+same is true of every hiring post's own response. The notice is bilingual: "Never
+pay to get a job… / Usilipe pesa ili upate kazi…".
+
+**Reasoning.** The plan was a system message at the top of the conversation. But
+a system message takes sequence number 1, and the request rule keys off "nothing
+sent yet" (`last_seq == 0`). The contacter would have looked as though they had
+already used their one message. A field returned by every conversation read and
+every sync reaches every client just as surely, without bending the request
+accounting. Bilingual, because the scams it warns against arrive in both
+languages.
+
+### 6.6 A review needs an accepted conversation about that exact thing
+
+**Choice.** Either person in an *accepted* conversation of kind `listing` or
+`service`, about a particular listing or service post, may review the other once
+for that context. The review records the conversation that qualified it. The
+following are all refused with 403 `no_qualifying_conversation`:
+- no conversation;
+- an unanswered one;
+- one about a different post;
+- an accepted direct chat.
+
+**Reasoning.** This is the brief's rule, and it stops both classic review abuses:
+a stranger's spite and a friend's flattery. "Accepted" — the other side replied —
+matters. Without it, one unanswered message to a seller would let anyone review
+them. Direct chats do not count, because nothing ties them to a transaction.
+Reviewing in both directions matches how hiring works: workers rate employers
+too.
+
+### 6.7 Ratings are recomputed, never incremented
+
+**Choice.** `users.rating_average` and `rating_count` are recomputed in one
+statement from visible, undeleted reviews whenever that set changes: create,
+edit, delete, auto-hide or purge. The recompute is a leaf (`services/ratings.py`),
+so moderation calls it after hiding a review without an import cycle.
+
+**Reasoning.** A cache maintained by increments drifts the first time an event is
+missed. A cache recomputed from the source cannot, and the query is one indexed
+aggregate. Hidden reviews stop counting at once, so a review hidden for
+harassment does not keep dragging a rating down while it awaits a moderator.
+
+### 6.8 Reviews are public statements; the export includes those received
+
+**Choice.**
+
+- **Export:** reviews a person wrote *and* reviews about them.
+- **Purge:** soft-deletes both, then recomputes every rating that changed.
+- **Blocking:** a viewer does not see reviews by someone blocked either way, but
+  those reviews still count in the rating.
+
+**Reasoning.** A received private message is someone else's words (3.17). A review
+is a public statement *about* the person, already visible to anyone, so it is
+theirs to see. On blocking: a block changes what the viewer sees, not the facts.
+Letting a provider block their critics in order to lift their own rating would
+make ratings meaningless.
+
+---
+
+### Deferred from Phase 6, with the phase that will own it
+
+- **The moderation queue that reviews held job posts.** Phase 8. Held posts carry
+  everything it needs: status, phrases, and the audit event.
+- **Scanning job-conversation messages for fee demands.** A natural extension of
+  6.4, best done with Phase 8's moderation tools so a flagged message has
+  somewhere to go.
+- **Rating aggregates per service, as well as per person.** Not needed while a
+  provider has one offering per category.
+- **Review prompts** ("you bought a bike from Achieng — leave a review?"). This is
+  a notification on `sold_to_id`, and fits with Phase 7's scheduled notifications.

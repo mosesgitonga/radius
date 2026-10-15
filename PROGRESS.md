@@ -1329,7 +1329,7 @@ curl -X PUT localhost:8000/v1/listings/$LID/availability -H "Authorization: Bear
 
 ## Phase 6 — Jobs, services and reviews
 
-**Status:** in progress
+**Status:** complete and verified on 2026-10-15
 
 ### Plan
 
@@ -1398,6 +1398,117 @@ conversation, so no client can omit it.
 - **Purge:** soft-deletes their service posts and the reviews they wrote and
   received, then recomputes the ratings that changed.
 
+### Built
+
+**Service posts** in three kinds, sharing one table (decision 6.1):
+- **Offering:** a provider profile per category, with rate info, availability and
+  how far they travel.
+- **Seeking.**
+- **Hiring:** job type, and a KES pay range with its period.
+
+Each kind accepts only its own fields. Categories are configurable, seeded with
+the brief's fifteen. A post is placed at its author's home and shown by area label
+and band. Seeking and hiring posts last 30 days, and any post can be closed and
+reopened.
+
+**Search** within the services radius (three times the feed radius, 3–40 km), or
+the user's filter, up to 50 km. It filters by kind and category, uses
+prefix-matched full-text search, and sorts by newest, nearest band or relevance.
+Offerings show the provider's rating. The text and band code is now shared with
+the marketplace (`core.search`, `location.bands`) rather than copied.
+
+**Contact.** A `service` conversation kind: one per post per person, following
+the request rule, landing in the author's inbox, with its own daily limit. Every
+conversation about a job, and every job post, carries a bilingual `safety_notice`.
+
+**Reviews**:
+- **Rating:** 1–5 stars and text, between people with an accepted conversation
+  about that exact listing or service post, in either direction.
+- **Limits:** one per pair per context.
+- **Replies:** the reviewed person can reply.
+- **Moderation:** reviews can be reported and auto-hidden.
+- **Ratings:** each user's rating is recomputed from visible reviews on every
+  change.
+
+**Job-scam protections:**
+
+- **A trust threshold for hiring:** a verified phone and an account at least 14
+  days old, or the verified badge.
+- **Fee demands are held, not refused:** English and Swahili phrases hold a job
+  post for review. The phrases are recorded, audited and shown to its author;
+  editing them out does not release it.
+- **The safety notice** on every job post and job conversation.
+- **`job_scam` reports** stay prioritised.
+
+**Schema.** Migration 0011 adds `service_posts` and `reviews`,
+`conversations.service_post_id` and the `service` kind, the `review` report
+target, and the `content_flagged` audit action.
+
+**Endpoints:** 15 new, 132 in total across 104 paths.
+
+### Verified
+
+| Check | Result |
+| --- | --- |
+| `pytest` | **993 passed** in 5 min 18 s with coverage, **92% coverage**; the services module 88–100% |
+| `ruff` + `mypy` (strict, app and tests) | clean |
+| Migrations | 0010 ↔ 0011 down and up; `alembic check` clean; 0011 applied on boot to the development database |
+| Privacy scan, OpenAPI, session scope | pass with the new responses: area label and band only; every operation documented; every route commits before responding |
+
+**The brief's acceptance criteria** (`tests/test_services.py`), also run against
+the real API container:
+
+| Criterion | Live result |
+| --- | --- |
+| A provider can be found, contacted and reviewed | A tailor's offering is found 3 km away by searching "tailo uniform", with band `1_3km`. Contact and reply; a 5-star review → rating 5.0 from 1 review |
+| Reviews without a qualifying conversation are rejected | A stranger's review → 403 `no_qualifying_conversation`. The tests also refuse an unanswered conversation, one about a different post, and an accepted direct chat |
+| A test scam post is held for review | "Tuma pesa ya usajili KES 1000 kwanza" → `hidden_pending_review`, held for `["pesa ya usajili", "tuma pesa"]`, invisible to everyone else |
+
+Also live: a two-day-old account posting a job got 403 `hiring_trust_threshold`,
+and a job conversation carried the safety notice.
+
+### Defects found, all fixed
+
+1. **The planned safety-notice message would have broken the request rule.** A
+   system message takes sequence 1, and "has the contacter sent yet?" is
+   `last_seq == 0`. Caught in design, before code; the notice became a field
+   (decision 6.5).
+2. **Autogenerate duplicated every enum constraint** again (twelve this time),
+   removed as before.
+
+**One unexplained slow run.** While I wrote the Phase 6 tests, a full-suite run
+(without the new tests) took 1 h 22 min instead of about 5. All 954 tests passed.
+It did not recur: the next full run, with coverage and timings, took 5 min 18 s,
+and its slowest test took 5.6 s. Nothing in the code points to it — no test waits
+or retries for long — so the likeliest cause is the machine sleeping or being
+loaded. If it happens again, the `--durations` output will say where the time
+went.
+
+### Deferred
+
+With the phase that will own each; reasoning in `docs/DECISIONS.md`.
+
+- **A moderation queue for held job posts** — Phase 8; held posts already carry
+  status, phrases and an audit event.
+- **Scanning job-conversation messages for fee demands** — Phase 8.
+- **Review prompts after a sale** — with Phase 7's scheduled notifications.
+- **Per-service rating aggregates** — not needed at one offering per category.
+
+### How to try it
+
+```bash
+docker compose up --build   # migration 0011 runs on boot
+
+curl -X POST localhost:8000/v1/services -H "Authorization: Bearer $A" \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"offering","category":"plumbing","title":"Plumber","rate_info":"KES 800 a visit","travel_km":10}'
+curl "localhost:8000/v1/services?q=plumb" -H "Authorization: Bearer $B"
+curl -X POST localhost:8000/v1/services/$SID/chat -H "Authorization: Bearer $B"   # message; A replies
+curl -X POST localhost:8000/v1/reviews -H "Authorization: Bearer $B" -H 'Content-Type: application/json' \
+  -d '{"subject_id":"'$A_ID'","context_type":"service_post","context_id":"'$SID'","rating":5}'
+```
+
 ### Open questions
 
-_None blocking. HEIC from Phase 2 is still open._
+- **HEIC support**, carried from Phase 2.
+- **Development `SECRET_KEY`** (minor), carried from Phase 3.

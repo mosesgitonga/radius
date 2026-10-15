@@ -64,6 +64,7 @@ app/
     location/        cells.py, radius.py, service.py, tasks.py
     groups/          access.py (who can see), permissions.py (who can act), service.py
     marketplace/     access.py (who can see a listing), service.py, views.py, router.py
+    services/        access.py, ratings.py (the cached rating), service.py, reviews.py
     messaging/       service.py, views.py, router.py, socket.py (the `/v1/ws` endpoint)
     notifications/   service.py (devices, preferences, collapsing, push), router.py
   modules/<name>/  one package per feature area
@@ -97,7 +98,10 @@ Three rules keep the monolith from congealing:
    group, and `groups.permissions.MINIMUM_ROLE` as the only statement of who
    may use which admin tool. Phase 5 adds `marketplace.access` for listings,
    and `cells.BUCKET_BOUNDS` as the one set of distance-band boundaries — used
-   by SQL that sorts by band as well as by the code that labels one.
+   by SQL that sorts by band as well as by the code that labels one. Phase 6
+   moves text matching to `core.search` and band sorting to `location.bands`,
+   shared by the marketplace and services, and adds `services.ratings.recompute`
+   as the only way a user's rating changes.
 
    One deliberate exception to rule 2: moderation resolves a reported message by
    querying the messaging *models*, because the messaging service imports

@@ -450,13 +450,54 @@ them.
 
 ---
 
+## Phase 6 — Jobs, services and reviews
+
+### `service_posts`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `author_id`, `kind`, `category`, `title`, `description` | The post | Soft-deleted by the author or on purge |
+| `rate_info`, `availability_info`, `travel_km` (offering); `budget_info` (seeking); `job_type`, `pay_min_kes`, `pay_max_kes`, `pay_period` (hiring) | What each kind needs | As the post |
+| `cell_res9`…`cell_res6`, `centroid`, `area_id`, `coarse_centroid` | The author's home cell when posted, for the radius filter and band sorting | As the post. Never in a response |
+| `expires_at`, `closed_at` | 30-day seeking and hiring posts; closing when filled | As the post |
+| `status`, `hidden_at`, `flagged_phrases` | Moderation, and the fee-demand phrases that held a job post | As the post. `flagged_phrases` are shown to the author and to moderators |
+
+`travel_km` is a number the provider chose — how far they will go — and reveals
+nothing about where they are.
+
+### `reviews`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `reviewer_id`, `subject_id`, `context_type`, `context_id`, `conversation_id` | Who reviewed whom about what, and the accepted conversation that allowed it | Soft-deleted by the reviewer, or when either account is purged |
+| `rating`, `body`, `reply_body`, `replied_at` | The review and the reply | As above |
+| `status`, `hidden_at` | Moderation | As above |
+
+`users.rating_average` and `users.rating_count` (Phase 1 columns) are now filled:
+derived from visible reviews, recomputed on every change.
+
+### Conversations
+
+`conversations.service_post_id` and the `service` kind — conversations about a
+service post, with no new personal data of their own.
+
+### Data rights in Phase 6
+
+- **Export** adds the user's service posts, and the reviews they wrote and
+  received. Reviews are public statements about a person, so the ones about them
+  are theirs to see, unlike private messages received (decision 6.8).
+- **Purge** soft-deletes their service posts and every review they wrote or
+  received, then recomputes the ratings of everyone they had reviewed.
+
+---
+
 ## Data subject rights — implementation status
 
 | Right | Status | Where |
 | --- | --- | --- |
-| Access (export as JSON) | **Implemented** (through Phase 5) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, group memberships and groups created, listings and saved listings, conversations, messages sent, devices, notification preferences and notifications |
+| Access (export as JSON) | **Implemented** (through Phase 6) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, group memberships and groups created, listings and saved listings, service posts, reviews written and received, conversations, messages sent, devices, notification preferences and notifications |
 | Rectification | **Implemented** | `PATCH /v1/me` |
-| Erasure | **Implemented** (through Phase 5) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its group memberships (passing on groups it owned), its listings and saved listings, its messages, its devices and notifications, and its stored images |
+| Erasure | **Implemented** (through Phase 6) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its group memberships (passing on groups it owned), its listings and saved listings, its service posts and reviews, its messages, its devices and notifications, and its stored images |
 | Restriction of processing | Not started | Phase 8, account restrictions (`UserStatus.suspended` exists) |
 | Objection to marketing | **Implemented** | `PUT /v1/me/consents`, marketing consent is withdrawable |
 | Data portability | **Implemented** | Covered by the JSON export |
@@ -493,6 +534,8 @@ becomes a worker job in the phase that owns the data.
 | Group memberships and bans | Until left, removed, unbanned, or the account is purged |
 | Group invite links | 30 days after they expire or are revoked |
 | Listings | 30 days live, renewable; then readable by link until the seller deletes them or the account is purged |
+| Seeking and hiring posts | 30 days, reopenable; offerings until deleted |
+| Reviews | Until deleted by the reviewer, or either account is purged |
 | Application logs | 30 days |
 
 ---
