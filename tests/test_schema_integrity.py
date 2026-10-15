@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import app.core.idempotency
 import app.modules.auth.models
 import app.modules.feed.models
+import app.modules.groups.models
 import app.modules.location.models
 import app.modules.media.models
 import app.modules.messaging.models
@@ -60,12 +61,12 @@ async def test_enum_column_is_constrained_to_exactly_its_values(
             {"table": table},
         )
     ).scalars()
+    # The column name in parentheses, so `status` does not also match the
+    # constraint on `approval_status`.
     definitions = [
         definition
         for definition in rows
-        if f"{column})::text = ANY" in definition
-        or f"({column})::text = ANY" in definition
-        or f"{column} = ANY" in definition
+        if f"({column})::text = ANY" in definition or f"({column} = ANY" in definition
     ]
 
     assert definitions, f"{table}.{column} has no CHECK constraint on its values"

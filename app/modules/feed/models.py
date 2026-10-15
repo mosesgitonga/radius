@@ -52,6 +52,22 @@ class StoryKind(StrEnum):
 _story_kind = db_enum(StoryKind, name="story_kind", length=20)
 
 
+class PostApproval(StrEnum):
+    """A group post's place in its group's approval queue.
+
+    Separate from `ContentStatus` on purpose: that is the platform's moderation
+    decision, this is a group admin's. A post can be approved by its group and
+    still be hidden by moderation, and the two must not overwrite each other.
+    """
+
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+_post_approval = db_enum(PostApproval, name="post_approval", length=16)
+
+
 class LocatedContentMixin:
     """The location columns every piece of radius-scoped content needs.
 
@@ -87,13 +103,17 @@ class Post(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, LocatedCo
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
 
-    group_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True, index=True)
-    """Phase 4. Nullable and not yet a foreign key, as the brief asks: a group post
-    reuses this model with a group scope, and adding the constraint later is a
-    migration rather than a table rewrite.
+    group_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("groups.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    """Set for a post made in a group. The feed requires null, so a group post never
+    reaches the neighbourhood feed; it is read through its group."""
 
-    Until then it is always null, and the feed query requires null — so a group
-    post will not leak into the public feed the moment Phase 4 starts writing it."""
+    approval_status: Mapped[PostApproval | None] = mapped_column(_post_approval, nullable=True)
+    """Null outside groups, and in groups that do not require approval."""
+
+    pinned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    """Pinned to the top of its group by an admin."""
 
     body: Mapped[str] = mapped_column(String(4000))
     """Capped well above the configured limit. The configuration is the product
@@ -139,6 +159,15 @@ class Post(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, LocatedCo
         Index("ix_posts_status_created_at_id", "status", "created_at", "id"),
         Index("ix_posts_author_id_created_at", "author_id", "created_at"),
         Index("ix_posts_category_created_at", "category", "created_at"),
+        # A group's posts, newest first.
+        Index("ix_posts_group_id_created_at_id", "group_id", "created_at", "id"),
+        CheckConstraint(
+            "approval_status IS NULL OR group_id IS NOT NULL",
+            name="post_approval_only_in_groups",
+        ),
+        CheckConstraint(
+            "pinned_at IS NULL OR group_id IS NOT NULL", name="post_pin_only_in_groups"
+        ),
     )
 
     def __repr__(self) -> str:  # pragma: no cover — debugging aid

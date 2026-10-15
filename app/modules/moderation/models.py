@@ -87,6 +87,15 @@ class AuditAction(StrEnum):
     report_submitted = "report_submitted"
     content_auto_hidden = "content_auto_hidden"
 
+    # Groups — admins acting on other people
+    group_deleted = "group_deleted"
+    group_member_removed = "group_member_removed"
+    group_member_banned = "group_member_banned"
+    group_member_unbanned = "group_member_unbanned"
+    group_role_changed = "group_role_changed"
+    group_ownership_transferred = "group_ownership_transferred"
+    group_post_removed = "group_post_removed"
+
 
 _actor_type = db_enum(AuditActorType, name="audit_actor_type", length=20)
 _action = db_enum(AuditAction, name="audit_action", length=48)

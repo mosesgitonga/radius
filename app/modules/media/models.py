@@ -50,6 +50,8 @@ class MediaPurpose(StrEnum):
     story = "story"
     message = "message"
     """An image sent in a conversation."""
+    group = "group"
+    """A group's cover image."""
     listing = "listing"
     """Phase 5. Declared now so the enum does not need changing then."""
     event_cover = "event_cover"

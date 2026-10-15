@@ -409,6 +409,34 @@ class Settings(BaseSettings):
     re-registers on every launch, so a token this old belongs to an uninstalled app
     or an abandoned phone."""
 
+    # -- Groups --------------------------------------------------------------
+    group_categories: str = "estate,church,chama,students,sports,business,other"
+    """Configurable, as the brief requires: a plain string column, so adding a
+    category is a settings change, not a migration."""
+
+    group_name_max_length: int = Field(default=80, ge=3, le=200)
+    group_description_max_length: int = Field(default=2000, ge=0, le=10_000)
+    group_rules_max_length: int = Field(default=4000, ge=0, le=20_000)
+
+    groups_per_day: int = Field(default=5, ge=1)
+    new_account_groups_per_day: int = Field(default=1, ge=1)
+    """Creating a group is how a scammer gets an audience-shaped thing to point
+    people at, so a new account gets one a day."""
+
+    group_join_requests_per_day: int = Field(default=30, ge=1)
+    group_invites_per_day: int = Field(default=100, ge=1)
+    new_account_group_invites_per_day: int = Field(default=20, ge=1)
+
+    group_invite_link_default_days: int = Field(default=7, ge=1, le=90)
+    group_invite_link_max_days: int = Field(default=30, ge=1, le=365)
+    """An invite link is a bearer credential for a private group, and links get
+    forwarded. Every link expires; this caps how long one can be made to last."""
+
+    group_search_min_similarity: float = Field(default=0.5, gt=0, lt=1)
+    """The `pg_trgm` *word* similarity a search needs against a group's name. Word
+    similarity, so one word finds a long name containing it ("kamakwa" finds
+    "Kamakwa Estate Residents"), while a typo ("kamkwa") still scores above 0.5."""
+
     # -- Validation ----------------------------------------------------------
     @field_validator("database_url")
     @classmethod
@@ -515,6 +543,18 @@ class Settings(BaseSettings):
             raise ValueError("NEW_ACCOUNT_COMMENTS_PER_HOUR must not exceed COMMENTS_PER_HOUR")
         if self.new_account_stories_per_day > self.stories_per_day:
             raise ValueError("NEW_ACCOUNT_STORIES_PER_DAY must not exceed STORIES_PER_DAY")
+        if not self.group_category_list:
+            raise ValueError("GROUP_CATEGORIES must list at least one category")
+        if self.new_account_groups_per_day > self.groups_per_day:
+            raise ValueError("NEW_ACCOUNT_GROUPS_PER_DAY must not exceed GROUPS_PER_DAY")
+        if self.new_account_group_invites_per_day > self.group_invites_per_day:
+            raise ValueError(
+                "NEW_ACCOUNT_GROUP_INVITES_PER_DAY must not exceed GROUP_INVITES_PER_DAY"
+            )
+        if self.group_invite_link_default_days > self.group_invite_link_max_days:
+            raise ValueError(
+                "GROUP_INVITE_LINK_DEFAULT_DAYS must not exceed GROUP_INVITE_LINK_MAX_DAYS"
+            )
         return self
 
     @model_validator(mode="after")
@@ -623,6 +663,10 @@ class Settings(BaseSettings):
     @property
     def post_category_list(self) -> tuple[str, ...]:
         return tuple(part.strip() for part in self.post_categories.split(",") if part.strip())
+
+    @property
+    def group_category_list(self) -> tuple[str, ...]:
+        return tuple(part.strip() for part in self.group_categories.split(",") if part.strip())
 
     @property
     def reaction_kind_list(self) -> tuple[str, ...]:
