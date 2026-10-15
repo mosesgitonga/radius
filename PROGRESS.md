@@ -1324,3 +1324,80 @@ curl -X PUT localhost:8000/v1/listings/$LID/availability -H "Authorization: Bear
 
 - **HEIC support**, carried from Phase 2.
 - **Development `SECRET_KEY`** (minor), carried from Phase 3.
+
+---
+
+## Phase 6 — Jobs, services and reviews
+
+**Status:** in progress
+
+### Plan
+
+**Service posts** — one model, `ServicePost`, with three kinds:
+
+- **`offering`** — a provider's profile for one category: description, rate info
+  ("KES 500 per hour"), availability, and how far they will travel. A provider
+  can have one live offering per category.
+- **`seeking`** — someone needing a service, with an optional budget.
+- **`hiring`** — a role, pay (an optional KES range and period), and job type
+  (full-time, part-time, casual, contract).
+
+All three have:
+- categories from a configurable list, seeded with the brief's fifteen;
+- a location taken from the author's home, shown by area label and distance band;
+- the coarse-cell centre for band sorting (decision 5.2);
+- a `tsvector` for search;
+- moderation `status`.
+
+Seeking and hiring posts expire after 30 days, and offerings do not. Any post can
+be closed (filled, or no longer needed).
+
+**Search** within the services radius (three times the feed radius, 3–40 km), or
+the user's filter, up to 50 km. It reuses the marketplace's full-text and
+band-sorting code, moved into a shared `location.bands` module rather than copied.
+Filters are kind and category. Offerings show the provider's cached rating.
+
+**Contact.** `POST /v1/services/{id}/chat` opens a conversation of a new kind,
+`service`, tied to the post — one per post per contacter. The request rule
+applies, as for listings, and the reply is what makes it accepted. A conversation
+about a `hiring` post starts with a safety notice ("Never pay to get a job"). It
+is a system message in the history, and a `safety_notice` field on the
+conversation, so no client can omit it.
+
+**Reviews** — 1–5 stars and optional text:
+- **Who may review:** either person in an *accepted* conversation tied to a
+  listing or a service post may review the other, once per context. Without a
+  qualifying conversation, the review is refused.
+- **Replies:** the reviewed person may reply.
+- **Reports:** reviews can be reported, with auto-hide.
+- **Aggregates:** each user's `rating_average` and `rating_count` (columns from
+  Phase 1) are recomputed from visible reviews whenever a review is written,
+  edited, deleted, hidden or purged. The recompute is a leaf function, so
+  moderation can call it after an auto-hide without an import cycle.
+
+**Job-scam protections.**
+
+- **Hiring needs a trust threshold:** phone verified and an account at least
+  `HIRING_MIN_ACCOUNT_AGE_DAYS` (14) old. A verified neighbour (Phase 8) passes
+  regardless.
+- **Fee demands are flagged.** A configurable list of phrases in English and
+  Swahili — "registration fee", "pay to apply", "ada ya usajili", "tuma pesa",
+  "lipa kwanza"… — is checked against hiring posts. A match *holds* the post:
+  `hidden_pending_review`, seen only by its author, with the matched phrases
+  recorded and an audit event, so Phase 8's queue has what it needs. Unlike the
+  marketplace's prohibited list, these are held rather than refused, because
+  "registration fee" also appears in honest posts ("we pay your registration
+  fee"), and a person should decide.
+- **The safety notice** on every job conversation.
+- **`job_scam` reports are prioritised**, already true since Phase 2
+  (`REPORT_PRIORITY`).
+
+**Data rights.**
+- **Export:** the user's service posts, and the reviews they wrote and received.
+  Reviews are public statements about a person, unlike private messages.
+- **Purge:** soft-deletes their service posts and the reviews they wrote and
+  received, then recomputes the ratings that changed.
+
+### Open questions
+
+_None blocking. HEIC from Phase 2 is still open._
