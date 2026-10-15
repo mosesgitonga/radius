@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0001"
@@ -40,10 +41,35 @@ def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
 
 
+def _other_extensions_need(extension: str) -> bool:
+    """Whether another *extension* depends on this one.
+
+    The PostGIS image's own init script installs `postgis_topology` and the tiger
+    geocoder into its default database, on top of PostGIS. Those were not created
+    by this migration, and neither, then, was the PostGIS they rest on: it was there
+    before us, so a downgrade leaves it there.
+    """
+    bind = op.get_bind()
+    count = bind.execute(
+        sa.text(
+            "SELECT count(*) FROM pg_depend d "
+            "JOIN pg_extension dependent ON d.objid = dependent.oid "
+            "JOIN pg_extension base ON d.refobjid = base.oid "
+            "WHERE d.classid = 'pg_extension'::regclass "
+            "AND d.refclassid = 'pg_extension'::regclass "
+            "AND base.extname = :name"
+        ),
+        {"name": extension},
+    ).scalar()
+    return bool(count)
+
+
 def downgrade() -> None:
     # No CASCADE: dropping PostGIS with CASCADE would silently take every
-    # geography column with it. If something still depends on these extensions,
+    # geography column with it. If a *table* still depends on these extensions,
     # failing loudly is the correct outcome — downgrade the migrations that
-    # created those tables first.
+    # created those tables first. Another extension depending on one is different:
+    # it means the extension predates us (see `_other_extensions_need`).
     op.execute("DROP EXTENSION IF EXISTS pg_trgm")
-    op.execute("DROP EXTENSION IF EXISTS postgis")
+    if not _other_extensions_need("postgis"):
+        op.execute("DROP EXTENSION IF EXISTS postgis")

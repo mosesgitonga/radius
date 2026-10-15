@@ -23,7 +23,7 @@ from typing import Any
 
 from alembic import context
 from geoalchemy2 import alembic_helpers
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -57,14 +57,48 @@ config.set_main_option("sqlalchemy.url", settings.database_url)
 target_metadata = Base.metadata
 
 
-def _configure_kwargs() -> dict[str, Any]:
+def _extension_owned_tables(connection: Connection) -> frozenset[str]:
+    """Tables that belong to an installed extension, not to us.
+
+    The PostGIS image's default database also gets `postgis_topology` and the tiger
+    geocoder, which add dozens of tables and put their schemas on the search path.
+    Autogenerate would then propose dropping all of them. PostgreSQL records which
+    objects an extension owns (`pg_depend`, type `e`), so ask it.
+    """
+    rows = connection.execute(
+        text(
+            "SELECT c.relname FROM pg_class c "
+            "JOIN pg_depend d ON d.objid = c.oid "
+            "AND d.classid = 'pg_class'::regclass AND d.deptype = 'e' "
+            "WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f')"
+        )
+    )
+    return frozenset(row[0] for row in rows)
+
+
+def _include_object_factory(extension_tables: frozenset[str]) -> Any:
+    def include_object(
+        obj: Any, name: str | None, type_: str, reflected: bool, compare_to: Any
+    ) -> bool:
+        table_name = (
+            name if type_ == "table" else getattr(getattr(obj, "table", None), "name", None)
+        )
+        if reflected and compare_to is None and table_name in extension_tables:
+            return False
+        # geoalchemy2 ships this helper untyped.
+        return bool(alembic_helpers.include_object(obj, name, type_, reflected, compare_to))  # type: ignore[no-untyped-call]
+
+    return include_object
+
+
+def _configure_kwargs(extension_tables: frozenset[str] = frozenset()) -> dict[str, Any]:
     return {
         "target_metadata": target_metadata,
         # Detect column type and server-default changes, which autogenerate
         # ignores by default and which are a common source of drift.
         "compare_type": True,
         "compare_server_default": True,
-        "include_object": alembic_helpers.include_object,
+        "include_object": _include_object_factory(extension_tables),
         "render_item": alembic_helpers.render_item,
         "process_revision_directives": alembic_helpers.writer,
         # Keep every migration's DDL in one transaction so a failure part-way
@@ -86,7 +120,12 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, **_configure_kwargs())
+    extension_tables = _extension_owned_tables(connection)
+    # The lookup above began a transaction. End it before Alembic starts: if one is
+    # already open, Alembic treats it as the caller's and never commits, and every
+    # migration would roll back, silently, when the connection closed.
+    connection.commit()
+    context.configure(connection=connection, **_configure_kwargs(extension_tables))
     with context.begin_transaction():
         context.run_migrations()
 
