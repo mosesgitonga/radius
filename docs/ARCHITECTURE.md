@@ -62,6 +62,7 @@ app/
     auth/            phone.py, service.py, dependencies.py, router.py
     users/           service.py (incl. the shared blocking check), tasks.py
     location/        cells.py, radius.py, service.py, tasks.py
+    groups/          access.py (who can see), permissions.py (who can act), service.py
     messaging/       service.py, views.py, router.py, socket.py (the `/v1/ws` endpoint)
     notifications/   service.py (devices, preferences, collapsing, push), router.py
   modules/<name>/  one package per feature area
@@ -90,12 +91,17 @@ Three rules keep the monolith from congealing:
    `feed.service.visible_to` is the only definition of who may see moderated
    content. Phase 3 adds `messaging.service.audience` as the only definition of
    who hears about something in a conversation, and `notifications.service.notify`
-   as the only way a notification is created.
+   as the only way a notification is created. Phase 4 adds
+   `groups.access` as the only definition of who may see or take part in a
+   group, and `groups.permissions.MINIMUM_ROLE` as the only statement of who
+   may use which admin tool.
 
    One deliberate exception to rule 2: moderation resolves a reported message by
    querying the messaging *models*, because the messaging service imports
    moderation (block-and-report) and the reverse import would be a cycle. The
-   query applies the same visibility rules as reading.
+   query applies the same visibility rules as reading. The feed reads group
+   rules through `groups.access`, a leaf that imports only models, because the
+   groups service imports the feed to create posts.
 
 `core` may not import from `modules`. That is what makes it reusable and keeps
 import cycles impossible.

@@ -352,13 +352,70 @@ body is never logged (`app/core/providers/push.py`).
 
 ---
 
+## Phase 4 — Groups
+
+Groups are where people hold power over each other's participation. Most of what
+is stored here is that power — who is an admin, who is muted, who is banned and
+why — and the rule throughout is that it is visible to the people who exercise it,
+not to the people it is exercised on.
+
+### `groups`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `name`, `description`, `rules`, `category` | What the group is | Life of the group; soft-deleted with it |
+| `visibility`, `join_policy`, `requires_post_approval` | How it works | As above |
+| `owner_id`, `created_by_id` | Who runs it, and who started it | Owner passes on purge; `created_by_id` cleared on purge |
+| `cell_res9`…`cell_res6`, `centroid`, `area_id` | **Public groups only:** where it is discovered — the creator's home cell centre when it was made public | Cleared if the group becomes private. Never in a response: groups are placed by area label and distance band |
+| `cover_media_id` | Cover image (purpose `group`) | Image deleted with the uploader's media on purge |
+| `member_count`, `chat_conversation_id` | Counts and the linked chat | Life of the group |
+
+### `group_members`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `user_id`, `role`, `status`, `joined_at`, `invited_by_id` | Membership, requests and invitations | Deleted on leaving, removal, rejection, or account purge |
+| `muted_until` | A moderator's mute | Shown to moderators and above, and to the member on their own membership |
+| `banned_at`, `banned_by_id`, `ban_reason` | A ban, kept so it holds | Until unbanned, or the banned account is purged. `ban_reason` is shown to the group's admins only |
+
+### `group_invite_links`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `token_hash` | A keyed hash; the token itself is never stored | Deleted 30 days after expiry or revocation (`run_retention`) |
+| `created_by_id`, `expires_at`, `max_uses`, `use_count`, `revoked_at` | Who made it and whether it still works | As above; links an account made are revoked on its purge |
+
+### `posts` (changes)
+
+`group_id` (now a foreign key), `approval_status` and `pinned_at`. A group post is
+otherwise an ordinary post: the same location rule (the author's home cell), the
+same export, the same purge. It never appears in the neighbourhood feed.
+
+### Audit
+
+Seven new actions, all admins acting on other people: `group_deleted`,
+`group_member_removed`, `group_member_banned`, `group_member_unbanned`,
+`group_role_changed`, `group_ownership_transferred`, `group_post_removed`.
+
+### Data rights in Phase 4
+
+- **Export** adds the groups a person belongs to (with role, status, joining date
+  and any mute) and the groups they created. Their group posts were already in the
+  content export. Bans placed on them are not listed (decision 4.13).
+- **Purge** deletes every membership row, bans included. It passes on every group
+  the account owned (admin, then moderator, then member), deleting any group left
+  empty, and revokes the invite links the account created. Group posts are
+  soft-deleted by the feed purge.
+
+---
+
 ## Data subject rights — implementation status
 
 | Right | Status | Where |
 | --- | --- | --- |
-| Access (export as JSON) | **Implemented** (through Phase 3) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, conversations, messages sent, devices, notification preferences and notifications |
+| Access (export as JSON) | **Implemented** (through Phase 4) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, group memberships and groups created, conversations, messages sent, devices, notification preferences and notifications |
 | Rectification | **Implemented** | `PATCH /v1/me` |
-| Erasure | **Implemented** (through Phase 3) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its messages, its devices and notifications, and its stored images |
+| Erasure | **Implemented** (through Phase 4) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its group memberships (passing on groups it owned), its messages, its devices and notifications, and its stored images |
 | Restriction of processing | Not started | Phase 8, account restrictions (`UserStatus.suspended` exists) |
 | Objection to marketing | **Implemented** | `PUT /v1/me/consents`, marketing consent is withdrawable |
 | Data portability | **Implemented** | Covered by the JSON export |
@@ -392,6 +449,8 @@ becomes a worker job in the phase that owns the data.
 | Notifications | 90 days |
 | Device tokens | Until signed out, reported dead by FCM, or 90 days without re-registering |
 | Presence | Redis only, a minute after the last heartbeat |
+| Group memberships and bans | Until left, removed, unbanned, or the account is purged |
+| Group invite links | 30 days after they expire or are revoked |
 | Application logs | 30 days |
 
 ---

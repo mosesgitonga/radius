@@ -1156,3 +1156,202 @@ an enqueue — are now on the response path, a millisecond or two.
   reported. The row and any reported content go with Phase 8's retention job.
 - **FCM installation IDs** (3.21) — when the client moves to them.
 - **HEIC/HEIF** — still open from Phase 2.
+
+---
+
+## Phase 4 — Groups
+
+### 4.1 A ban is a membership row
+
+**Choice.** Banning sets the person's `group_members` row to `banned` (creating the
+row if they were never a member). Every way into a group — open join, join request,
+direct invitation, invite link — loads that row first. Leaving does not delete a
+banned row; only an unban does.
+
+**Reasoning.** "Banned users can't rejoin" is the brief's acceptance test, and
+there are four ways in. A separate bans table would need checking in four places;
+one row with one status is checked by construction. `test_a_banned_user_cannot_rejoin_by_any_route`
+walks all four, plus leaving.
+
+### 4.2 Only public groups have a place
+
+**Choice.** A public group stores a cell and centroid — its creator's home cell at
+the time it was made public. A private group stores none, and check constraints
+hold both rules in the database. Switching a group to public places it at the
+acting admin's home; switching to private forgets its place.
+
+**Reasoning.** Data minimisation. A private group is never discovered, so it has no
+use for a location. Using the actor's home, not their current position, follows
+the rule for posts (decision 1.1): a group cannot be planted in a neighbourhood
+nobody running it lives in.
+
+### 4.3 Who may see what
+
+**Choice.**
+
+- **A public group's profile and posts:** anyone signed in. Taking part needs
+  membership.
+- **A private group's posts and members:** active members only. Someone invited,
+  or holding a valid link, sees its name, description and rules — never its posts.
+- **Someone banned:** a 404 for the group, as for anything else they may not see.
+- **The two refusals differ.** A group the caller cannot see is a 404; a group they
+  can see but lack the role for is a 403.
+
+**Reasoning.** A public group is public, and making non-members join to read it
+would only push people into joining. The 404 for unseeable groups is the rule
+everywhere (2.7): a distinct answer would confirm that a private group exists. A
+403 for missing role is safe, because the caller already knows the group exists,
+and "you can't do that here" is the useful answer.
+
+### 4.4 Permissions are a table, checked by one function
+
+**Choice.** `groups.permissions.MINIMUM_ROLE` maps every admin action to the lowest
+role that may take it. `require()` enforces it, and `require_outranks()` adds the
+second rule: nobody acts on someone of equal or higher rank.
+
+**Reasoning.** The matrix in the plan and the code are then the same thing. The
+acceptance test calls every admin endpoint as every role and derives the expected
+answer from the same table: 80 cells, each asserting a 403 exactly when one is
+due. A test also fails if a new action is added without an endpoint row.
+
+### 4.5 `groups.access` is a leaf the feed can import
+
+**Choice.** The read and participation rules live in `groups/access.py`, which
+imports only models. `feed.service.get_post` asks it whether a group post may be
+read, and `require_can_engage` whether the viewer may comment or react.
+
+**Reasoning.** The groups service imports the feed to create posts, so the feed
+could not import the groups service back. A leaf module breaks the cycle and gives
+each rule one definition: comments, reactions and reports on group posts go
+through the existing endpoints and get the group rules for free.
+
+### 4.6 Post approval is separate from moderation status
+
+**Choice.**
+
+- **A separate column:** `posts.approval_status` (`pending`, `approved`, `rejected`)
+  is the group's decision, and `posts.status` remains the platform's.
+- **Who needs approval:** only plain members' posts in groups that require it.
+  Moderators' own posts never wait.
+- **A pending post:** seen by its author and the group's moderators, and nobody can
+  comment on it or react to it.
+
+**Reasoning.** One column for both decisions would let a group admin's approval
+override a moderator's hide, or the reverse. Engaging with a pending post would
+make approval meaningless: comments would be visible in a thread nobody else can
+see yet.
+
+### 4.7 Discovery searches by word similarity, on the trigram index
+
+**Choice.** `q` matches with `pg_trgm`'s `<%` operator — word similarity, served by
+the GIN index on `groups.name`. The threshold (`GROUP_SEARCH_MIN_SIMILARITY`, 0.5)
+is set for the transaction only. A search returns one page of best matches.
+Browsing without `q` is paginated, busiest groups first.
+
+**Reasoning.** Plain similarity compares whole strings, so "kamakwa" scores poorly
+against "Kamakwa Estate Residents". Word similarity finds the word inside the name
+and still tolerates "kamkwa". A ranked search has no stable keyset to paginate
+on, and fifty results are plenty for a name search in one town.
+
+### 4.8 Invite links are hashed, always expire, and count uses atomically
+
+**Choice.**
+
+- **Storage:** only a keyed hash of the token is stored, and the token is returned
+  once.
+- **Lifetime:** every link expires — seven days by default, at most
+  `GROUP_INVITE_LINK_MAX_DAYS`.
+- **Use limits:** the use count is incremented by a conditional `UPDATE`.
+- **Joining:** a link admits straight to membership, whatever the join policy.
+- **Refusals:** every way a link can be bad — unknown, expired, used up, revoked,
+  or the holder banned — is the same 404.
+
+**Reasoning.** A link to a private group is a bearer credential, and links get
+forwarded. Hashing means a database leak hands over no working invitations. The
+conditional update means a link limited to ten uses admits ten people however many
+tap it at once. An admin made the link, so approving its users again would be
+asking the same question twice.
+
+### 4.9 An invitation never lifts a ban
+
+**Choice.** Inviting someone who is banned is refused with 409, "unban them first".
+Inviting someone with a pending join request approves it.
+
+**Reasoning.** One admin's invitation must not quietly undo another admin's ban.
+Lifting a ban should be a deliberate act, and it is audited.
+
+### 4.10 The linked chat mirrors the group
+
+**Choice.** `POST /groups/{id}/chat` creates a Phase 3 group conversation with
+`group_id` set, holding every active member.
+
+- **Membership stays in step:** joining adds a person, with history from that
+  point; leaving, removal, a ban or deleting the group takes them out.
+- **Managed from the group only:** renaming the group renames the chat, and the
+  chat's own member and rename endpoints refuse linked chats.
+- **No invitations and no member limit.**
+
+**Reasoning.** Everyone in the chat already chose to join the group, which is the
+consent chat invitations exist to get (3.9). Managing it from two places would let
+the two drift apart. The cost of no member limit is realtime fan-out to every
+member, which is fine at launch scale; see the deferred list.
+
+### 4.11 Groups are not a way round limits
+
+**Choice.**
+- Group posts share the neighbourhood post bucket (`create_post`).
+- Creating groups is limited per day, with new accounts allowed one.
+- Join requests and invitations have daily limits, invitations tiered by account
+  age.
+
+**Reasoning.** A group is an audience-shaped thing a scammer can point people at,
+and a second post bucket would double what a new account can post.
+
+### 4.12 An owner leaving hands the group on
+
+**Choice.** When the owner leaves or is purged, ownership passes to the
+longest-standing admin, then moderator, then member. A group left with nobody is
+soft-deleted.
+
+**Reasoning.** It mirrors the chat rule (3.10). A group nobody can administer is a
+group nobody can moderate, which is worse than one with an accidental owner. An
+empty group has no audience, and keeping it open would only hold a name.
+
+### 4.13 Purge removes memberships, bans included; export leaves bans out
+
+**Choice.**
+
+- **Purge:** deletes every `group_members` row for the account, including bans
+  placed on it. It passes on groups the account owned, and revokes the invite
+  links it created.
+- **Export:** lists memberships and the groups the account created, but not bans
+  placed on it.
+
+**Reasoning.** A ban is about an account, and once the account is gone there is
+nothing to keep out. The ban reason is written for the group's admins. The fact of
+the ban is the group's record, not the banned person's data, much as a moderator's
+note is not the reported person's.
+
+### 4.14 A reported group is answered for by its owner, and never auto-hidden
+
+**Choice.** A report against a group resolves to the group's owner as the
+responsible party, and groups are not in the auto-hide set.
+
+**Reasoning.** Hiding a whole community on reports alone is a decision for a
+person, not a threshold. Phase 8's moderation queue is where it is made.
+
+---
+
+### Deferred from Phase 4, with the phase that will own it
+
+- **Moderators deleting comments in their group.** The brief lists deleting posts.
+  Comment authors and post authors can already delete comments (2.14). Phase 8,
+  with the rest of the moderation tools.
+- **Moving a public group.** A group stays where it was made public; changing
+  visibility twice moves it. A dedicated "move" can come when someone needs it.
+- **Group events.** Phase 7 (an event's organiser can be a group).
+- **Ranked discovery** beyond membership size. Phase 8's performance work, with
+  real data.
+- **A cap on linked-chat size.** Not needed at launch. If fan-out ever matters, the
+  chat can stop mirroring above a size and become opt-in.
+- **Join questions** ("Which house number?") for approval groups. Not in the brief.

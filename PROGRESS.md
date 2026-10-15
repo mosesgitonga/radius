@@ -909,7 +909,7 @@ Pushes go to the fake provider in development. The worker log shows
 
 ## Phase 4 — Groups
 
-**Status:** in progress
+**Status:** complete and verified on 2026-10-15
 
 ### Plan
 
@@ -1002,6 +1002,144 @@ Purge takes them out of every group and passes on any group they owned (admin,
 then moderator, then the longest-standing member). A group left with nobody is
 deleted. Their group posts are already covered by the feed purge.
 
+### Built
+
+**Groups**:
+
+- **Public groups** are placed at their creator's home and discoverable nearby.
+- **Private groups** store no location and are never discovered.
+- **Settings:** configurable categories, rules, a cover image, an open or approval
+  join policy, and optional post approval.
+
+**Discovery.** `GET /v1/groups/discover` searches within the groups radius (twice
+the feed's), or the user's own filter up to 25 km, from home or explore mode. Name
+search uses `pg_trgm` word similarity, so it tolerates typos. Results can be
+filtered by category, and are placed by area label and distance band.
+
+**Joining:**
+
+- **Public groups:** an open group is joined at once; an approval group gets a join
+  request that admins approve or reject.
+- **Direct invitations**, which the invitee accepts or declines.
+- **Invite links**, stored hashed: they always expire, can be limited in uses and
+  revoked, and admit straight in.
+- **Bans come first:** every route into a group checks for a ban before anything
+  else.
+
+**Roles and admin tools.** Owner, admin, moderator and member, from one permission
+table, and nobody acts on an equal or higher rank. The tools:
+
+- approve and reject join requests;
+- remove, ban and unban members — a ban can be placed on someone not yet a member;
+- mute until a time;
+- appoint moderators and admins, and transfer ownership;
+- edit settings and rules, including switching between public and private;
+- approve, reject, pin (up to three) and remove posts;
+- enable a linked chat;
+- delete the group.
+
+Consequential actions are audited.
+
+**Group posts** reuse the post model. Comments, reactions and reports go through
+the existing endpoints, which now ask `groups.access` whether the viewer may read
+the post and take part. Moderators' own posts skip approval. Group posts never
+reach the neighbourhood feed.
+
+**Linked chat.** A Phase 3 group conversation whose membership follows the group
+as people join, leave, are removed or are banned. It is managed only from the
+group.
+
+**Notifications:** invitations, join requests (to admins), approvals of requests
+and of posts.
+
+**Cross-cutting:**
+
+- tiered limits on group creation and invitations, and a daily limit on join
+  requests;
+- group posts share the feed's daily post limit;
+- export, purge and the retention job reach groups.
+
+**Schema.** Migration 0009 adds `groups`, `group_members` and
+`group_invite_links`. It turns `posts.group_id` and `conversations.group_id` into
+real foreign keys, and adds post approval and pinning. It also widens the media
+purpose and audit action constraints.
+
+**Endpoints:** 30 new, 104 in total across 86 paths, plus the socket.
+
+### Verified
+
+| Check | Result |
+| --- | --- |
+| `pytest` | **912 passed** in 4½ minutes with coverage, **91% coverage**; the groups module 92–100% |
+| `ruff` + `mypy` (strict, app and tests) | clean |
+| Migrations | 0008 ↔ 0009 down and up twice; `alembic check` clean; 0009 applied on boot to the development database |
+| Privacy scan | passes with the new group responses: area label and band only, and nothing for private groups |
+| OpenAPI and session scope | every operation documented; every route commits before responding |
+| Live stack | see below |
+
+**The brief's acceptance criteria** (`tests/test_group_permissions.py`):
+
+| Criterion | Result |
+| --- | --- |
+| Non-members can't read private groups | An outsider gets 404 for the group, its posts, its members, a post by ID, its comments, and joining, posting, commenting, reacting or reporting. An invitee sees the profile but not the posts. It never appears in discovery and stores no location |
+| Members can't use admin tools | Every admin endpoint (20) called by every role (4). Each of the 80 cells asserts a 403 exactly when `MINIMUM_ROLE` says so, and never otherwise. Nobody acts on an equal or higher rank |
+| Banned users can't rejoin | Refused by every route: joining, asking, preview, invite link, accepting an invitation, and leaving to reset. An admin's invitation gets 409 "unban them first". A ban works on non-members too. A banned user does not see the group in discovery. Unbanning lets them ask again |
+
+**Live stack**, real API container:
+- a public group is labelled "Nyeri Town", and the private one has no label;
+- Kamau, 1.5 km away, finds it by searching "kamkwa estate", with band `1_3km`;
+- the private group cannot be discovered;
+- Kamau joins and posts, and the post stays out of a neighbour's feed;
+- an outsider gets 404 on the private group, and a member using an admin tool gets
+  403;
+- once Wanjiku bans Kamau, his rejoin is a 404.
+
+### Defects found, all fixed
+
+1. **Alembic silently dropped a foreign key.** `groups.chat_conversation_id` →
+   `conversations` (the two tables reference each other, so it is `use_alter`)
+   was rendered inside `create_table`, and Alembic skips it there. Caught by
+   `alembic check`; it is now created after both tables exist.
+2. **The enum-constraint test matched too loosely.** Its `status` pattern also
+   matched the new constraint on `approval_status`, and reported a false
+   mismatch. It now matches the parenthesised column name.
+3. **Autogenerate duplicated every new enum constraint**, as in 0007. Removed by
+   hand.
+
+### Deferred
+
+With the phase that will own each; reasoning in `docs/DECISIONS.md`.
+
+- **Moderators deleting comments** in their group — Phase 8.
+- **Moving a public group** other than by switching visibility.
+- **Group events** — Phase 7.
+- **Ranked discovery** beyond membership size — Phase 8.
+- **A linked-chat size cap**, and **join questions** — not needed yet.
+
+### How to try it
+
+```bash
+docker compose up --build   # migration 0009 runs on boot
+
+# Create a public group (placed at your home area)
+curl -X POST localhost:8000/v1/groups -H "Authorization: Bearer $A" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Kamakwa Estate Residents","category":"estate","visibility":"public","join_policy":"approval"}'
+
+# A neighbour finds it, typo and all, and asks to join
+curl "localhost:8000/v1/groups/discover?q=kamkwa" -H "Authorization: Bearer $B"
+curl -X POST localhost:8000/v1/groups/$GID/join -H "Authorization: Bearer $B"
+
+# The owner approves, or makes a link for a private group
+curl -X POST localhost:8000/v1/groups/$GID/members/$B_ID/review -H "Authorization: Bearer $A" \
+  -H 'Content-Type: application/json' -d '{"action":"approve"}'
+curl -X POST localhost:8000/v1/groups/$GID/invite-links -H "Authorization: Bearer $A" \
+  -H 'Content-Type: application/json' -d '{"max_uses":20}'
+```
+
 ### Open questions
 
-_None blocking. HEIC from Phase 2 is still open._
+- **HEIC support**, carried from Phase 2: add `pillow-heif`, or have the Flutter
+  app send JPEG.
+- **Development `SECRET_KEY`** (minor), carried from Phase 3: the dev default is
+  29 bytes.
