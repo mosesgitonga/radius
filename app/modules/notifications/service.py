@@ -215,23 +215,30 @@ async def notify(
     *,
     recipient_id: uuid.UUID,
     kind: NotificationType,
-    actor_id: uuid.UUID,
+    actor_id: uuid.UUID | None,
     target_type: str,
     target_id: uuid.UUID,
     collapse_key: str,
     settings: Settings,
     data: dict[str, str] | None = None,
+    push_text: str | None = None,
 ) -> Notification | None:
     """Record an in-app notification and schedule its push, after commit.
 
     Returns None when nothing was recorded: the recipient is the actor, either has
     blocked the other, or the type is switched off in-app. A switched-off in-app
     type can still push; the two preferences are independent.
+
+    `actor_id` is None for the system's own notices — reminders, expiry warnings.
+    `push_text` words the push when the type's template cannot ("Harambee starts
+    tomorrow at 18:00"). It goes to the push only: the in-app row keeps IDs, never
+    content, as the module docstring requires.
     """
-    if recipient_id == actor_id:
-        return None
-    if await is_blocked_between(session, recipient_id, actor_id):
-        return None
+    if actor_id is not None:
+        if recipient_id == actor_id:
+            return None
+        if await is_blocked_between(session, recipient_id, actor_id):
+            return None
 
     preference = (await preferences_for(session, recipient_id))[kind.value]
     notification: Notification | None = None
@@ -256,12 +263,15 @@ async def notify(
         )
 
     if preference.push_enabled:
+        push_data = dict(data or {}, target_type=target_type, target_id=str(target_id))
+        if push_text is not None:
+            push_data["push_text"] = push_text
         job_args = (
             str(recipient_id),
             kind.value,
-            str(actor_id),
+            str(actor_id) if actor_id is not None else "",
             collapse_key,
-            dict(data or {}, target_type=target_type, target_id=str(target_id)),
+            push_data,
         )
 
         async def _enqueue() -> None:
@@ -276,7 +286,7 @@ async def _collapse_or_create(
     *,
     recipient_id: uuid.UUID,
     kind: NotificationType,
-    actor_id: uuid.UUID,
+    actor_id: uuid.UUID | None,
     target_type: str,
     target_id: uuid.UUID,
     collapse_key: str,
@@ -303,10 +313,11 @@ async def _collapse_or_create(
         )
     ).scalar_one_or_none()
 
-    actor = str(actor_id)
+    actor = str(actor_id) if actor_id is not None else None
     if existing is not None:
         remembered = [other for other in existing.actor_ids if other != actor]
-        existing.actor_ids = [actor, *remembered][:MAX_REMEMBERED_ACTORS]
+        existing.actor_ids = ([actor] if actor else []) + remembered
+        existing.actor_ids = existing.actor_ids[:MAX_REMEMBERED_ACTORS]
         existing.actor_id = actor_id
         existing.event_count = existing.event_count + 1
         existing.updated_at = datetime.now(UTC)
@@ -317,7 +328,7 @@ async def _collapse_or_create(
         user_id=recipient_id,
         type=kind.value,
         actor_id=actor_id,
-        actor_ids=[actor],
+        actor_ids=[actor] if actor else [],
         event_count=1,
         target_type=target_type,
         target_id=target_id,
@@ -512,6 +523,38 @@ _PUSH_TEXT: dict[NotificationType, tuple[str, str]] = {
         "{actor} replied to your review",
         "{actor} replied to your review",
     ),
+    NotificationType.review_prompt: (
+        "{actor} marked your purchase as sold. How did it go? Leave a review",
+        "{actor} marked your purchase as sold. How did it go? Leave a review",
+    ),
+    NotificationType.listing_expiring: (
+        "Your listing expires soon. Renew it to keep it up",
+        "Your listing expires soon. Renew it to keep it up",
+    ),
+    NotificationType.event_invite: (
+        "{actor} invited you to an event",
+        "{actor} invited you to an event",
+    ),
+    NotificationType.event_rsvp_request: (
+        "{actor} wants to come to your event",
+        "{actor} and {others} want to come to your event",
+    ),
+    NotificationType.event_rsvp_approved: (
+        "{actor} confirmed your place at their event",
+        "{actor} confirmed your place at their event",
+    ),
+    NotificationType.event_reminder: (
+        "An event you are going to starts soon",
+        "An event you are going to starts soon",
+    ),
+    NotificationType.event_updated: (
+        "An event you replied to has changed",
+        "An event you replied to has changed",
+    ),
+    NotificationType.event_cancelled: (
+        "An event you replied to has been cancelled",
+        "An event you replied to has been cancelled",
+    ),
     NotificationType.listing_inquiry: (
         "{actor} asked about your listing",
         "{actor} and {others} asked about your listing",
@@ -536,7 +579,7 @@ async def deliver_notification_push(
     *,
     recipient_id: uuid.UUID,
     kind: NotificationType,
-    actor_id: uuid.UUID,
+    actor_id: uuid.UUID | None,
     collapse_key: str,
     data: dict[str, str],
     settings: Settings,
@@ -545,13 +588,17 @@ async def deliver_notification_push(
 
     Re-checks the block, because one may have been placed after the event and
     before the job ran. The count of others comes from the collapsed in-app row
-    when there is one, so the push and the list agree.
+    when there is one, so the push and the list agree. A system notice (no actor)
+    is worded by its `push_text`.
     """
-    if await is_blocked_between(session, recipient_id, actor_id):
-        return PushOutcome(sent=False, reason="blocked")
-    actor = await session.get(User, actor_id)
-    if actor is None or actor.deleted_at is not None:
-        return PushOutcome(sent=False, reason="actor_gone")
+    actor_name = "MyRadius"
+    if actor_id is not None:
+        if await is_blocked_between(session, recipient_id, actor_id):
+            return PushOutcome(sent=False, reason="blocked")
+        actor = await session.get(User, actor_id)
+        if actor is None or actor.deleted_at is not None:
+            return PushOutcome(sent=False, reason="actor_gone")
+        actor_name = actor.display_name
 
     collapsed = (
         await session.execute(
@@ -567,9 +614,9 @@ async def deliver_notification_push(
     ).first()
     others = max(len(collapsed.actor_ids) - 1, 0) if collapsed is not None else 0
 
-    text = render_activity(
+    text = data.get("push_text") or render_activity(
         kind,
-        actor_name=actor.display_name,
+        actor_name=actor_name,
         others=others,
         target=data.get("target_type", "post"),
     )

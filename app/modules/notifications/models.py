@@ -54,6 +54,16 @@ class NotificationType(StrEnum):
     """Someone's first message about a service post."""
     review_received = "review_received"
     review_reply = "review_reply"
+    review_prompt = "review_prompt"
+    """After a sale names the buyer: invite them to review the seller."""
+    listing_expiring = "listing_expiring"
+    event_invite = "event_invite"
+    event_rsvp_request = "event_rsvp_request"
+    """To the organiser, when an approval event gets an RSVP."""
+    event_rsvp_approved = "event_rsvp_approved"
+    event_reminder = "event_reminder"
+    event_updated = "event_updated"
+    event_cancelled = "event_cancelled"
     """A buyer's first message about a seller's listing."""
 
 
