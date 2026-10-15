@@ -29,7 +29,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from redis.asyncio import Redis
-from sqlalchemy import Select, delete, func, select, update
+from sqlalchemy import Select, delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,6 +49,7 @@ from app.modules.feed.models import (
 )
 from app.modules.groups import access as group_access
 from app.modules.groups.models import ROLE_RANK, Group, GroupRole
+from app.modules.location import bands
 from app.modules.location.radius import RadiusEngine, RadiusResult
 from app.modules.location.service import (
     Anchor,
@@ -119,15 +120,6 @@ async def _require_anchor(redis: Redis, *, viewer: User, mode: AnchorMode) -> An
             details={"action": "PUT /v1/me/location"},
         )
     return anchor
-
-
-def _within(column: Any, anchor: Anchor, radius_m: int) -> Any:
-    """`ST_DWithin` against the anchor's cell centre.
-
-    The WKT is a bound parameter, not interpolated: it is built from our own cell
-    arithmetic, but there is no reason to make that an assumption the SQL relies on.
-    """
-    return func.ST_DWithin(column, func.ST_GeogFromText(anchor.centroid_wkt), radius_m)
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +321,7 @@ async def feed_page(
         # Group posts are scoped to their group, from Phase 4. Required to be null
         # here so they cannot leak into the public feed the moment they exist.
         Post.group_id.is_(None),
-        _within(Post.centroid, anchor, radius.radius_m),
+        bands.within(Post.centroid, anchor, radius.radius_m),
     )
     if blocked:
         statement = statement.where(Post.author_id.not_in(blocked))
@@ -766,7 +758,7 @@ async def stories_page(
         # Checked on read as well as swept by the worker: between sweeps an
         # expired story must not be served, and the sweep is not instant.
         Story.expires_at > datetime.now(UTC),
-        _within(Story.centroid, anchor, radius.radius_m),
+        bands.within(Story.centroid, anchor, radius.radius_m),
     )
     if blocked:
         statement = statement.where(Story.author_id.not_in(blocked))

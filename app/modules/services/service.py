@@ -363,11 +363,7 @@ async def browse(
         ServicePost.status == ContentStatus.visible,
         ServicePost.closed_at.is_(None),
         or_(ServicePost.expires_at.is_(None), ServicePost.expires_at > now),
-        func.ST_DWithin(
-            ServicePost.centroid,
-            func.ST_GeogFromText(anchor.centroid_wkt),
-            int(radius_km * 1000),
-        ),
+        bands.within(ServicePost.centroid, anchor, int(radius_km * 1000)),
     )
     hidden = await blocked_user_ids(session, viewer.id)
     if hidden:

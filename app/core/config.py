@@ -94,6 +94,12 @@ class Settings(BaseSettings):
     db_echo: bool = False
 
     db_statement_timeout_ms: int = Field(default=10_000, ge=0)
+    db_parallel_workers_per_gather: int = Field(default=0, ge=0, le=8)
+    """PostgreSQL's `max_parallel_workers_per_gather`, per API connection. Off by
+    default. An API runs many short queries at once, and a parallel plan lets one
+    request take the cores other requests are waiting for; starting the workers
+    also costs about as much as the queries save. Measured in Phase 8: no
+    difference to sequential latency, so the default is about behaviour under load."""
     """Server-side statement timeout; 0 disables it. Guards against one slow
     geospatial query pinning a connection for the whole request budget."""
 

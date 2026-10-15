@@ -688,9 +688,7 @@ async def browse(
         *_upcoming(now),
         Event.visibility == EventVisibility.public,
         Event.end_at > window_start,
-        func.ST_DWithin(
-            Event.centroid, func.ST_GeogFromText(anchor.centroid_wkt), int(radius_km * 1000)
-        ),
+        bands.within(Event.centroid, anchor, int(radius_km * 1000)),
     )
     if window_end is not None:
         statement = statement.where(Event.start_at < window_end)

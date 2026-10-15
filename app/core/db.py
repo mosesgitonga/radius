@@ -32,14 +32,15 @@ _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
 
 def _build_engine(settings: Settings) -> AsyncEngine:
-    connect_args: dict[str, object] = {}
+    server_settings = {
+        "application_name": settings.app_name,
+        "max_parallel_workers_per_gather": str(settings.db_parallel_workers_per_gather),
+    }
     if settings.db_statement_timeout_ms > 0:
         # Enforced by the server, so it also covers a query whose client has gone
         # away. One slow PostGIS scan must not hold a pooled connection forever.
-        connect_args["server_settings"] = {
-            "statement_timeout": str(settings.db_statement_timeout_ms),
-            "application_name": settings.app_name,
-        }
+        server_settings["statement_timeout"] = str(settings.db_statement_timeout_ms)
+    connect_args: dict[str, object] = {"server_settings": server_settings}
 
     return create_async_engine(
         settings.database_url,

@@ -24,6 +24,18 @@ from app.modules.location import cells
 from app.modules.location.service import Anchor
 
 
+def within(column: InstrumentedAttribute[Any], anchor: Anchor, radius_m: int) -> Any:
+    """Content whose centroid is within `radius_m` of the anchor's cell centre.
+
+    On the sphere rather than the WGS84 spheroid (the `false`): about a third
+    cheaper per row, which is most of the cost of a dense feed, and the same
+    measure the bands below and H3's great-circle distances use. The two differ by
+    a few metres in a few kilometres, well inside a cell. The GiST index serves it
+    either way. The WKT is a bound parameter, never interpolated.
+    """
+    return func.ST_DWithin(column, func.ST_GeogFromText(anchor.centroid_wkt), radius_m, False)
+
+
 def coarse_wkt(cell_res8: int) -> str:
     """The res-8 cell centre, as stored in a `coarse_centroid` column."""
     latitude, longitude = cells.cell_centroid(cell_res8)

@@ -47,6 +47,7 @@ from app.modules.groups.models import (
     GroupVisibility,
 )
 from app.modules.groups.permissions import GroupAction, require, require_outranks
+from app.modules.location import bands
 from app.modules.location.radius import RadiusEngine, RadiusResult
 from app.modules.location.service import (
     Anchor,
@@ -476,9 +477,7 @@ async def discover(
         Group.visibility == GroupVisibility.public,
         Group.deleted_at.is_(None),
         Group.id.not_in(banned_from),
-        func.ST_DWithin(
-            Group.centroid, func.ST_GeogFromText(anchor.centroid_wkt), int(radius_km * 1000)
-        ),
+        bands.within(Group.centroid, anchor, int(radius_km * 1000)),
     )
     if category is not None:
         statement = statement.where(Group.category == _check_category(category, settings))

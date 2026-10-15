@@ -435,9 +435,7 @@ async def browse(
         Listing.status == ContentStatus.visible,
         Listing.availability.in_(BROWSABLE),
         Listing.expires_at > datetime.now(UTC),
-        func.ST_DWithin(
-            Listing.centroid, func.ST_GeogFromText(anchor.centroid_wkt), int(radius_km * 1000)
-        ),
+        bands.within(Listing.centroid, anchor, int(radius_km * 1000)),
     )
     hidden = await blocked_user_ids(session, viewer.id)
     if hidden:
