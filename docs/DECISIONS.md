@@ -1752,3 +1752,222 @@ about.
   already returned; not in the brief.
 - **Per-user reminder preferences** beyond turning the `event_reminder` type off,
   which already works through Phase 3's notification preferences.
+
+---
+
+## Phase 8 — Trust, safety and launch hardening
+
+### 8.1 Staff are a separate population with their own sign-in
+
+**Choice.** Staff live in `staff_accounts`, not `users`, and sign in with three
+factors in one request:
+- an email;
+- a scrypt password (standard library, N=2^15);
+- a TOTP code (RFC 6238, standard library). Each code is accepted once, with one
+  step of drift either way.
+
+Staff get a separate token type and audience, refused by every user endpoint, while
+user tokens are refused by every staff endpoint. Sessions last 8 hours, with no
+refresh token. Every failure gets one answer. Failures lock the account for a
+while. The first admin comes from a script that refuses once an admin exists.
+Admins create staff, and the server generates each new account's password and
+authenticator secret.
+
+**Reasoning.** Approved at the start of the phase. Moderators can ban people, so
+they need a second factor that a SIM swap can't defeat, which rules out SMS. Keeping
+staff out of `users` means no neighbour's account, however it is taken over, can
+reach a moderation endpoint, and no moderator doubles as a profile.
+
+### 8.2 One queue for reports and held content
+
+**Choice.** `GET /v1/admin/queue` combines two sources in one list:
+- pending reports, grouped by what was reported;
+- content held without a report: job posts held for a fee demand, and posts from
+  restricted accounts.
+
+Order is by the worst reason (the bands in `REPORT_PRIORITY`: violence, then job
+scams, then the rest), then by age. A held job post ranks with job-scam reports.
+Paging is keyset.
+
+**Reasoning.** The brief asks for violence and job scams first. A held post that
+nobody has reported is otherwise invisible to moderators and stays hidden forever.
+
+### 8.3 What each action does to reports, and who is told
+
+**Choice.**
+- **Remove** upholds the pending reports. **Restore** dismisses them. **Resolve**
+  closes them without changing the content.
+- **Messages** are removed as a "message deleted" tombstone, with the content kept as
+  evidence. **Groups** are removed as if the owner deleted them. Neither can be
+  restored.
+- **Telling people:** the person affected gets an `account_notice` for removals,
+  warnings, suspensions and restrictions, and can read their standing at
+  `GET /v1/me/standing`.
+- **Auditing:** every action is an audit event with actor type `moderator`.
+
+**Reasoning.** Report outcomes feed the trust rules: upheld reports stop someone
+being a trusted reporter and block the badge. So every action has to settle them,
+or the trust rules drift away from what moderators decided. Being acted against
+without being told is worse than being told (the Phase 2 principle).
+
+### 8.4 Restricted, not silenced; persons are restricted automatically, never hidden
+
+**Choice.** A restricted account:
+- is held to new-account limits whatever its age;
+- can't start conversations (message requests, listing and service inquiries) or
+  post jobs;
+- has its new posts, listings, service posts and events created hidden-pending-review.
+
+`REPORT_AUTO_RESTRICT_THRESHOLD` distinct trusted reports against the *person*
+restrict them for `AUTO_RESTRICT_DAYS`. Lifting a restriction dismisses the pending
+reports, so the same reports can't restrict them again the next time someone
+reports.
+
+**Reasoning.** Decision 2.9 stands: reports alone never hide a person. A coordinated
+group could otherwise silence a neighbour. Restriction is the middle ground. It
+slows a spammer or scammer down until a moderator looks, and a wrongly reported
+person can still reply, read, and be seen.
+
+### 8.5 Ban lists hold keyed hashes; a ban looks like a failed sign-in
+
+**Choice.**
+- **Storage:** phone numbers and installation IDs are stored only as HMACs keyed
+  with `BAN_LIST_KEY` (which falls back to `SECRET_KEY`), with the kind of value in
+  the hashed input.
+- **What a ban covers:** banning an account adds its number, and every installation
+  it signed in from, unless the admin says otherwise. It signs the account out
+  everywhere at once and can also remove its content.
+- **At sign-in:** a banned number gets the normal answer to a code request and no
+  SMS. A banned device fails verification with the same message as an expired code.
+- **Installation IDs:** clients send a random installation ID at sign-in
+  (`device_id`). Only its hash is stored, on the session.
+
+**Reasoning.**
+- A ban list in the clear would itself be a list of people's numbers.
+- A separate key means rotating `SECRET_KEY` after a breach doesn't empty the lists.
+- Not disclosing the ban costs a banned person nothing they're owed, and denies a
+  ban-evader confirmation that a new number worked.
+- Device bans are weaker, because the client supplies the ID (SECURITY.md, open
+  item 4). The phone ban is the stronger control.
+
+### 8.6 The badge: two routes, recomputed nightly, with a moderator lock
+
+**Choice.** Recomputed at 00:30 UTC (03:30 in Nairobi), after the presence roll, in
+two set-based `UPDATE`s. The rule is in decision 1.1 and the phase plan; every
+threshold is a setting.
+
+A vouch can be given to anyone the voucher can see. Whether they share an area is
+checked only at computation, so refusing a vouch never reveals that someone lives
+elsewhere.
+
+A moderator can revoke the badge and lock it. A locked account is never awarded it,
+and is stripped of it if it somehow holds one.
+
+**Reasoning.**
+- Recomputing nightly withdraws the badge as soon as the rule stops holding, which
+  the brief requires.
+- Set-based, because on the first night that is most of a town. Per-row updates, or
+  an `IN` list of tens of thousands of IDs, would exceed the bind-parameter limit.
+- The lock exists because without it, a revoked badge would come back the next
+  morning.
+
+### 8.7 Retention: hard deletion, with two exceptions
+
+**Choice.** Covered in the data map's Phase 8 section. In short:
+- **Content** is hard-deleted 90 days after deletion or removal, with its images,
+  unless something about it, or something its deletion would cascade to, has a
+  pending report.
+- **Messages** keep their tombstone; the content kept as evidence is erased.
+- **Records:** audit events, resolved reports, warnings, and the consents of
+  long-purged accounts go after two years.
+- **Batching:** each sweep handles 1,000 rows per table per night.
+
+**Reasoning.**
+- The cascade check matters. Deleting a group deletes its posts, and deleting a post
+  deletes its comments, so a pending report on any of those must hold the parent.
+- Messages are ordered by sequence number and clients sync by it, so removing rows
+  would leave gaps every client would have to guess about.
+- Batches keep one night's run inside the job timeout, however much has built up.
+
+### 8.8 A registry of purge decisions, checked by a test
+
+**Choice.** `users.data_registry.PURGE_REGISTRY` lists every column pointing at
+`users`, with how the purge treats it: erased, soft-deleted then hard-deleted,
+membership ended, pointer kept, or retained with a reason. A test fails when a new
+column pointing at `users` has no entry.
+
+**Reasoning.** "Extend the purge when you add personal data" was a convention, and it
+failed silently once. Blocks were documented since Phase 1 as deleted on purge and
+never were. The registry test turned that convention into a check, and found the
+gap.
+
+### 8.9 Spherical distance, and no parallel plans, for the API
+
+**Choice.**
+- **Distance:** every proximity filter goes through `location.bands.within`, which
+  uses `ST_DWithin(..., use_spheroid => false)`.
+- **Parallel plans:** API connections set `max_parallel_workers_per_gather = 0`
+  (`DB_PARALLEL_WORKERS_PER_GATHER`).
+
+**Reasoning.** Measured on 500,000 posts.
+- **Spherical distance** cuts the feed query by a third at a 3 km radius (31 → 18 ms
+  median in isolation). It's also the measure the distance bands and H3 already use.
+  The difference from the spheroid is a few metres over a few kilometres.
+- **Parallel workers** made no difference to sequential latency. They're off because
+  under load a parallel plan lets one request take the cores others are waiting for.
+- **A rejected alternative:** a per-cell `LATERAL` walk over a `(cell_res7,
+  created_at)` index. It was faster at large radii (15 km: 70 vs 284 ms), slower at
+  the small radii a dense town produces (1 km: 18 vs 4 ms), and about even at 3 km.
+  The adaptive radius already bounds how many posts a feed query considers, so the
+  simpler query stays. The trade-off is recorded in case years of history change it.
+
+### 8.10 Production on one VPS, behind Caddy
+
+**Choice.** `docker-compose.prod.yml`, with Caddy in front:
+- **Caddy:** TLS, HTTP/3, WebSockets; `X-Forwarded-For` overwritten rather than
+  appended; `/metrics` refused from outside.
+- **Logs:** to journald, capped at 30 days on the host.
+- **Secrets:** from a mode-600 env file and a read-only mount.
+- **Metrics:** under Gunicorn, Prometheus metrics are summed across workers through
+  `PROMETHEUS_MULTIPROC_DIR`.
+- **Backups:** nightly `pg_dump`, verified, kept 14 days locally and off-site in a
+  separate private bucket. A weekly restore test restores the newest dump into a
+  scratch database and compares every table's row count.
+- **Access log:** Gunicorn's is removed.
+
+**Reasoning.**
+- Overwriting `X-Forwarded-For` matters because the API takes the leftmost entry as
+  the client. An appended header would let a client choose its own IP for the rate
+  limiter.
+- Gunicorn's access log wrote full URLs past our redaction.
+- Without the multiprocess directory, `/metrics` would report whichever worker
+  answered.
+- A backup nobody has restored is a hope, not a backup. The restore test was run
+  against the development stack, including the off-site round trip.
+
+### 8.11 Sentry receives as little as possible
+
+**Choice.** Sentry is on only with `SENTRY_DSN`. Events lose:
+- the request (kept: method and URL without its query string);
+- local variables;
+- the user, beyond an opaque ID;
+- the server name.
+
+Every remaining key and string is redacted with the log filter's rules.
+
+**Reasoning.** An exception's locals are exactly where a latitude or a code would sit.
+Sentry is a processor under the Act, and the less it holds, the simpler that
+relationship is.
+
+---
+
+### Deferred from Phase 8, with the phase that will own it
+
+- **Appeals.** A person can read a decision about them, but not contest it in the
+  app. Moderators can restore or lift anything by hand. Not in the brief.
+- **Encrypting TOTP secrets at rest**, with a key held outside the database
+  (SECURITY.md, open item 2).
+- **Device attestation** (Play Integrity, App Attest), to make device bans hold up
+  against reinstalls.
+- **Managed PostgreSQL with point-in-time recovery**, when one machine is outgrown
+  (`docs/DEPLOYMENT.md` §8).

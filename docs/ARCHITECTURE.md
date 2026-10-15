@@ -57,10 +57,13 @@ app/
     redis.py         Redis client and the cache-error set
     security.py      codes, keyed hashing, access tokens
     health.py        liveness and readiness
+    observability.py Sentry, scrubbed with the log rules
+    metrics.py       Prometheus: request and job metrics, /metrics
     providers/       external services, each behind a Protocol: SMS, storage, push
   modules/
     auth/            phone.py, service.py, dependencies.py, router.py
-    users/           service.py (incl. the shared blocking check), tasks.py
+    users/           service.py (incl. the shared blocking check), badge.py, standing.py,
+                     data_registry.py (what the purge does to each reference), tasks.py
     location/        cells.py, radius.py, service.py, tasks.py
     groups/          access.py (who can see), permissions.py (who can act), service.py
     marketplace/     access.py (who can see a listing), service.py, views.py, router.py
@@ -68,6 +71,9 @@ app/
     events/          access.py (who sees an event, and its venue), times.py, service.py
     messaging/       service.py, views.py, router.py, socket.py (the `/v1/ws` endpoint)
     notifications/   service.py (devices, preferences, collapsing, push), router.py
+    moderation/      service.py (reports), console.py (the queue and staff actions),
+                     holds.py, banlist.py, retention.py, audit.py
+    staff/           credentials.py (scrypt, TOTP, staff tokens), service.py, dependencies.py
   modules/<name>/  one package per feature area
     models.py        SQLAlchemy models
     schemas.py       Pydantic request and response models
@@ -105,7 +111,11 @@ Three rules keep the monolith from congealing:
    as the only way a user's rating changes. Phase 7 adds
    `events.access.EventView.venue_visible` as the only rule for who sees a
    private event's venue, and `events.times` as the only place local time is
-   interpreted.
+   interpreted. Phase 8 adds `users.standing` as the only definition of restricted
+   and suspended, `moderation.holds.hold_if_restricted` as the only way new content
+   is held, `moderation.banlist` as the only ban check, `location.bands.within` as
+   the only proximity predicate, and `staff.dependencies.CurrentStaff` as the only
+   way into `/v1/admin`.
 
    One deliberate exception to rule 2: moderation resolves a reported message by
    querying the messaging *models*, because the messaging service imports

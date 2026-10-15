@@ -9,8 +9,9 @@ rectification, and erasure requests across all of it.
 and extends the export and deletion routines in the same change. A field that is
 not in this table cannot be exported or erased, because nobody knows it exists.
 
-- **Data controller:** MyRadius (registration with the Office of the Data
-  Protection Commissioner to be completed before the Nyeri launch — Phase 8).
+- **Data controller:** MyRadius. **Registration with the Office of the Data
+  Protection Commissioner is still to be done, by the controller, before launch.**
+  It is a legal filing, not a software task, and nothing in the code can complete it.
 - **Lawful basis:** consent for optional processing (location use, marketing),
   and performance of a contract for the data a requested feature cannot work
   without. Consents are recorded with a timestamp and the document version.
@@ -29,7 +30,7 @@ both exist from the first deployed request.
 
 | Field | Why | Retention | Notes |
 | --- | --- | --- | --- |
-| `client_ip` | Abuse investigation, rate-limit forensics, incident response | 30 days (Phase 8 sets this in the log pipeline) | An IP address is personal data. It is the only identifier in Phase 0 logs. |
+| `client_ip` | Abuse investigation, rate-limit forensics, incident response | 30 days, enforced by journald on the host (`docs/DEPLOYMENT.md` §2) | An IP address is personal data. It is the only identifier in Phase 0 logs. |
 | `request_id` | Correlating a user's report with server logs | 30 days | Random per request; identifies nothing by itself. |
 | `method`, `path`, `status_code`, `duration_ms` | Operations and performance | 30 days | Paths may contain resource UUIDs. Query strings are **not** logged, because location endpoints carry coordinates in them. |
 
@@ -283,7 +284,7 @@ apply to all of it:
 | `sender_id`, `seq`, `kind`, `reply_to_id` | The conversation's structure | Life of the conversation |
 | `body` | The message text | **Cleared on deletion and on account purge**, unless a report is pending |
 | `media_id` | An image, through `media_assets` (purpose `message`) | Image objects deleted on message deletion and on purge |
-| `deleted_at` | "Message deleted" placeholder | The row stays so numbering holds; hard purge in Phase 8 |
+| `deleted_at` | "Message deleted" placeholder | The row stays so numbering holds. Content kept as evidence is erased 90 days after deletion (Phase 8) |
 
 **Read receipts** are `last_read_seq` values. Other members see them only once a
 conversation is accepted, so the sender of a request does not learn it was read.
@@ -537,14 +538,123 @@ When the seller was told the listing is about to expire. Cleared on renewal.
 
 ---
 
+## Phase 8 — Trust, safety and launch hardening
+
+Phase 8 adds the people who moderate, the records of what they do, and the ban
+lists. It also adds, for the first time, a check that every reference to a person
+has a written purge decision (`app/modules/users/data_registry.py`, enforced by
+`tests/test_data_registry.py`).
+
+### `staff_accounts` and `staff_sessions`
+
+Staff are not users. Their data is about employment, not the community.
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `email`, `display_name`, `role` | Who the moderator is, and what they may do | While employed; a disabled account is kept, because the audit log names it |
+| `password_hash` | scrypt, with its parameters | Until changed |
+| `totp_secret`, `totp_last_step` | The authenticator factor, and replay protection | Until reset. Unencrypted at rest; see `docs/SECURITY.md`, open item 2 |
+| `failed_logins`, `locked_until`, `last_login_at`, `disabled_at` | Lockout and account state | As the account |
+| Session: `staff_id`, `expires_at`, `revoked_at`, `ip_address` | One sign-in, for revocation and forensics | 8 hours live; kept as history |
+
+### `user_warnings`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `user_id`, `reason`, `staff_id`, `report_id`, `created_at` | A moderator's warning. The person sees it in `GET /v1/me/standing`, and it counts in their history | 2 years, or until the account is purged. The audit log keeps the fact of a warning; the wording goes |
+
+### `banned_phones` and `banned_devices`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `phone_hash` / `device_hash` | **A keyed HMAC, never the number or the installation ID.** Checked at sign-in | Until a moderator lifts the ban. Survives the account's purge: a ban outlives the account it was for |
+| `user_id`, `staff_id`, `reason` | Which account the ban came from, who imposed it and why | As the entry. `user_id` points at the anonymised row after a purge |
+
+The hash is keyed with `BAN_LIST_KEY`, so a leaked table cannot be checked against
+a list of numbers without the key.
+
+### `vouches`
+
+`voucher_id`, `vouchee_id`, `created_at`: a verified neighbour vouching for
+someone. Counted towards the badge only while the voucher is verified and lives in
+the same res-7 area. That is checked when the badge is computed, never stored.
+Withdrawable by the voucher. Deleted in both directions on purge, and exported.
+
+### `users` (changes)
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `suspended_until` | When a suspension lifts on its own | Cleared when lifted, and on purge |
+| `restricted_until`, `restriction_reason` | A restriction, by a moderator or by reports. The reason is shown to the person | Lapses on its own; cleared on purge |
+| `badge_locked_at` | A moderator's lock on the badge | Until unlocked; cleared on purge |
+
+### `device_sessions.device_id_hash`
+
+A keyed hash of the installation ID the app sends at sign-in. It lets a ban reach
+the devices an account used. The ID itself is never stored. Cleared from every
+session of an account when the account is purged.
+
+### Audit
+
+Every staff action is an audit event with actor type `moderator`. Staff sign-ins
+and failed sign-ins are audited too, but never with the email that was tried.
+Badge awards and revocations by the nightly job have actor type `system`.
+
+### Outside the database
+
+- **Sentry**, when configured, receives errors with no headers, query strings,
+  bodies, local variables, IP addresses or user details beyond an opaque ID.
+  Strings are redacted with the log rules. It acts as a processor.
+- **Metrics** carry route templates, status codes and task names. No identifiers.
+- **Backups:** `pg_dump` files, kept 14 days, locally (mode 700) and in a private
+  bucket. They contain everything the database does. **A purged account remains in
+  backups until they age out, two weeks after the purge**, and the deletion flow
+  should say so.
+
+### Retention, now enforced
+
+The nightly `run_retention` job now also:
+
+- **Content:** hard-deletes content soft-deleted or removed more than
+  `CONTENT_PURGE_AFTER_DAYS` (90) ago, with its images. Posts, comments, stories,
+  listings, service posts, events, reviews and groups are covered. Anything under a
+  pending report is kept, and so is anything whose deletion would cascade to
+  something under a pending report.
+- **Messages:** erases the content kept as evidence in deleted messages after the
+  same period. The "message deleted" tombstone stays.
+- **Records:** deletes audit events, resolved reports and warnings older than
+  `AUDIT_RETENTION_DAYS` (730).
+- **Consents:** deletes the consent records of accounts purged more than
+  `AUDIT_RETENTION_DAYS` ago.
+
+### Data rights in Phase 8
+
+- **Export** adds:
+  - the account's standing: suspension end, restriction and its reason;
+  - the vouches given and the number received;
+  - the warnings received;
+  - every report the person filed, with its outcome.
+
+  It never says who reported *them*.
+- **Purge** adds:
+  - deleting blocks in both directions. Documented since Phase 1 and not done until
+    now; found by the new registry test.
+  - vouches in both directions, and warnings;
+  - the installation hashes on the account's sessions;
+  - clearing the restriction, suspension and badge-lock fields.
+- **Restriction of processing:** a moderator or the report rule can now restrict an
+  account (see the table below).
+
+---
+
 ## Data subject rights — implementation status
 
 | Right | Status | Where |
 | --- | --- | --- |
-| Access (export as JSON) | **Implemented** (through Phase 7) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, group memberships and groups created, listings and saved listings, service posts, reviews written and received, events organised and replied to, conversations, messages sent, devices, notification preferences and notifications |
+| Access (export as JSON) | **Implemented** (through Phase 8) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, group memberships and groups created, listings and saved listings, service posts, reviews written and received, events organised and replied to, conversations, messages sent, devices, notification preferences and notifications, standing, vouches, warnings received and reports filed |
 | Rectification | **Implemented** | `PATCH /v1/me` |
-| Erasure | **Implemented** (through Phase 7) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its group memberships (passing on groups it owned), its listings and saved listings, its service posts and reviews, its events and replies, its messages, its devices and notifications, and its stored images |
-| Restriction of processing | Not started | Phase 8, account restrictions (`UserStatus.suspended` exists) |
+| Erasure | **Implemented** (through Phase 8) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its group memberships (passing on groups it owned), its listings and saved listings, its service posts and reviews, its events and replies, its messages, its devices and notifications, its stored images, its blocks, vouches and warnings, and the installation hashes on its sessions. Content and records are then hard-deleted by retention |
+| Restriction of processing | **Implemented** | Moderators suspend or restrict an account (`/v1/admin/users/{id}/suspend`, `/restrict`); the person sees it at `GET /v1/me/standing` |
 | Objection to marketing | **Implemented** | `PUT /v1/me/consents`, marketing consent is withdrawable |
 | Data portability | **Implemented** | Covered by the JSON export |
 | Right to be informed | Partial | Consent records capture document versions; the policy documents themselves are the client's |
@@ -563,13 +673,17 @@ becomes a worker job in the phase that owns the data.
 | --- | --- |
 | Account, while active | Until deletion is requested |
 | Deleted account | Purged 30 days after the request, except where law requires otherwise |
-| Soft-deleted user content | 90 days, then purged — kept because moderation needs the evidence |
+| Soft-deleted user content | 90 days, then hard-deleted with its images (Phase 8 `run_retention`); held while a report about it, or about anything it would cascade to, is pending |
 | Stories | 24 hours, then hard-deleted with their images — held only while a report is pending |
 | Home location | Only the current H3 cell and its centroid. No history: a change overwrites. |
 | Explore-mode location | **Redis only, ~2 hour TTL. Never written to PostgreSQL.** Not in the export, because it is never at rest. |
 | Home-presence history | A 14-bit rolling mask of daily yes/no answers to "was this user in their home area". Not the locations it came from. Self-purging. |
-| Moderation reports and actions | 2 years, as the record of why an account was acted against |
-| Audit log | 2 years |
+| Moderation reports and warnings | 2 years after resolution (Phase 8 `run_retention`); pending reports are never deleted |
+| Audit log | 2 years (Phase 8 `run_retention`) |
+| Consent records | 2 years after the account is purged (Phase 8 `run_retention`) |
+| Ban-list entries | Until lifted; keyed hashes only, surviving the account's purge |
+| Staff accounts | While employed; disabled accounts kept for the audit log's references |
+| Database backups | 14 days, locally and off-site |
 | Payment records | 7 years, as tax law requires. **Survives account deletion**, and the deletion flow must say so. |
 | Uploaded originals | Deleted immediately after processing |
 | Idempotency records | 24 hours |
