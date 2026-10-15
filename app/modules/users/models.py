@@ -163,16 +163,12 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     verified_neighbour_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    badge_locked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    badge_locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     """A moderator revoked the badge and locked it: the daily recomputation leaves
     it off until a moderator unlocks it."""
 
     # -- Trust and safety (Phase 8) -------------------------------------------
-    suspended_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    suspended_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     """When a suspension lifts on its own. Null with status `suspended` means until
     a moderator lifts it."""
     restricted_until: Mapped[datetime | None] = mapped_column(

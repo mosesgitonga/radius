@@ -30,6 +30,10 @@ from app.modules.location import cells
 from app.modules.location.models import Area, CellActivity
 from app.modules.media import service as media_service
 from app.modules.media.models import MediaAsset, MediaPurpose
+from app.modules.staff import service as staff_service
+from app.modules.staff.credentials import create_staff_token
+from app.modules.staff.models import StaffAccount, StaffRole, StaffSession
+from app.modules.staff.service import IssuedCredentials
 from app.modules.users.models import User, UserStatus
 
 # Metres per degree of latitude, and per degree of longitude at the equator.
@@ -428,3 +432,39 @@ async def make_post(
         settings=get_settings(),
     )
     return post
+
+
+async def make_staff(
+    session: AsyncSession,
+    *,
+    role: StaffRole = StaffRole.moderator,
+    email: str | None = None,
+) -> IssuedCredentials:
+    """A staff account, with the credentials it was issued."""
+    issued = await staff_service.create_account(
+        session,
+        email=email or f"staff-{uuid.uuid4().hex[:10]}@example.com",
+        display_name="Test Moderator",
+        role=role,
+        created_by=None,
+        settings=get_settings(),
+    )
+    await session.flush()
+    return issued
+
+
+async def staff_token(session: AsyncSession, account: StaffAccount) -> str:
+    """A live staff token for `account`, without the sign-in's password check —
+    the admin API tests are not tests of scrypt."""
+    settings = get_settings()
+    staff_session = StaffSession(
+        staff_id=account.id, expires_at=datetime.now(UTC) + settings.staff_session_ttl
+    )
+    session.add(staff_session)
+    await session.flush()
+    return create_staff_token(
+        staff_id=account.id,
+        session_id=staff_session.id,
+        expires_at=staff_session.expires_at,
+        settings=settings,
+    )

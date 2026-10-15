@@ -331,7 +331,54 @@ class Settings(BaseSettings):
     trusted_reporter_min_account_age_days: int = Field(default=7, ge=0, le=365)
     """Phase 2's stand-in for the verified badge: a reporter counts towards the
     auto-hide threshold once their account is this old, their phone is verified,
-    and nothing has been upheld against them. Phase 8 replaces this with the badge."""
+    and nothing has been upheld against them. A verified neighbour always counts."""
+
+    report_auto_restrict_threshold: int = Field(default=3, ge=1, le=100)
+    """Distinct trusted reporters of a *person* that restrict them automatically.
+    A person is never hidden on reports; restricting slows them down without
+    silencing them, until a moderator looks."""
+    auto_restrict_days: int = Field(default=7, ge=1, le=90)
+
+    # -- Verified-neighbour badge --------------------------------------------
+    badge_min_account_age_days: int = Field(default=14, ge=0, le=365)
+    badge_min_presence_days: int = Field(default=10, ge=0, le=14)
+    """Days, of the last fourteen, the user was seen in their home area."""
+    badge_report_lookback_days: int = Field(default=90, ge=1, le=730)
+    """No report against the user upheld within this many days."""
+    badge_vouches_required: int = Field(default=2, ge=1, le=10)
+    """Verified neighbours in the same res-7 area whose vouches earn the badge on
+    their own."""
+    vouches_per_day: int = Field(default=10, ge=1)
+
+    # -- Staff ---------------------------------------------------------------
+    staff_session_ttl_hours: int = Field(default=8, ge=1, le=24)
+    """One shift. There is no refresh token: a moderator signs in again, with a
+    fresh authenticator code."""
+    staff_max_failed_logins: int = Field(default=5, ge=1, le=20)
+    staff_lockout_minutes: int = Field(default=15, ge=1, le=1440)
+    staff_password_min_length: int = Field(default=12, ge=8, le=128)
+
+    ban_list_key: SecretStr = SecretStr("")
+    """Keys the phone and device hashes on the ban lists. Defaults to `SECRET_KEY`;
+    set it separately so rotating `SECRET_KEY` after a breach does not also empty
+    the ban lists."""
+
+    # -- Retention -----------------------------------------------------------
+    content_purge_after_days: int = Field(default=90, ge=1, le=3650)
+    """Soft-deleted and removed content is hard-deleted this long after deletion,
+    unless a report about it is still pending."""
+    audit_retention_days: int = Field(default=730, ge=365, le=3650)
+    """Audit events and resolved reports. Two years: long enough to investigate a
+    breach or a pattern of abuse, no longer."""
+
+    # -- Observability -------------------------------------------------------
+    sentry_dsn: SecretStr = SecretStr("")
+    """Error tracking is off unless this is set."""
+    sentry_traces_sample_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    metrics_token: SecretStr = SecretStr("")
+    """Bearer token for `/metrics`. Unset, the endpoint does not exist."""
+    worker_metrics_port: int = Field(default=0, ge=0, le=65535)
+    """Port for the worker's Prometheus endpoint; 0 disables it."""
 
     # -- Rate limits for new accounts ----------------------------------------
     new_account_age_hours: int = Field(default=48, ge=0, le=8760)
@@ -777,6 +824,15 @@ class Settings(BaseSettings):
     @property
     def access_token_ttl(self) -> timedelta:
         return timedelta(seconds=self.access_token_ttl_seconds)
+
+    @property
+    def staff_session_ttl(self) -> timedelta:
+        return timedelta(hours=self.staff_session_ttl_hours)
+
+    @property
+    def ban_list_secret(self) -> bytes:
+        key = self.ban_list_key.get_secret_value() or self.secret_key.get_secret_value()
+        return key.encode()
 
     @property
     def refresh_token_ttl(self) -> timedelta:

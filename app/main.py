@@ -37,6 +37,7 @@ from app.modules.moderation.router import router as moderation_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.services.router import reviews_router
 from app.modules.services.router import router as services_router
+from app.modules.staff.router import router as staff_router
 from app.modules.users.router import router as users_router
 
 logger = logging.getLogger(__name__)
@@ -200,6 +201,7 @@ def build_v1_router(settings: Settings) -> APIRouter:
     router.include_router(socket_router)
     router.include_router(notifications_router)
     router.include_router(moderation_router)
+    router.include_router(staff_router)
     return router
 
 
