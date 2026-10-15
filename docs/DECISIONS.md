@@ -1355,3 +1355,121 @@ person, not a threshold. Phase 8's moderation queue is where it is made.
 - **A cap on linked-chat size.** Not needed at launch. If fan-out ever matters, the
   chat can stop mirroring above a size and become opt-in.
 - **Join questions** ("Which house number?") for approval groups. Not in the brief.
+
+---
+
+## Phase 5 — Marketplace
+
+### 5.1 Availability and moderation are separate columns
+
+**Choice.** `listings.availability` (`available`, `reserved`, `sold`) is the
+seller's. `listings.status` is the platform's `ContentStatus`, named as on posts.
+
+**Reasoning.** A seller must not be able to "sell" their way out of a moderation
+hide, and a hide must not masquerade as a sale. Naming the moderation column
+`status` means the auto-hide rule written for posts (2.9) applies to listings
+without a line changed.
+
+### 5.2 "Nearest" sorts by the band, computed from coarse cells
+
+**Choice.** Each listing stores `coarse_centroid`, the centre of its res-8 cell.
+`sort=nearest` orders by distance band — from that point to the centre of the
+viewer's res-8 cell, using the same band boundaries (`cells.BUCKET_BOUNDS`) —
+then newest. The band shown is the one the query sorted by.
+
+**Reasoning.** The brief says "nearest bucket", and the trilateration rule
+(brief 6.4.3) is why. Sorting by exact distance would reveal ordering *within* a
+band, so someone stepping their position around could watch listings swap places
+and narrow a seller's home to a res-9 cell. Ordering by band reveals nothing the
+band does not already show. The SQL uses spherical distance so it agrees with the
+H3 great-circle distance used for bands elsewhere.
+
+### 5.3 Full-text search with the `simple` configuration, prefix-matched
+
+**Choice.** A stored generated `tsvector` combines the title (weight A) and the
+description (weight B) under the `simple` configuration, with a GIN index. A
+query becomes `word1:* & word2:*`, built from letters and digits only. With a
+query and no explicit sort, results are ranked by `ts_rank` and returned as one
+page.
+
+**Reasoning.** Listings mix English and Swahili, often in one title. An English
+stemmer would help "chairs" and mangle "mtumba". `simple` treats both alike, and
+prefix matching recovers most of what stemming gives. Building the query from
+word characters only means nothing a user types reaches the `tsquery` parser as
+syntax. A generated column needs no trigger, and cannot drift from the text.
+
+### 5.4 Prohibited items are refused, naming the term
+
+**Choice.** `MARKETPLACE_PROHIBITED_TERMS` is a configurable list of whole words or
+phrases. A listing whose normalised title or description contains one is refused
+with 400 and `details.term`. Edits are checked too. The default list avoids
+common innocent uses: "gun" is absent because of glue and spray guns.
+
+**Reasoning.** "Basic" anti-abuse, as the brief says. Naming the term lets an
+honest seller rephrase. A determined bad actor will rephrase whatever we do, which
+is why reports and auto-hide remain the second line. Holding matches for review
+instead was considered, but Phase 8's queue does not exist yet, so a held listing
+would wait for ever.
+
+### 5.5 A duplicate is the same seller relisting the same live item
+
+**Choice.** `content_hash` is SHA-256 of the normalised title and description.
+Listing again while a live (unsold, unexpired, undeleted) listing has the same
+hash gets 409 and the original's ID.
+
+**Reasoning.** Reposting to climb back to the top of "newest" is the abuse.
+Renewing is the intended way, and the error says so. Two sellers with the same
+sofa are not duplicates, and neither is relisting something after it sold.
+
+### 5.6 A listing conversation is a request that lands in the inbox
+
+**Choice.**
+
+- **Kind and uniqueness:** `kind = listing`, with one conversation per listing per
+  buyer, enforced by a partial unique index.
+- **The request rule applies:** the buyer may send one message until the seller
+  replies. The reply accepts it.
+- **It lands in the seller's inbox**, not their requests folder.
+- **Its own limit:** inquiries are capped per day (10 for new accounts, 50
+  otherwise), not under the message-request limit.
+- **Blocking hides it whole**, as for a direct conversation.
+
+**Reasoning.** The seller invited contact by listing, so hiding inquiries in a
+requests folder would lose sales. One-message-until-reply still stops a stranger
+flooding a seller. And "accepted" now means the seller engaged, which is what
+Phase 6's reviews require: an accepted conversation tied to the listing. Asking
+about items is the marketplace's point, so a new account's five message requests
+a day would be far too few.
+
+### 5.7 Naming the buyer is optional, and limited to people who asked
+
+**Choice.** Marking a listing sold may include `buyer_id`, who must be someone
+with a conversation about that listing. It is stored as `sold_to_id`.
+
+**Reasoning.** This is the "design for reviews" hook. Phase 6 can let a buyer
+review the seller of something actually sold to them, with no migration and no
+way to name a stranger. It is optional because many sales are agreed in person or
+by phone.
+
+### 5.8 Sold and expired listings stay readable by link
+
+**Choice.** Browse shows only `available` and `reserved` items that are unexpired
+and visible. A listing's own page opens whatever its availability or expiry. New
+chats cannot start on sold or expired listings, though existing ones carry on.
+
+**Reasoning.** A link shared in a WhatsApp group should not break the moment the
+item sells. "Sold" is useful information to the person who tapped it. Reserved
+items stay in browse because a reservation often falls through.
+
+---
+
+### Deferred from Phase 5, with the phase that will own it
+
+- **Seller reviews.** Phase 6, on `sold_to_id` and accepted listing
+  conversations.
+- **Expiry reminders** ("your listing expires tomorrow — renew?"). A worker job plus
+  a notification type; small, and best done with Phase 7's reminder machinery.
+- **Image-based duplicate detection.** Text hashing catches the common case.
+  Perceptual hashing of photos is a Phase 8 hardening item if needed.
+- **Holding prohibited-term matches for review** instead of refusing them, once
+  Phase 8's moderation queue exists.

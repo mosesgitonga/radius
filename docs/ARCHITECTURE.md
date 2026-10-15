@@ -63,6 +63,7 @@ app/
     users/           service.py (incl. the shared blocking check), tasks.py
     location/        cells.py, radius.py, service.py, tasks.py
     groups/          access.py (who can see), permissions.py (who can act), service.py
+    marketplace/     access.py (who can see a listing), service.py, views.py, router.py
     messaging/       service.py, views.py, router.py, socket.py (the `/v1/ws` endpoint)
     notifications/   service.py (devices, preferences, collapsing, push), router.py
   modules/<name>/  one package per feature area
@@ -94,7 +95,9 @@ Three rules keep the monolith from congealing:
    as the only way a notification is created. Phase 4 adds
    `groups.access` as the only definition of who may see or take part in a
    group, and `groups.permissions.MINIMUM_ROLE` as the only statement of who
-   may use which admin tool.
+   may use which admin tool. Phase 5 adds `marketplace.access` for listings,
+   and `cells.BUCKET_BOUNDS` as the one set of distance-band boundaries — used
+   by SQL that sorts by band as well as by the code that labels one.
 
    One deliberate exception to rule 2: moderation resolves a reported message by
    querying the messaging *models*, because the messaging service imports

@@ -1148,7 +1148,7 @@ curl -X POST localhost:8000/v1/groups/$GID/invite-links -H "Authorization: Beare
 
 ## Phase 5 — Marketplace
 
-**Status:** in progress
+**Status:** complete and verified on 2026-10-15
 
 ### Plan
 
@@ -1224,6 +1224,103 @@ point is arranged in chat. Responses carry no cell, centroid or distance in metr
 Purge soft-deletes listings (their images go with the media purge) and deletes
 saved listings.
 
+### Built
+
+**Listings.**
+
+- **Contents:** title, description, a configurable category, condition, and
+  pricing (fixed, negotiable or free) in whole shillings.
+- **Photos:** up to eight, EXIF-stripped through the media pipeline.
+- **Status:** available, reserved or sold.
+- **Expiry:** 30 days, renewable until 30 days past expiry.
+- **Placement:** at the seller's home and shown by area label. The pickup point is
+  arranged in chat.
+- **Reach:** each listing returns an estimate of how many neighbours can see it.
+
+**Browse and search** within the marketplace radius (twice the feed's, 2–30 km),
+or the user's filter, up to 50 km.
+
+- **Search:** full-text with a generated `tsvector` (`simple` configuration, title
+  weighted above description), prefix-matched.
+- **Filters:** category, condition and price range.
+- **Sorting:** newest; nearest, by distance band and from coarse cells only;
+  price ascending and descending; or relevance. All but relevance use keyset
+  pagination.
+
+**Saved listings.** **Chat with the seller:** a listing conversation, one per
+listing per buyer, following the message-request rule. It lands in the seller's
+inbox, with its own daily limit and a `listing_inquiry` notification.
+**Marking it sold** can name the buyer, from the people who asked; this is the
+hook for Phase 6 reviews.
+
+**Anti-abuse:**
+- tiered daily listing limits;
+- a configurable prohibited-items list, refused with the term named and checked on
+  edits too;
+- duplicate detection on the normalised title and description;
+- reports and auto-hide on listings.
+
+**Schema.** Migration 0010 adds `listings`, `listing_images` and
+`saved_listings`. It turns `conversations.listing_id` into a real foreign key, with
+a partial unique index for one conversation per buyer.
+
+**Endpoints:** 13 new, 117 in total across 95 paths.
+
+### Verified
+
+| Check | Result |
+| --- | --- |
+| `pytest` | **957 passed**, **92% coverage**; the marketplace module 89–100% |
+| `ruff` + `mypy` (strict, app and tests) | clean |
+| Migrations | 0009 ↔ 0010 down and up; `alembic check` clean; 0010 applied on boot to the development database |
+| Privacy scan, OpenAPI, session scope | listings carry only an area label and band; every operation documented; every route commits before responding |
+
+**The brief's acceptance criterion** — "a user can list an item, a nearby buyer
+finds it by search, chats with the seller, and the seller marks it sold" — is
+`test_list_find_chat_and_sell`, and was run against the real API container:
+
+| Step | Live result |
+| --- | --- |
+| List | "Solar panel 100W", area "Nyeri Town", reach about 50 |
+| Anti-abuse | Re-posting it with different case and punctuation → 409 `duplicate`; a "Rifle" → 400, `term: rifle` |
+| Find by search | A neighbour 2.5 km away searches "sola" → found, band `1_3km`, radius 30 km |
+| Chat | Buyer asks, seller replies (accepting) |
+| Mark sold | Sold to that buyer; gone from search, still readable by link |
+
+### Defects found, all fixed
+
+1. **Autogenerate duplicated every enum constraint** once more (eight this time).
+   Removed by hand, as in 0007 and 0009.
+2. **Two of my own tests passed for the wrong reason.** The test client is shared,
+   and `authenticate` swaps its token, so a later assertion ran as a different
+   user. One failed loudly; one passed vacuously, checking an empty list as the
+   wrong person. Both now sign in again before each use.
+
+### Deferred
+
+With the phase that will own each; reasoning in `docs/DECISIONS.md`.
+
+- **Seller reviews** — Phase 6, on `sold_to_id` and accepted listing chats.
+- **Expiry reminders** — with Phase 7's reminder machinery.
+- **Image-based duplicate detection**, and **holding prohibited matches for
+  review** — Phase 8.
+
+### How to try it
+
+```bash
+docker compose up --build   # migration 0010 runs on boot
+
+curl -X POST localhost:8000/v1/listings -H "Authorization: Bearer $A" \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Three-seater sofa","category":"furniture","condition":"good","pricing":"negotiable","price_kes":8500}'
+
+curl "localhost:8000/v1/listings?q=sof&sort=nearest" -H "Authorization: Bearer $B"
+curl -X POST localhost:8000/v1/listings/$LID/chat -H "Authorization: Bearer $B"   # then send messages
+curl -X PUT localhost:8000/v1/listings/$LID/availability -H "Authorization: Bearer $A" \
+  -H 'Content-Type: application/json' -d '{"availability":"sold","buyer_id":"'$B_ID'"}'
+```
+
 ### Open questions
 
-_None blocking. HEIC from Phase 2 is still open._
+- **HEIC support**, carried from Phase 2.
+- **Development `SECRET_KEY`** (minor), carried from Phase 3.

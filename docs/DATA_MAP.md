@@ -409,13 +409,54 @@ Seven new actions, all admins acting on other people: `group_deleted`,
 
 ---
 
+## Phase 5 — Marketplace
+
+A listing is public by design, and the seller chose to publish it. What it must not
+do is locate the seller. It is placed by an area label — the "approximate pickup
+area" — and a distance band, exactly like a post. The meeting point is agreed in
+chat.
+
+### `listings`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `seller_id`, `title`, `description`, `category`, `condition`, `pricing`, `price_kes` | The listing | Soft-deleted by the seller or on purge; hard purge with other content in Phase 8 |
+| `images` (`listing_images`) | Up to eight photos, EXIF-stripped like every upload | Deleted with the seller's media on purge |
+| `cell_res9`…`cell_res6`, `centroid`, `area_id` | The seller's home cell when listed, for the radius filter | As the listing. Never in a response |
+| `coarse_centroid` | The res-8 cell centre, only for sorting by distance band (decision 5.2) | As the listing. Never in a response |
+| `availability`, `sold_at`, `sold_to_id` | Selling, and optionally who bought it — someone who asked about it in chat | As the listing; `sold_to_id` cleared if the buyer's account is purged |
+| `expires_at`, `renewed_at` | 30-day listings, renewable | As the listing |
+| `status`, `hidden_at` | Moderation, as for posts | As the listing |
+| `content_hash`, `search_vector` | Duplicate detection and full-text search, derived from the text | As the listing |
+
+### `saved_listings`
+
+`user_id` and `listing_id`. Private to the user; nobody, the seller included, sees
+who saved a listing. Deleted on purge.
+
+### Listing conversations
+
+Phase 3 conversations with `kind = listing` and `listing_id` set — the same tables,
+the same rules and the same export. Nothing marketplace-specific is copied into
+them.
+
+### Data rights in Phase 5
+
+- **Export** adds the user's listings (deleted and sold ones included and marked)
+  and their saved listings.
+- **Purge** soft-deletes their listings, whose photos go with the media purge, and
+  deletes their saved listings. A listing they bought keeps its record of the sale,
+  with `sold_to_id` cleared.
+
+---
+
 ## Data subject rights — implementation status
 
 | Right | Status | Where |
 | --- | --- | --- |
-| Access (export as JSON) | **Implemented** (through Phase 4) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, group memberships and groups created, conversations, messages sent, devices, notification preferences and notifications |
+| Access (export as JSON) | **Implemented** (through Phase 5) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, group memberships and groups created, listings and saved listings, conversations, messages sent, devices, notification preferences and notifications |
 | Rectification | **Implemented** | `PATCH /v1/me` |
-| Erasure | **Implemented** (through Phase 4) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its group memberships (passing on groups it owned), its messages, its devices and notifications, and its stored images |
+| Erasure | **Implemented** (through Phase 5) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its group memberships (passing on groups it owned), its listings and saved listings, its messages, its devices and notifications, and its stored images |
 | Restriction of processing | Not started | Phase 8, account restrictions (`UserStatus.suspended` exists) |
 | Objection to marketing | **Implemented** | `PUT /v1/me/consents`, marketing consent is withdrawable |
 | Data portability | **Implemented** | Covered by the JSON export |
@@ -451,6 +492,7 @@ becomes a worker job in the phase that owns the data.
 | Presence | Redis only, a minute after the last heartbeat |
 | Group memberships and bans | Until left, removed, unbanned, or the account is purged |
 | Group invite links | 30 days after they expire or are revoked |
+| Listings | 30 days live, renewable; then readable by link until the seller deletes them or the account is purged |
 | Application logs | 30 days |
 
 ---
