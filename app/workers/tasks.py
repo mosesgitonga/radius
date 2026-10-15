@@ -31,6 +31,7 @@ from app.core.idempotency import purge_expired as purge_idempotency_records
 from app.core.providers.push import get_push_provider
 from app.core.providers.storage import get_storage_provider
 from app.core.redis import get_redis
+from app.modules.events import service as events_service
 from app.modules.feed.tasks import expire_stories
 from app.modules.groups import service as groups_service
 from app.modules.location.tasks import refresh_cell_activity, roll_home_presence
@@ -265,12 +266,27 @@ async def deliver_notification_push(
             get_push_provider(),
             recipient_id=uuid.UUID(recipient_id),
             kind=NotificationType(kind),
-            actor_id=uuid.UUID(actor_id),
+            actor_id=uuid.UUID(actor_id) if actor_id else None,
             collapse_key=collapse_key,
             data=data,
             settings=settings,
         )
     return outcome.reason
+
+
+@with_job_context
+async def send_event_reminders(ctx: JobContext) -> dict[str, int]:
+    """Every minute: send the event reminders due now, and listing-expiry notices.
+
+    One sweep for both, because both are "tell someone about a time that is
+    coming". Safe to run late, early or twice: each reminder is recorded before it
+    is sent, and sent only if the record was new.
+    """
+    settings = get_settings()
+    async with task_session(ctx) as session:
+        run = await events_service.send_event_reminders(session, settings=settings)
+        expiring = await events_service.remind_expiring_listings(session, settings=settings)
+    return {"event_reminders": run.sent, "events": run.events, "expiring_listings": expiring}
 
 
 def as_worker_task(func: Callable[..., Coroutine[Any, Any, Any]]) -> WorkerCoroutine:

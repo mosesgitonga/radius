@@ -25,6 +25,7 @@ from app.core.queue import close_queue
 from app.core.realtime import close_hub
 from app.core.redis import close_redis
 from app.modules.auth.router import router as auth_router
+from app.modules.events.router import router as events_router
 from app.modules.feed.router import router as feed_router
 from app.modules.groups.router import router as groups_router
 from app.modules.location.router import router as location_router
@@ -118,6 +119,13 @@ TAGS_METADATA = [
         ),
     },
     {
+        "name": "events",
+        "description": (
+            "Events nearby, in groups, or private; RSVPs and reminders. A private "
+            "event's venue is shown only to accepted attendees."
+        ),
+    },
+    {
         "name": "messaging",
         "description": (
             "Direct and group conversations, message requests, and sync. The realtime "
@@ -174,8 +182,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def build_v1_router(settings: Settings) -> APIRouter:
     """The versioned client API.
 
-    Module routers are mounted here as each phase lands them. Events arrive in
-    Phase 7, payments in Phase 9.
+    Module routers are mounted here as each phase lands them. Payments arrive in
+    Phase 9.
     """
     router = APIRouter(prefix=settings.api_prefix, responses=COMMON_ERROR_RESPONSES)
     router.include_router(auth_router)
@@ -187,6 +195,7 @@ def build_v1_router(settings: Settings) -> APIRouter:
     router.include_router(marketplace_router)
     router.include_router(services_router)
     router.include_router(reviews_router)
+    router.include_router(events_router)
     router.include_router(messaging_router)
     router.include_router(socket_router)
     router.include_router(notifications_router)

@@ -142,6 +142,8 @@ async def make_cast(
 
 
 FUTURE = (datetime.now(UTC) + timedelta(days=3)).isoformat()
+EVENT_START = (datetime.now(UTC) + timedelta(days=5)).isoformat()
+EVENT_END = (datetime.now(UTC) + timedelta(days=5, hours=2)).isoformat()
 
 # (action, method, path, body). Paths use {group}, {target}, {requester}, {post},
 # {pending}. Every admin endpoint the router exposes is here.
@@ -196,6 +198,21 @@ ADMIN_ENDPOINTS: list[tuple[GroupAction, str, str, dict[str, Any] | None]] = [
     (GroupAction.pin_posts, "PUT", "/v1/groups/{group}/posts/{post}/pin", {"pinned": True}),
     (GroupAction.remove_posts, "DELETE", "/v1/groups/{group}/posts/{post}", None),
     (GroupAction.delete_group, "DELETE", "/v1/groups/{group}", None),
+    (
+        GroupAction.manage_events,
+        "POST",
+        "/v1/events",
+        {
+            "title": "Estate meeting",
+            "event_type": "meetup",
+            "start_at": EVENT_START,
+            "end_at": EVENT_END,
+            "venue": {"latitude": -0.42, "longitude": 36.95},
+            "venue_name": "Social hall",
+            "visibility": "group",
+            "group_id": "{group}",
+        },
+    ),
 ]
 
 

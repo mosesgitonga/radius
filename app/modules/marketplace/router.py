@@ -347,6 +347,7 @@ async def set_availability(
         listing_id=listing_id,
         availability=payload.availability,
         buyer_id=payload.buyer_id,
+        settings=settings,
     )
     return await _one(session, redis, storage, listing, user, settings)
 

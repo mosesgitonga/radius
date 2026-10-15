@@ -18,6 +18,7 @@ from app.core.providers.storage import StorageProvider, get_storage_provider
 from app.core.redis import get_redis
 from app.modules.auth import service as auth_service
 from app.modules.auth.dependencies import ActiveUser, CurrentUser, user_rate_limit
+from app.modules.events import service as events_service
 from app.modules.feed import service as feed_service
 from app.modules.groups import service as groups_service
 from app.modules.location import cells
@@ -326,6 +327,7 @@ async def export_my_data(
     export["groups"] = await groups_service.export_user_groups(session, user_id=user.id)
     export["marketplace"] = await marketplace_service.export_user_listings(session, user_id=user.id)
     export["services"] = await services_service.export_user_posts(session, user_id=user.id)
+    export["events"] = await events_service.export_user_events(session, user_id=user.id)
     export["reviews"] = await reviews_service.export_user_reviews(session, user_id=user.id)
     export["messaging"] = await messaging_service.export_user_messages(session, user_id=user.id)
     export["notifications"] = await notifications_service.export_user_notifications(

@@ -49,6 +49,8 @@ from app.modules.media.service import claim_assets_for
 from app.modules.messaging import service as messaging_service
 from app.modules.messaging.models import Conversation, ConversationKind
 from app.modules.moderation.models import ContentStatus
+from app.modules.notifications import service as notifications_service
+from app.modules.notifications.models import NotificationType
 from app.modules.users.models import User
 from app.modules.users.service import blocked_user_ids
 
@@ -288,6 +290,8 @@ async def renew_listing(
         )
     listing.expires_at = now + timedelta(days=settings.listing_ttl_days)
     listing.renewed_at = now
+    # A fresh term gets its own expiry reminder.
+    listing.expiry_reminded_at = None
     await session.flush()
     await session.refresh(listing)
     return listing
@@ -300,6 +304,7 @@ async def set_availability(
     listing_id: uuid.UUID,
     availability: ListingAvailability,
     buyer_id: uuid.UUID | None,
+    settings: Settings,
 ) -> Listing:
     """Mark a listing available, reserved, or sold.
 
@@ -322,6 +327,12 @@ async def set_availability(
                 "Only someone who asked about this listing can be named as the buyer"
             )
 
+    newly_sold_to = (
+        buyer_id
+        if buyer_id is not None
+        and (listing.availability != ListingAvailability.sold or listing.sold_to_id != buyer_id)
+        else None
+    )
     listing.availability = availability
     if availability == ListingAvailability.sold:
         listing.sold_at = listing.sold_at or datetime.now(UTC)
@@ -330,6 +341,20 @@ async def set_availability(
         listing.sold_at = None
         listing.sold_to_id = None
     await session.flush()
+    if newly_sold_to is not None:
+        # Carried over from Phase 6: the buyer is invited to review the seller.
+        # Their conversation about the listing is what makes the review allowed.
+        await notifications_service.notify(
+            session,
+            recipient_id=newly_sold_to,
+            kind=NotificationType.review_prompt,
+            actor_id=seller.id,
+            target_type="listing",
+            target_id=listing.id,
+            collapse_key=f"review_prompt:{listing.id}",
+            data={"listing_id": str(listing.id), "seller_id": str(seller.id)},
+            settings=settings,
+        )
     await session.refresh(listing)
     return listing
 

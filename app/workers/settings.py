@@ -34,6 +34,7 @@ from app.workers.tasks import (
     refresh_density,
     roll_presence,
     run_retention,
+    send_event_reminders,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ class WorkerSettings:
         as_worker_task(expire_old_stories),
         as_worker_task(deliver_message_push),
         as_worker_task(deliver_notification_push),
+        as_worker_task(send_event_reminders),
     ]
 
     cron_jobs: ClassVar[list[CronJob]] = [
@@ -82,6 +84,8 @@ class WorkerSettings:
         # every Kenyan user, and in the quietest part of the night.
         cron(as_worker_task(roll_presence), hour={0}, minute={20}, second=0),
         cron(as_worker_task(run_retention), hour={0}, minute={40}, second=0),
+        # Every minute, so a one-hour reminder is never more than a minute late.
+        cron(as_worker_task(send_event_reminders), second=5, run_at_startup=True),
         cron(as_worker_task(heartbeat), minute={0}, second=0, run_at_startup=False),
         # Every five minutes: uploads whose processing job was lost. Often enough
         # that a dropped job means a slightly late image, not a confused user.

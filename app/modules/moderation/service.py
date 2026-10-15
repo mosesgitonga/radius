@@ -23,6 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.db import execute_dml
 from app.core.errors import BadRequestError, NotFoundError
+from app.modules.events import access as events_access
+from app.modules.events.models import Event
 from app.modules.feed import service as feed_service
 from app.modules.feed.models import Comment, Post, Story
 from app.modules.groups import access as group_access
@@ -191,6 +193,7 @@ async def _find_report(
 _HIDEABLE: dict[ReportTargetType, Any] = {
     ReportTargetType.post: Post,
     ReportTargetType.listing: Listing,
+    ReportTargetType.event: Event,
     ReportTargetType.service_post: ServicePost,
     ReportTargetType.review: Review,
     ReportTargetType.comment: Comment,
@@ -302,6 +305,11 @@ async def _resolve_target_author(
         if await is_blocked_between(session, viewer.id, message.sender_id):
             raise NotFoundError("Message not found")
         return message.sender_id
+    if target_type == ReportTargetType.event:
+        event_view = await events_access.visible_event(
+            session, event_id=target_id, viewer_id=viewer.id
+        )
+        return event_view.event.organiser_id
     if target_type == ReportTargetType.service_post:
         service_post = await services_access.visible_post(
             session, post_id=target_id, viewer_id=viewer.id
