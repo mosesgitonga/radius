@@ -163,6 +163,24 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     verified_neighbour_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    badge_locked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """A moderator revoked the badge and locked it: the daily recomputation leaves
+    it off until a moderator unlocks it."""
+
+    # -- Trust and safety (Phase 8) -------------------------------------------
+    suspended_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """When a suspension lifts on its own. Null with status `suspended` means until
+    a moderator lifts it."""
+    restricted_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """Restricted: held to new-account limits, no message requests or job posts,
+    and posts held for review — slowed down, not silenced."""
+    restriction_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # -- Reputation (populated in Phase 6) -----------------------------------
     rating_average: Mapped[float | None] = mapped_column(Numeric(3, 2), nullable=True)
@@ -278,3 +296,28 @@ class Block(Base, UUIDPrimaryKeyMixin):
 
     def __repr__(self) -> str:  # pragma: no cover — debugging aid
         return f"<Block {self.blocker_id} -> {self.blocked_id}>"
+
+
+class Vouch(Base, UUIDPrimaryKeyMixin):
+    """A verified neighbour vouching for someone in the same area.
+
+    Two vouches from verified neighbours earn the badge (the brief's second route),
+    so a vouch is only counted while its giver is verified and still lives in the
+    same res-7 area as the person vouched for — checked when the badge is computed,
+    not frozen when the vouch was given.
+    """
+
+    __tablename__ = "vouches"
+
+    voucher_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    vouchee_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("voucher_id", "vouchee_id", name="uq_vouches_voucher_id_vouchee_id"),
+        CheckConstraint("voucher_id <> vouchee_id", name="vouch_not_for_self"),
+    )

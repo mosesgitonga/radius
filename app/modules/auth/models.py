@@ -81,6 +81,10 @@ class DeviceSession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     device_platform: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    device_id_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    """A keyed hash of the installation ID the client sent at sign-in. Lets a ban
+    reach the devices someone used, without keeping the IDs themselves."""
+
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     last_used_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

@@ -98,6 +98,28 @@ class AuditAction(StrEnum):
     group_ownership_transferred = "group_ownership_transferred"
     group_post_removed = "group_post_removed"
 
+    # Staff — Phase 8. Every action a moderator or admin takes is one of these.
+    staff_signed_in = "staff_signed_in"
+    staff_sign_in_failed = "staff_sign_in_failed"
+    staff_account_created = "staff_account_created"
+    staff_account_updated = "staff_account_updated"
+    content_removed = "content_removed"
+    content_restored = "content_restored"
+    report_resolved = "report_resolved"
+    user_warned = "user_warned"
+    user_suspended = "user_suspended"
+    user_unsuspended = "user_unsuspended"
+    user_banned = "user_banned"
+    user_unbanned = "user_unbanned"
+    user_restricted = "user_restricted"
+    user_unrestricted = "user_unrestricted"
+    badge_awarded = "badge_awarded"
+    badge_revoked = "badge_revoked"
+    phone_banned = "phone_banned"
+    phone_unbanned = "phone_unbanned"
+    device_banned = "device_banned"
+    device_unbanned = "device_unbanned"
+
 
 _actor_type = db_enum(AuditActorType, name="audit_actor_type", length=20)
 _action = db_enum(AuditAction, name="audit_action", length=48)
@@ -299,3 +321,54 @@ class Report(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     def __repr__(self) -> str:  # pragma: no cover — debugging aid
         return f"<Report {self.reason} on {self.target_type}:{self.target_id}>"
+
+
+class ModerationWarning(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """A moderator's formal warning to a user. The user sees it; it also counts in
+    their moderation history."""
+
+    __tablename__ = "user_warnings"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    staff_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("staff_accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    reason: Mapped[str] = mapped_column(String(1000))
+    report_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("reports.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class BannedPhone(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """A phone number that may not sign in. Held as a keyed hash: the ban list must
+    not itself be a list of people's numbers."""
+
+    __tablename__ = "banned_phones"
+
+    phone_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    staff_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("staff_accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    """The account banned, when the number came from one."""
+
+
+class BannedDevice(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """An app installation that may not sign in, by the hash of the installation
+    ID the client sends at sign-in."""
+
+    __tablename__ = "banned_devices"
+
+    device_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    staff_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("staff_accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
