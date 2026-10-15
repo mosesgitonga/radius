@@ -437,6 +437,43 @@ class Settings(BaseSettings):
     similarity, so one word finds a long name containing it ("kamakwa" finds
     "Kamakwa Estate Residents"), while a typo ("kamkwa") still scores above 0.5."""
 
+    # -- Marketplace ---------------------------------------------------------
+    listing_categories: str = (
+        "electronics,phones,furniture,household,clothing_and_shoes,vehicles,motorbikes,"
+        "farm_produce,livestock,books,baby_and_kids,beauty,sports,other"
+    )
+    """Configurable, like every other category list: a plain string column."""
+
+    listing_title_max_length: int = Field(default=120, ge=10, le=300)
+    listing_description_max_length: int = Field(default=4000, ge=0, le=20_000)
+    listing_max_images: int = Field(default=8, ge=1, le=20)
+    listing_max_price_kes: int = Field(default=100_000_000, ge=1)
+    """A backstop on typos — an extra zero or six — not a product rule."""
+
+    listing_ttl_days: int = Field(default=30, ge=1, le=365)
+    """Listings expire so the marketplace stays current: an item sold off-platform
+    and never marked sold disappears on its own."""
+    listing_renewal_grace_days: int = Field(default=30, ge=0, le=365)
+    """How long after expiring a listing can still be renewed rather than re-listed."""
+
+    listings_per_day: int = Field(default=20, ge=1)
+    new_account_listings_per_day: int = Field(default=3, ge=1)
+    listing_inquiries_per_day: int = Field(default=50, ge=1)
+    new_account_listing_inquiries_per_day: int = Field(default=10, ge=1)
+    """Starting a conversation about someone's listing. Separate from message
+    requests, because asking about items for sale is what the marketplace is for."""
+
+    marketplace_prohibited_terms: str = (
+        "firearm,firearms,pistol,rifle,ammunition,bullets,explosive,explosives,"
+        "bhang,cannabis,marijuana,cocaine,heroin,ivory,rhino horn,pangolin,bushmeat,"
+        "game meat,counterfeit,fake notes,fake currency,human organ,kidney for sale,"
+        "passport for sale,national id for sale,birth certificate for sale"
+    )
+    """Whole words or phrases, matched case-insensitively. Chosen to avoid common
+    innocent uses — "gun" is absent because of glue guns and spray guns. A listing
+    containing one is refused with the term named, so an honest seller can rephrase.
+    Configurable because the list is a policy decision, and policy changes."""
+
     # -- Validation ----------------------------------------------------------
     @field_validator("database_url")
     @classmethod
@@ -550,6 +587,14 @@ class Settings(BaseSettings):
         if self.new_account_group_invites_per_day > self.group_invites_per_day:
             raise ValueError(
                 "NEW_ACCOUNT_GROUP_INVITES_PER_DAY must not exceed GROUP_INVITES_PER_DAY"
+            )
+        if not self.listing_category_list:
+            raise ValueError("LISTING_CATEGORIES must list at least one category")
+        if self.new_account_listings_per_day > self.listings_per_day:
+            raise ValueError("NEW_ACCOUNT_LISTINGS_PER_DAY must not exceed LISTINGS_PER_DAY")
+        if self.new_account_listing_inquiries_per_day > self.listing_inquiries_per_day:
+            raise ValueError(
+                "NEW_ACCOUNT_LISTING_INQUIRIES_PER_DAY must not exceed LISTING_INQUIRIES_PER_DAY"
             )
         if self.group_invite_link_default_days > self.group_invite_link_max_days:
             raise ValueError(
@@ -667,6 +712,18 @@ class Settings(BaseSettings):
     @property
     def group_category_list(self) -> tuple[str, ...]:
         return tuple(part.strip() for part in self.group_categories.split(",") if part.strip())
+
+    @property
+    def listing_category_list(self) -> tuple[str, ...]:
+        return tuple(part.strip() for part in self.listing_categories.split(",") if part.strip())
+
+    @property
+    def prohibited_term_list(self) -> tuple[str, ...]:
+        return tuple(
+            part.strip().lower()
+            for part in self.marketplace_prohibited_terms.split(",")
+            if part.strip()
+        )
 
     @property
     def reaction_kind_list(self) -> tuple[str, ...]:

@@ -29,7 +29,6 @@ from sqlalchemy import (
     Index,
     String,
     UniqueConstraint,
-    Uuid,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -116,8 +115,11 @@ class Conversation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     direct_key: Mapped[str | None] = mapped_column(String(80), nullable=True, unique=True)
 
-    listing_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True, index=True)
-    """Phase 5. Nullable and not yet a foreign key, as the brief asks."""
+    listing_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("listings.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    """For a buyer-seller conversation about a listing. `created_by_id` is the buyer:
+    one conversation per listing per buyer, by the partial unique index below."""
     group_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("groups.id", ondelete="CASCADE"), nullable=True, index=True
     )
@@ -140,6 +142,13 @@ class Conversation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         CheckConstraint("last_seq >= 0", name="conversation_last_seq_non_negative"),
         # The sync endpoint: conversations changed since a cursor.
         Index("ix_conversations_updated_at", "updated_at"),
+        Index(
+            "uq_conversations_listing_id_created_by_id",
+            "listing_id",
+            "created_by_id",
+            unique=True,
+            postgresql_where=text("kind = 'listing'"),
+        ),
     )
 
 

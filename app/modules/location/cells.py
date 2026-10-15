@@ -57,6 +57,14 @@ _BUCKET_BOUNDS: Final[tuple[tuple[float, DistanceBucket], ...]] = (
     (10_000.0, DistanceBucket.three_to_10km),
 )
 
+BUCKET_BOUNDS: Final = _BUCKET_BOUNDS
+"""Public so SQL that sorts by band (the marketplace's "nearest") uses the same
+boundaries as the band shown."""
+BUCKET_ORDER: Final[tuple[DistanceBucket, ...]] = (
+    *(bucket for _, bucket in _BUCKET_BOUNDS),
+    DistanceBucket.over_10km,
+)
+
 
 class InvalidCoordinatesError(ValueError):
     """Raised for coordinates outside the valid range for latitude or longitude."""

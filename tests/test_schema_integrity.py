@@ -22,6 +22,7 @@ import app.modules.auth.models
 import app.modules.feed.models
 import app.modules.groups.models
 import app.modules.location.models
+import app.modules.marketplace.models
 import app.modules.media.models
 import app.modules.messaging.models
 import app.modules.moderation.models
