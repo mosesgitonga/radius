@@ -904,3 +904,104 @@ Pushes go to the fake provider in development. The worker log shows
   bytes, so PyJWT warns when signing locally. Production and staging already
   refuse anything under 32 bytes. Lengthening the default is a one-line change if
   you want the warning gone.
+
+---
+
+## Phase 4 — Groups
+
+**Status:** in progress
+
+### Plan
+
+Groups are the first place where *other users* hold power over someone: an admin
+can remove, ban or mute them, and approve or delete what they post. So the work
+is mostly authorisation, and the brief's "done when" is all permission tests.
+
+**Models**
+
+- `Group`:
+  - name, description, category from a configurable list (estate, church, chama,
+    students, sports, business, other), and rules;
+  - visibility (`public` or `private`), join policy (`open` or `approval`), and
+    whether posts need approval;
+  - an optional cover image (a new `group` media purpose), the owner, and a member
+    count.
+- **Location only for public groups.** A public group stores a cell and centroid,
+  taken from its creator's home when it is made public, so it can be discovered.
+  A private group stores no location at all: it never appears in discovery, so it
+  has no use for one.
+- `GroupMember`: role (`owner`, `admin`, `moderator`, `member`) and status
+  (`active`, `pending` for a join request, `invited`, `banned`), plus `muted_until`
+  and who invited them. A ban is a membership row with status `banned`, so "banned
+  users can't rejoin" is a property of one row that every way in checks.
+- `GroupInviteLink`: a hash of the token (the token itself is shown once, like a
+  refresh token), an expiry, an optional use limit, a use count, and a revocation
+  time.
+- `posts` gains `approval_status` (null outside groups; `pending`, `approved` or
+  `rejected` in a group that requires approval) and `pinned_at`. `posts.group_id`
+  and `conversations.group_id` become real foreign keys.
+
+**Permissions** — one table in code, `groups.permissions`, checked by every route:
+
+| Action | Owner | Admin | Moderator | Member |
+| --- | --- | --- | --- | --- |
+| Post, comment, react (unless muted) | ✓ | ✓ | ✓ | ✓ |
+| Approve or reject pending posts; delete posts; mute members | ✓ | ✓ | ✓ | |
+| Pin posts; approve join requests; invite; manage invite links | ✓ | ✓ | | |
+| Remove and ban members; set rules and settings; enable the chat | ✓ | ✓ | | |
+| Make someone a moderator | ✓ | ✓ | | |
+| Make someone an admin; transfer ownership; delete the group | ✓ | | | |
+
+Nobody acts on someone of equal or higher rank: an admin cannot remove another
+admin, and nobody can remove or ban the owner.
+
+**Reading.**
+
+- **A public group** and its posts are readable by anyone who is signed in.
+  Posting, commenting and reacting need membership.
+- **A private group** is readable only by its members. Someone invited, or holding
+  a valid invite link, can see its name and description, never its posts.
+- **A banned user** gets a 404 for the group, as for anything else they may not
+  see.
+- Group posts never appear in the neighbourhood feed (Phase 2 already enforces
+  this).
+- **Posts from someone blocked are filtered out** inside groups too, as is that
+  person in member lists.
+
+**Joining.** A public open group joins at once. A public approval group creates a
+join request that admins approve or reject. A private group can be joined only by
+a direct invite (accepted by the invitee) or a valid invite link. Every one of
+these paths checks the ban first.
+
+**Discovery.** `GET /v1/groups/discover` lists public groups within the groups
+radius (twice the feed radius, 2–25 km), from home or from an explore session.
+The user's distance filter goes up to 25 km. It searches by name with `pg_trgm`
+(trigram similarity, so "kamakwa estate" finds "Kamakwa Estates Residents") and
+filters by category. Each group is shown with its k-anonymous area label and a
+distance band, never a cell.
+
+**Group posts** reuse `feed.service.create_post`, gaining a group scope. Comments,
+reactions and reports on group posts go through the existing endpoints:
+`feed.service.get_post` asks a leaf module, `groups.access`, whether the viewer
+may read the group. That module imports only models, so there is no import cycle.
+
+**Linked chat.** An admin can enable a group chat — a Phase 3 group conversation
+with `group_id` set. Its membership follows the group: joining adds you, and
+leaving, removal or a ban takes you out. Its members cannot be managed from the
+chat side.
+
+**Notifications** (plain-string types, no migration): a group invite to the
+invitee; a join request to the admins; join approved, and post approved, to the
+requester or author.
+
+**Rate limits:** tiered group creation (new accounts 1 a day, established 5), join
+requests, and invites.
+
+**Data rights.** Export lists the groups a person created and their memberships.
+Purge takes them out of every group and passes on any group they owned (admin,
+then moderator, then the longest-standing member). A group left with nobody is
+deleted. Their group posts are already covered by the feed purge.
+
+### Open questions
+
+_None blocking. HEIC from Phase 2 is still open._
