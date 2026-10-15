@@ -491,13 +491,59 @@ service post, with no new personal data of their own.
 
 ---
 
+## Phase 7 — Events
+
+An event is a public or semi-public notice, but its venue can be someone's home —
+a private party, a chama meeting. So the venue is held as words, shown to the
+right people, and the place itself only as a coarse cell.
+
+### `events`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `organiser_id`, `group_id`, `title`, `description`, `event_type` | The event | Soft-deleted by the organiser; cancelled and deleted on the organiser's purge |
+| `start_at`, `end_at` | When, in UTC | As the event |
+| `venue_name`, `venue_details` | The exact venue, as words. **Private events: shown only to the organiser and accepted attendees** | As the event |
+| `cell_res9`…`cell_res6`, `centroid`, `coarse_centroid` | The venue's cell, from a map point that is discarded on receipt. No coordinate column exists | As the event. Never in a response |
+| `visibility`, `requires_approval`, `attendee_visibility`, `capacity`, counts | How it works | As the event |
+| `invite_token_hash` | A private event's link, hashed | Replaced or cleared by the organiser |
+| `event_status`, `cancelled_at`, `cancellation_reason` | Cancellation | As the event |
+| `status`, `hidden_at` | Moderation | As the event |
+
+### `event_rsvps`
+
+`user_id`, `response` (going, interested, not going, or none for an unanswered
+invitation), `approval`, `invited_by_id`. Who can see that a person is attending
+follows the event's attendee visibility — everyone, attendees only, or the
+organiser only — and blocked people are always left out. Deleted on purge.
+
+### `event_reminders_sent`
+
+The record that a reminder was sent: event, person, offset, time. It exists to
+make reminders idempotent. Cleared when an event's time changes, and deleted with
+the person.
+
+### `listings.expiry_reminded_at`
+
+When the seller was told the listing is about to expire. Cleared on renewal.
+
+### Data rights in Phase 7
+
+- **Export** adds the events the user organised (with their venues — the user's
+  own words) and their replies.
+- **Purge** cancels any upcoming event the account organised, which tells everyone
+  who replied, and soft-deletes them all. It deletes the account's replies and
+  reminder records, then recounts the events they had replied to.
+
+---
+
 ## Data subject rights — implementation status
 
 | Right | Status | Where |
 | --- | --- | --- |
-| Access (export as JSON) | **Implemented** (through Phase 6) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, group memberships and groups created, listings and saved listings, service posts, reviews written and received, conversations, messages sent, devices, notification preferences and notifications |
+| Access (export as JSON) | **Implemented** (through Phase 7) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, group memberships and groups created, listings and saved listings, service posts, reviews written and received, events organised and replied to, conversations, messages sent, devices, notification preferences and notifications |
 | Rectification | **Implemented** | `PATCH /v1/me` |
-| Erasure | **Implemented** (through Phase 6) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its group memberships (passing on groups it owned), its listings and saved listings, its service posts and reviews, its messages, its devices and notifications, and its stored images |
+| Erasure | **Implemented** (through Phase 7) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its group memberships (passing on groups it owned), its listings and saved listings, its service posts and reviews, its events and replies, its messages, its devices and notifications, and its stored images |
 | Restriction of processing | Not started | Phase 8, account restrictions (`UserStatus.suspended` exists) |
 | Objection to marketing | **Implemented** | `PUT /v1/me/consents`, marketing consent is withdrawable |
 | Data portability | **Implemented** | Covered by the JSON export |
@@ -536,6 +582,8 @@ becomes a worker job in the phase that owns the data.
 | Listings | 30 days live, renewable; then readable by link until the seller deletes them or the account is purged |
 | Seeking and hiring posts | 30 days, reopenable; offerings until deleted |
 | Reviews | Until deleted by the reviewer, or either account is purged |
+| Events | Until deleted by the organiser, or the organiser's account is purged |
+| Event reminder records | Until the event's time changes, or the person is purged |
 | Application logs | 30 days |
 
 ---

@@ -1606,3 +1606,149 @@ make ratings meaningless.
   provider has one offering per category.
 - **Review prompts** ("you bought a bike from Achieng — leave a review?"). This is
   a notification on `sold_to_id`, and fits with Phase 7's scheduled notifications.
+
+---
+
+## Phase 7 — Events
+
+### 7.1 `tzdata`, and a named zone in configuration
+
+**Choice.** Added `tzdata` (approved). Event times are stored in UTC, and
+`EVENT_TIMEZONE` (default `Africa/Nairobi`) is the zone they are entered, shown and
+worded in. A time sent without an offset is local wall time in that zone. Every
+event response carries the UTC instant, the same instant with its local offset,
+and the zone's name. The setting is validated at boot.
+
+**Reasoning.** Windows has no zone database of its own, so without `tzdata` the
+test environment could not resolve `Africa/Nairobi`, and tests would have run
+different code from production. A fixed UTC+3 offset was the alternative: correct
+for Kenya today, but a hand-rolled time zone, and wrong the day the product
+reaches a country with daylight saving. Reading an offset-less time as local is
+how a person types "Saturday 6 pm".
+
+### 7.2 The venue is a cell plus words; coordinates are discarded
+
+**Choice.**
+- **Coordinates:** the organiser picks the venue on a map; the point becomes the
+  venue's res-9 cell and centre on receipt and is discarded. The `events` table
+  has no coordinate column, and no response carries one.
+- **The exact venue:** words the organiser writes — `venue_name` and
+  `venue_details`.
+
+**Reasoning.** The rule that raw coordinates are never stored applies here as
+everywhere. The cell does everything the system needs: radius queries, the area
+label and the distance band. The exact place is what a person needs, and words
+convey it better than a point: "behind the chief's office" is more use than a pin.
+
+### 7.3 A private event's venue is for accepted attendees only
+
+**Choice.** For a private event, `venue_name` and `venue_details` are returned only
+to the organiser and to *accepted* attendees: an approved RSVP of going or
+interested. Everyone else who can see the event — an invitee who has not answered,
+someone waiting for approval, someone who said no — gets the area label,
+`venue_visible: false`, and null venue fields. The rule lives in one place
+(`events.access.EventView.venue_visible`), and the view applies it to every
+response that carries an event.
+
+**Reasoning.** This is the brief's location-privacy rule. "Accepted" is the
+deliberate line: a private party's address should not go to someone the host has
+not confirmed, or who has declined. The acceptance test checks the response text
+itself, so a venue cannot leak through a field added later.
+
+### 7.4 Reminders are a sweep with a ledger
+
+**Choice.**
+- **The sweep:** a worker job every minute asks which reminders are due now. For
+  each offset in `EVENT_REMINDER_OFFSETS_MINUTES` (a day and an hour by default),
+  the offset is due from its moment until the next, smaller offset is due.
+- **The ledger:** each reminder is first inserted into `event_reminders_sent`,
+  which is unique on (event, person, offset). It is sent only if the insert
+  happened.
+- **When an event moves,** its ledger is cleared, so reminders follow the new time.
+- **The wording** is in local time: "Kamakwa harambee starts tomorrow at 18:00".
+
+**Reasoning.**
+- **No scheduled jobs.** A scheduled job per reminder would have to be found and
+  moved whenever an event changes, and is lost if the queue loses it. A sweep with
+  a ledger is idempotent: run twice, run late or restarted mid-way, each person
+  gets each reminder once.
+- **Stale reminders are not sent.** Bounding each offset by the next one means a
+  worker that was down for hours sends the reminder that still makes sense,
+  rather than a pile of out-of-date ones.
+- **Pinned clock.** The sweep takes `now` as an argument, which is how the
+  acceptance test pins the clock to a Friday evening in Nairobi.
+
+### 7.5 A reminder goes to people already going when it fell due
+
+**Choice.** The day-before reminder goes only to attendees whose "going" predates
+the moment it fell due. Someone who replies three hours before the event gets the
+one-hour reminder only.
+
+**Reasoning.** Found by testing. Without this, a late reply was followed within a
+minute by a "starts today at 18:00" reminder — telling the person what they had
+just read. The rule uses the RSVP's last-changed time. So someone who was
+"interested" a week ago and switches to "going" at the last minute is treated as
+the late decider they are.
+
+### 7.6 Changes worth telling people about
+
+**Choice.**
+- **What notifies:** a new start or end time, a new venue (point, name or
+  details), and cancellation. Each notifies everyone who replied, including people
+  who said they were not going. A changed time may change their mind.
+- **What does not:** edits to the title or description.
+- **Deleting** an upcoming event cancels it first, so nobody turns up to a deleted
+  event without warning.
+
+**Reasoning.** The brief says changes and cancellations notify "everyone who
+RSVP'd". Notifying for every typo fix would teach people to ignore event
+notifications. That is the opposite of what a cancellation notice needs.
+
+### 7.7 Group events use the group's permission table
+
+**Choice.** Organising for a group needs the new `manage_events` action (admin and
+above). It sits in `groups.permissions.MINIMUM_ROLE` and is covered by the Phase 4
+role-by-endpoint matrix. A group-only event is readable by the group's active
+members. A banned member therefore loses it, as they lose the group.
+
+**Reasoning.** One permission table, one test that walks it. A second, events-only
+notion of "group admin" would be a second definition to get wrong.
+
+### 7.8 Counts are recomputed; capacity limits "going" only
+
+**Choice.** `going_count` and `interested_count` are set from approved RSVPs after
+every change — never incremented. Capacity applies to "going". A pending reply
+does not count until approved, and approval checks capacity again.
+
+**Reasoning.** Counts are what capacity is enforced against, so they must equal
+the rows; recomputing guarantees it (the same reasoning as ratings, 6.7). Interest
+costs the organiser nothing, so it is unlimited.
+
+### 7.9 Two Phase 5 and 6 items, done with the reminder machinery
+
+**Choice.**
+- **Listing-expiry reminders:** the reminder sweep also tells sellers a day before
+  a listing expires, once per term. `expiry_reminded_at` is cleared on renewal.
+- **Review prompts:** marking a listing sold to a named buyer invites that buyer to
+  review the seller.
+- **System notices:** both, like event reminders, are notices with no actor.
+  `notify` now accepts that, and takes a push-only text, so the stored in-app row
+  still holds IDs and never content.
+
+**Reasoning.** Both were deferred to this phase on the grounds that they belong
+with the reminder machinery (see the deferred lists of Phases 5 and 6). Push-only text keeps the 3.16 rule —
+notifications store IDs, not content — while letting a reminder say what it is
+about.
+
+---
+
+### Deferred from Phase 7, with the phase that will own it
+
+- **Recurring events** (every Sunday service). Not in the brief; one event per
+  occurrence for now.
+- **Waitlists** for full events. Capacity refuses "going" with a clear 409, and
+  "interested" stays open.
+- **Calendar export (ICS).** Useful, and easy on the `start_local` and `end_local`
+  already returned; not in the brief.
+- **Per-user reminder preferences** beyond turning the `event_reminder` type off,
+  which already works through Phase 3's notification preferences.

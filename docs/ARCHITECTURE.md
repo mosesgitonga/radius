@@ -65,6 +65,7 @@ app/
     groups/          access.py (who can see), permissions.py (who can act), service.py
     marketplace/     access.py (who can see a listing), service.py, views.py, router.py
     services/        access.py, ratings.py (the cached rating), service.py, reviews.py
+    events/          access.py (who sees an event, and its venue), times.py, service.py
     messaging/       service.py, views.py, router.py, socket.py (the `/v1/ws` endpoint)
     notifications/   service.py (devices, preferences, collapsing, push), router.py
   modules/<name>/  one package per feature area
@@ -101,7 +102,10 @@ Three rules keep the monolith from congealing:
    by SQL that sorts by band as well as by the code that labels one. Phase 6
    moves text matching to `core.search` and band sorting to `location.bands`,
    shared by the marketplace and services, and adds `services.ratings.recompute`
-   as the only way a user's rating changes.
+   as the only way a user's rating changes. Phase 7 adds
+   `events.access.EventView.venue_visible` as the only rule for who sees a
+   private event's venue, and `events.times` as the only place local time is
+   interpreted.
 
    One deliberate exception to rule 2: moderation resolves a reported message by
    querying the messaging *models*, because the messaging service imports

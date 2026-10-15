@@ -1517,7 +1517,7 @@ curl -X POST localhost:8000/v1/reviews -H "Authorization: Bearer $B" -H 'Content
 
 ## Phase 7 — Events
 
-**Status:** in progress
+**Status:** complete and verified on 2026-10-15
 
 ### Plan
 
@@ -1602,6 +1602,104 @@ range. `GET /v1/groups/{id}/events` lists a group's events.
 - **Listing-expiry reminders:** a seller is told a day before a listing expires.
 - **Review prompts:** a buyer named on a sale is invited to review the seller.
 
+### Built
+
+**Events.**
+
+- **Fields:** title, description, type (party, church, sports, harambee, clean-up,
+  meetup, other), start and end, venue name and details, cover image, and an
+  optional capacity.
+- **Organiser:** a user, or a group they are an admin of.
+- **Time:** times without an offset are read as `Africa/Nairobi`. Every response
+  gives UTC, local time with its offset, and the zone's name.
+- **Location:** the venue map point becomes a cell and is discarded.
+
+**Visibility.** Public events are discoverable within the events radius. Group-only
+events are for the group's members. Private events are invite-only, by direct
+invitation or a replaceable hashed link.
+
+**Location privacy.** A private event's venue name and details reach only the
+organiser and accepted attendees. Everyone else gets the area label.
+
+**RSVPs.** Going, interested or not going, with an approval mode, capacity on
+"going" and attendee-list visibility (everyone, attendees, organiser). Counts are
+recomputed from the rows.
+
+**Reminders** come from a one-minute worker sweep with a ledger:
+- **When:** a day and an hour before by default, worded in local time.
+- **Once each:** idempotent, never stale, and re-timed when an event moves.
+- **Who:** people who were already going when each reminder fell due.
+
+**Changes and cancellations.** A new time or venue, or cancelling, notifies
+everyone who replied. Deleting an upcoming event cancels it first.
+
+**Browse.** Upcoming public events within the radius, soonest first, by type and
+by `today` or `this_weekend` (computed in local time) or a date range. A group's
+events are listed with the group, and the caller's own events in `/events/mine`.
+
+**Groups.** A new `manage_events` permission sits in the Phase 4 table, and its
+matrix is extended.
+
+**Carried over.**
+- **Listing-expiry reminders** (Phase 5) and **review prompts after a sale**
+  (Phase 6).
+- **System notices:** `notify` now handles notices with no actor, and push-only
+  text, so stored notifications still hold IDs only.
+
+**Dependency.** `tzdata`, approved.
+
+**Schema.** Migration 0012 adds `events`, `event_rsvps`, `event_reminders_sent`,
+and `listings.expiry_reminded_at`.
+
+**Endpoints:** 16 new, 148 in total across 116 paths.
+
+### Verified
+
+| Check | Result |
+| --- | --- |
+| `pytest` | **1037 passed**, about 6 minutes with coverage, **92% coverage**; the events module 79–100% |
+| `ruff` + `mypy` (strict, app and tests) | clean |
+| Migrations | 0011 ↔ 0012 down and up; `alembic check` clean; 0012 applied on boot to the development database |
+| Privacy scan, OpenAPI, session scope, permission matrix | all pass; the matrix now has 20 actions × 4 roles plus the new events row |
+
+**The brief's acceptance criteria** (`tests/test_events.py`):
+
+| Criterion | Test, and live result |
+| --- | --- |
+| Reminders fire at the right local times | The sweep is run at pinned instants around a Saturday 18:00 Nairobi event (15:00 UTC). Nothing at Friday 17:59. At Friday 18:00 exactly, the day-before reminder: "Kamakwa harambee starts tomorrow at 18:00". Nothing on a rerun half an hour later. Nothing at 16:59 on Saturday, then at 17:00 "…starts today at 18:00". Nothing after the start. Only people going are reminded. **Live**, with the real worker container: a private event at 16:23 local had its one-hour reminders sent at 12:23:05 UTC — 15:23 in Nairobi |
+| Private-event venues are hidden from non-attendees | An outsider gets 404. An unanswered invitee, someone who said no, and someone awaiting approval all get `venue_visible: false`, with null venue fields and the venue text absent from the whole response body. Accepting reveals it. The venue never appears in browse, lists or notifications. **Live**: the same, with the invitee seeing only "Blue Valley" until they replied going |
+
+### Defects found, all fixed
+
+1. **A late reply got a pointless reminder.** Someone replying three hours before
+   was still inside the day-before reminder's window, and got "starts today at
+   18:00" a minute after reading exactly that. Reminders now go only to people
+   already going when each fell due (decision 7.5).
+2. **The time-zone database was missing on Windows** — resolved with `tzdata`,
+   after asking.
+3. **Autogenerate duplicated every enum constraint** (fourteen this time), removed
+   as before.
+
+### Deferred
+
+With reasoning in `docs/DECISIONS.md`: recurring events, waitlists, calendar
+(ICS) export, and finer reminder preferences — none in the brief.
+
+### How to try it
+
+```bash
+docker compose up --build   # migration 0012 runs on boot; the worker sweeps every minute
+
+curl -X POST localhost:8000/v1/events -H "Authorization: Bearer $A" -H 'Content-Type: application/json' -d '{
+  "title":"Estate clean-up","event_type":"clean_up",
+  "start_at":"2026-10-24T08:00:00","end_at":"2026-10-24T12:00:00",
+  "venue":{"latitude":-0.42,"longitude":36.95},"venue_name":"Kamakwa primary","visibility":"public"}'
+curl "localhost:8000/v1/events?when=this_weekend" -H "Authorization: Bearer $B"
+curl -X PUT localhost:8000/v1/events/$EID/rsvp -H "Authorization: Bearer $B" \
+  -H 'Content-Type: application/json' -d '{"response":"going"}'
+```
+
 ### Open questions
 
-_None blocking. HEIC from Phase 2 is still open._
+- **HEIC support**, carried from Phase 2.
+- **Development `SECRET_KEY`** (minor), carried from Phase 3.
