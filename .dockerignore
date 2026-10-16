@@ -18,3 +18,4 @@ redis-data/
 *.md
 backups/
 secrets/
+mobile/

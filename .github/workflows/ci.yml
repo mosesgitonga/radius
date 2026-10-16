@@ -161,3 +161,29 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  mobile:
+    name: Mobile app analyses and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      # The SDK straight from Flutter's repository, at the version the app is
+      # developed on, so CI and the development machine agree.
+      - name: Install Flutter 3.47.7
+        working-directory: ${{ runner.temp }}
+        run: |
+          git clone --depth 1 --branch 3.47.7 https://github.com/flutter/flutter.git
+          echo "${{ runner.temp }}/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Install packages
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
