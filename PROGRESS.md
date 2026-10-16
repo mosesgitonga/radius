@@ -1942,3 +1942,69 @@ curl localhost:8000/v1/me/standing -H "Authorization: Bearer $USER"
   controller before launch. It is a legal filing, not software.
 - **HEIC support**, carried from Phase 2.
 - **Development `SECRET_KEY`** (minor), carried from Phase 3.
+
+---
+
+## Mobile app — MVP
+
+**Status:** in progress
+
+Phases 9 and 10 (payments, then expansion) are skipped for now, by decision on
+2026-10-16: the next goal is an MVP people can use. The app is Flutter, as the brief
+specifies, and lives in this repository under `mobile/` (`app/` is the backend's
+Python package). The look was agreed as clickable mockups first: the "Red soil"
+palette — primary `#C4502E`, glow `#F0805C`, ink `#1C2333`, cream `#FFF6EE`, trust
+`#0E7C70` — with Bricolage Grotesque headings and Figtree text.
+
+Built in slices, each runnable on an Android emulator and a phone against the real
+backend, and each ending like a phase: summary, then wait.
+
+### Plan
+
+**Toolchain.** Flutter 3.47.7 (Dart 3.13.5), JDK 17 and the Android command-line SDK
+on the development machine, user-level only. Android first; iOS needs a Mac.
+
+**Packages (approved).**
+- **State and navigation:** `flutter_riverpod`, `go_router`.
+- **Network:** `dio`, `web_socket_channel`.
+- **Storage:** `flutter_secure_storage`, for the refresh token in the Android keystore.
+- **Models:** `freezed`, `json_serializable`, `build_runner` (development only).
+- **Media and device:** `cached_network_image`, `image_picker`, `geolocator`.
+- **Utilities:** `intl` (Nairobi time), `uuid` (idempotency keys).
+- **Fonts:** bundled as assets, never downloaded at runtime, because data is
+  expensive.
+
+Maps (`flutter_map`) and push (`firebase_messaging`) wait for their slices.
+
+**Structure.**
+- `mobile/lib/core/`: config, API client, auth state, theme, routing, errors.
+- `mobile/lib/features/<feature>/`: data (API calls and models), state, screens.
+
+**Rules the app keeps, matching the backend's:**
+- The app never sends or stores anything the API doesn't need.
+- Coordinates go up only when setting home or exploring, and are never stored on the
+  phone.
+- Distances are shown only as the API's bands.
+- Every create request carries an `Idempotency-Key`, so retries on a bad connection
+  are safe.
+
+**Slices.**
+1. **Scaffold and sign-in:** project, theme, API client with token refresh, phone →
+   code → sign-up with consents → set home area (by "use my location"; the map
+   picker comes with maps), signed-in shell with the bottom bar.
+2. **Feed:** posts with photos, comments, reactions, reporting, a new post.
+3. **Chats:** list, requests, conversation, realtime over `/v1/ws`. Then push.
+4. **Marketplace:** browse, search, listing, sell, ask the seller.
+5. **Services and reviews, groups, events.**
+6. **Me:** profile, standing, settings, blocks, data export, deletion.
+
+**Tests.** Widget tests for each screen's states (loading, empty, error, content);
+unit tests for the API client's refresh and retry; `flutter analyze` clean. A CI job
+is added in slice 1.
+
+### Open questions
+
+- **Map tiles** for the home-area picker (slice 1 uses "use my location" only):
+  OpenStreetMap's public tiles are not for production use, so a tile provider is
+  needed before launch.
+- **A Firebase project** for push (slice 3).
