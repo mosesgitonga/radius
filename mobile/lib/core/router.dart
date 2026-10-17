@@ -8,6 +8,9 @@ import '../features/auth/screens/home_area_screen.dart';
 import '../features/auth/screens/phone_screen.dart';
 import '../features/auth/screens/signup_screen.dart';
 import '../features/auth/screens/status_screens.dart';
+import '../features/feed/screens/compose_screen.dart';
+import '../features/feed/screens/feed_screen.dart';
+import '../features/feed/screens/post_screen.dart';
 import '../features/me/me_screen.dart';
 import '../features/shell/shell_screen.dart';
 import '../features/shell/tab_placeholder.dart';
@@ -25,6 +28,8 @@ class Routes {
   static const market = '/market';
   static const chats = '/chats';
   static const me = '/me';
+  static const compose = '/compose';
+  static String post(String id) => '/feed/post/$id';
 
   static const _signedOut = {signIn, code, signUp};
   static const _gates = {restoring, offline, signIn, code, signUp, homeArea};
@@ -59,16 +64,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.code, builder: (_, _) => const CodeScreen()),
       GoRoute(path: Routes.signUp, builder: (_, _) => const SignupScreen()),
       GoRoute(path: Routes.homeArea, builder: (_, _) => const HomeAreaScreen()),
+      GoRoute(path: Routes.compose, builder: (_, _) => const ComposeScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => ShellScreen(shell: shell),
         branches: [
           StatefulShellBranch(routes: [
             GoRoute(
               path: Routes.feed,
-              builder: (_, _) => const TabPlaceholder(
-                title: 'Home',
-                message: 'The neighbourhood feed arrives in the next build.',
-              ),
+              builder: (_, _) => const FeedScreen(),
+              routes: [
+                GoRoute(
+                  path: 'post/:id',
+                  builder: (_, state) => PostScreen(postId: state.pathParameters['id']!),
+                ),
+              ],
             ),
           ]),
           StatefulShellBranch(routes: [

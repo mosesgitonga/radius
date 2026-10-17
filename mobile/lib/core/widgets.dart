@@ -125,12 +125,16 @@ class NeighbourBadge extends StatelessWidget {
         children: [
           const Icon(Icons.shield_outlined, size: 13, color: Palette.trustInk),
           const SizedBox(width: 4),
-          Text(
-            long ? 'Verified neighbour' : 'Neighbour',
-            style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(color: Palette.trustInk, fontWeight: FontWeight.w600),
+          Flexible(
+            child: Text(
+              long ? 'Verified neighbour' : 'Neighbour',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: Palette.trustInk, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),

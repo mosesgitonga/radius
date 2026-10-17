@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/auth/auth_repository.dart';
+import '../features/feed/feed_repository.dart';
 import 'api/api_client.dart';
 import 'api/token_store.dart';
 
@@ -14,4 +15,8 @@ final apiClientProvider = Provider<ApiClient>(
 
 final authRepositoryProvider = Provider<AuthRepository>(
   (ref) => AuthRepository(ref.watch(apiClientProvider)),
+);
+
+final feedRepositoryProvider = Provider<FeedRepository>(
+  (ref) => FeedRepository(ref.watch(apiClientProvider)),
 );
