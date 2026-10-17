@@ -8,7 +8,9 @@ import '../../../core/router.dart';
 import '../../../core/theme.dart';
 import '../../../core/widgets.dart';
 import '../../auth/auth_controller.dart';
+import '../../chats/start_chat.dart';
 import '../feed_controller.dart';
+import '../feed_models.dart';
 import '../widgets/post_card.dart';
 import '../widgets/report_sheet.dart';
 
@@ -48,7 +50,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     }
   }
 
-  void _postMenu(String postId, bool mine) {
+  void _postMenu(Post post, bool mine) {
+    final postId = post.id;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Palette.cream,
@@ -56,6 +59,15 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (!mine)
+              ListTile(
+                leading: const Icon(Icons.chat_bubble_outline_rounded),
+                title: Text('Message ${post.author.displayName}'),
+                onTap: () {
+                  Navigator.of(sheet).pop();
+                  openDirectChat(context, ref, post.author.id);
+                },
+              ),
             if (!mine)
               ListTile(
                 leading: const Icon(Icons.flag_outlined),
@@ -168,7 +180,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                         mine: mine,
                         onHelpful: () => _toggleHelpful(post.id),
                         onOpen: () => context.go(Routes.post(post.id)),
-                        onMore: () => _postMenu(post.id, mine),
+                        onMore: () => _postMenu(post, mine),
                       ),
                     );
                   },

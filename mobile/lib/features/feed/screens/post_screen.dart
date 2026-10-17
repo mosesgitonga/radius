@@ -6,6 +6,7 @@ import '../../../core/providers.dart';
 import '../../../core/theme.dart';
 import '../../../core/widgets.dart';
 import '../../auth/auth_controller.dart';
+import '../../chats/start_chat.dart';
 import '../feed_controller.dart';
 import '../feed_models.dart';
 import '../widgets/post_card.dart';
@@ -134,6 +135,36 @@ class _PostScreenState extends ConsumerState<PostScreen> {
     );
   }
 
+  void _postMenu(Post post) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Palette.cream,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.chat_bubble_outline_rounded),
+              title: Text('Message ${post.author.displayName}'),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                openDirectChat(context, ref, post.author.id);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.flag_outlined),
+              title: const Text('Report post'),
+              onTap: () {
+                Navigator.of(sheet).pop();
+                _report('post', post.id, 'post');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _toast(String message) {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
@@ -169,7 +200,7 @@ class _PostScreenState extends ConsumerState<PostScreen> {
                           post: post,
                           mine: post.author.id == myId,
                           onHelpful: _toggleHelpful,
-                          onMore: post.author.id == myId ? null : () => _report('post', post.id, 'post'),
+                          onMore: post.author.id == myId ? null : () => _postMenu(post),
                         ),
                         const SizedBox(height: 16),
                         Text(

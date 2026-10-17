@@ -75,8 +75,17 @@ class ApiClient {
   Future<dynamic> get(String path, {Map<String, dynamic>? query}) =>
       _request('GET', path, query: query);
 
-  Future<dynamic> post(String path, {Object? body, bool idempotent = false, bool auth = true}) =>
-      _request('POST', path, body: body, idempotent: idempotent, auth: auth);
+  /// [idempotencyKey] is for a create the person may retry by hand, such as a
+  /// message that failed to send: the retry must carry the first attempt's key.
+  Future<dynamic> post(
+    String path, {
+    Object? body,
+    bool idempotent = false,
+    bool auth = true,
+    String? idempotencyKey,
+  }) =>
+      _request('POST', path,
+          body: body, idempotent: idempotent, auth: auth, idempotencyKey: idempotencyKey);
 
   Future<dynamic> put(String path, {Object? body}) => _request('PUT', path, body: body);
 
@@ -88,6 +97,13 @@ class ApiClient {
   /// there is none, or it is no longer good.
   Future<bool> resume() => _refresh();
 
+  /// The current access token, for the realtime socket.
+  String? get accessToken => _accessToken;
+
+  /// A newly issued access token, for a socket whose token is about to expire.
+  /// Null when the session is over.
+  Future<String?> renewAccessToken() async => await _refresh() ? _accessToken : null;
+
   Future<dynamic> _request(
     String method,
     String path, {
@@ -95,10 +111,11 @@ class ApiClient {
     Map<String, dynamic>? query,
     bool idempotent = false,
     bool auth = true,
+    String? idempotencyKey,
   }) async {
     // One key per logical request, reused on the retry after a refresh: the
     // server must see the retry as the same request.
-    final idempotencyKey = idempotent ? const Uuid().v4() : null;
+    idempotencyKey ??= idempotent ? const Uuid().v4() : null;
 
     Future<Response<dynamic>> send() => _send(method, path,
         body: body, query: query, idempotencyKey: idempotencyKey, auth: auth);

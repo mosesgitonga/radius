@@ -44,7 +44,8 @@ class FeedState {
   }
 }
 
-final feedControllerProvider = NotifierProvider<FeedController, FeedState>(FeedController.new);
+/// Discarded with the signed-in shell, so the next account starts afresh.
+final feedControllerProvider = NotifierProvider.autoDispose<FeedController, FeedState>(FeedController.new);
 
 /// The neighbourhood feed: first page, more on scroll, pull to refresh, and
 /// local updates when the person reacts, comments or posts.

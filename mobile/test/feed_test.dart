@@ -6,11 +6,13 @@ import 'package:myradius/core/api/api_client.dart';
 import 'package:myradius/core/api/api_exception.dart';
 import 'package:myradius/core/api/token_store.dart';
 import 'package:myradius/core/providers.dart';
+import 'package:myradius/core/realtime.dart';
 import 'package:myradius/features/feed/feed_controller.dart';
 import 'package:myradius/features/feed/feed_models.dart';
 import 'package:myradius/main.dart';
 
 import 'support/fake_adapter.dart';
+import 'support/fake_socket.dart';
 
 Map<String, dynamic> postJson(
   String id, {
@@ -191,6 +193,11 @@ void main() {
         overrides: [
           tokenStoreProvider.overrideWithValue(store),
           apiClientProvider.overrideWithValue(api),
+          realtimeProvider.overrideWith((ref) {
+            final client = RealtimeClient(api, connect: FakeSockets().connect, uri: Uri.parse('ws://api.test/v1/ws'));
+            ref.onDispose(client.dispose);
+            return client;
+          }),
         ],
         child: const MyRadiusApp(),
       ));

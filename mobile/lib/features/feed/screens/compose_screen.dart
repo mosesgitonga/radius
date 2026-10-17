@@ -66,11 +66,12 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       _error = null;
     });
     final repo = ref.read(feedRepositoryProvider);
+    final uploader = ref.read(mediaUploaderProvider);
     try {
       final mediaIds = <String>[];
       for (var i = 0; i < _photos.length; i++) {
         setState(() => _progress = 'Uploading photo ${i + 1} of ${_photos.length}…');
-        mediaIds.add(await repo.uploadPhoto(_photos[i]));
+        mediaIds.add(await uploader.uploadPhoto(_photos[i], purpose: 'post'));
       }
       setState(() => _progress = 'Posting…');
       final (post, reach) = await repo.createPost(body: body, category: _category, mediaIds: mediaIds);

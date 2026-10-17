@@ -8,6 +8,8 @@ import '../features/auth/screens/home_area_screen.dart';
 import '../features/auth/screens/phone_screen.dart';
 import '../features/auth/screens/signup_screen.dart';
 import '../features/auth/screens/status_screens.dart';
+import '../features/chats/screens/chats_screen.dart';
+import '../features/chats/screens/conversation_screen.dart';
 import '../features/feed/screens/compose_screen.dart';
 import '../features/feed/screens/feed_screen.dart';
 import '../features/feed/screens/post_screen.dart';
@@ -30,6 +32,7 @@ class Routes {
   static const me = '/me';
   static const compose = '/compose';
   static String post(String id) => '/feed/post/$id';
+  static String conversation(String id) => '/chats/c/$id';
 
   static const _signedOut = {signIn, code, signUp};
   static const _gates = {restoring, offline, signIn, code, signUp, homeArea};
@@ -66,7 +69,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.homeArea, builder: (_, _) => const HomeAreaScreen()),
       GoRoute(path: Routes.compose, builder: (_, _) => const ComposeScreen()),
       StatefulShellRoute.indexedStack(
-        builder: (context, state, shell) => ShellScreen(shell: shell),
+        builder: (context, state, shell) => ShellScreen(
+          shell: shell,
+          showTabs: !state.uri.path.startsWith('/chats/c/'),
+        ),
         branches: [
           StatefulShellBranch(routes: [
             GoRoute(
@@ -92,10 +98,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [
             GoRoute(
               path: Routes.chats,
-              builder: (_, _) => const TabPlaceholder(
-                title: 'Chats',
-                message: 'Messages arrive in a later build.',
-              ),
+              builder: (_, _) => const ChatsScreen(),
+              routes: [
+                GoRoute(
+                  path: 'c/:id',
+                  builder: (_, state) => ConversationScreen(conversationId: state.pathParameters['id']!),
+                ),
+              ],
             ),
           ]),
           StatefulShellBranch(routes: [
