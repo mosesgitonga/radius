@@ -2091,6 +2091,49 @@ size that fills the screen, not always the 720-pixel one.
 had been pushed over the tab shell and was rebuilt when the keyboard opened; it is now
 a route inside the Home tab.
 
+### Slice 3 — chats: plan
+
+Live messages over the socket. **Push waits for a Firebase project** and the Firebase
+packages; until then a message reaches a closed app only when it is next opened.
+
+- **Realtime connection** (`/v1/ws`, using `web_socket_channel`, already approved):
+  - **Sign-in:** the access token goes in the `Authorization` header, never the URL.
+    A fresh one is sent as an `auth` frame before the old one expires.
+  - **Staying up:** a ping every heartbeat. It reconnects with backoff, and when the
+    app comes back to the foreground. A 4401 close renews the sign-in first; a 4403
+    (banned) stops.
+  - **Events only ring the doorbell:** a `message.created` event makes the app fetch
+    the messages after the last sequence number it holds. A missed event and a
+    reconnect therefore go through the same code.
+- **Chats tab:**
+  - **Chats:** most recent first, showing the name (or group title), the last
+    message, the time and the unread count. The tab's icon shows the total unread.
+  - **Requests:** message requests and group invitations, each with Accept and
+    Decline. A request also offers "Block and report".
+- **Conversation:**
+  - **Messages:** bubbles (mine on the right), day separators, and sender names in
+    groups. System messages are written out from the member list ("Otieno joined").
+  - **Paging:** scrolling up loads earlier messages (`before_seq`).
+  - **Read state:** reading marks the conversation read up to the last message. In
+    a direct chat, my last message says "Read" once the other person has seen it.
+  - **Sending:** text, and one photo per message (uploaded as in the feed, purpose
+    `message`). A message shows as sending at once; on a failure it offers retry,
+    with the same idempotency key.
+  - **Long-press:** delete my message for everyone, or report someone else's.
+  - **Notices:** the safety notice, when the conversation has one, stays at the top.
+  - **Requests:** a sent request shows "Waiting for a reply" once its one message is
+    sent. A received one shows Accept, Decline, and Block and report instead of the
+    message box; replying also accepts.
+  - **Menu:** mute and unmute; block; leave a group.
+- **Starting a chat:** "Message" on someone else's post (the post menu and the post
+  page) opens the direct conversation.
+- **Not in this slice:**
+  - **Online and typing:** the mockups show both, but the API exposes neither.
+    Presence is kept only to decide who gets a push, and there is no typing signal.
+  - **Creating group chats** and managing members: group chats arrive with
+    neighbourhood groups.
+  - **Listing and service context cards:** with the marketplace and services slices.
+
 ### Open questions
 
 - **Map tiles** for the home-area picker (slice 1 uses "use my location" only):
