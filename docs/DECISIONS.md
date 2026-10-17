@@ -1971,3 +1971,44 @@ relationship is.
   against reinstalls.
 - **Managed PostgreSQL with point-in-time recovery**, when one machine is outgrown
   (`docs/DEPLOYMENT.md` §8).
+
+---
+
+## Mobile app — MVP
+
+### M.1 Flutter, in `mobile/`, with Riverpod and go_router
+
+**Choice.** One Flutter app for Android and iOS, in this repository under `mobile/`
+(`app/` is the backend package). State is Riverpod notifiers; navigation is
+go_router, with one stateful branch per tab so each tab keeps its own history.
+
+**Reasoning.** One codebase for both platforms, and one repository, so an API change
+and the app change that needs it land in the same commit.
+
+### M.2 The app keeps no copy of messages on the phone
+
+**Choice.** Conversations and messages are fetched when they are opened, and held in
+memory only. Nothing about them is written to disk.
+
+**Reasoning.** A shared or lost phone then gives away nothing but what is on screen,
+and there is no local database to migrate, encrypt or wipe at sign-out. The cost is
+a fetch on each open, which the API's paging keeps small. An offline cache can come
+later, against `GET /v1/sync`, if people ask for it.
+
+### M.3 The socket lives with the signed-in shell, and only rings the doorbell
+
+**Choice.** The tab shell opens the realtime socket when it appears and closes it
+when it goes (at sign-out). Events make the app fetch: messages after the last
+sequence number held, or the one conversation that changed. A reconnect refetches
+the inbox and catches up the open conversation.
+
+**Reasoning.** It is the server's own design (3.2): a missed event and a reconnect
+are the same code path, so no event is load-bearing.
+
+### M.4 Per-account state is discarded with the shell
+
+**Choice.** The feed and chat controllers are disposed when the signed-in shell
+goes.
+
+**Reasoning.** Otherwise the next account to sign in on the same phone would briefly
+see the previous one's feed and inbox.

@@ -2134,6 +2134,52 @@ packages; until then a message reaches a closed app only when it is next opened.
     neighbourhood groups.
   - **Listing and service context cards:** with the marketplace and services slices.
 
+### Slice 3 — chats: built and verified (2026-10-17)
+
+**Built,** as planned.
+- `core/realtime.dart` holds the socket client.
+- `core/api/media_uploader.dart` holds the photo upload, moved out of the feed so that
+  posts and messages share it.
+- `features/chats/` has the models, the repository, the inbox and conversation
+  controllers, and the two screens.
+- The Chats tab shows the unread count. The tab bar is hidden inside a conversation,
+  where the message box needs the room.
+- Decisions M.1–M.4 are recorded for the app; DATA_MAP covers chat photos.
+
+**Verified.**
+- **Tests:** `flutter test` gives 45 passed (11 new); `flutter analyze` is clean.
+  - **Socket:** signs in by header, pings, and renews its token a minute before it
+    expires. It reconnects after a drop, and after a 4401 renews the sign-in first.
+    It stops for good after a 4403.
+  - **Inbox:** shows the unread count. A `message.created` event makes the open
+    conversation fetch from the last sequence number held.
+  - **Sending:** a failed send stays on screen, and its retry carries the same
+    idempotency key.
+  - **Requests:** a received request has no message box until it is accepted.
+- **Live**, on the emulator against the development backend, with a script playing a
+  second account:
+  - **Request:** the neighbour's first message arrived under Requests · 1. Accepting
+    opened the conversation.
+  - **Live messages:** my reply was sent. When the neighbour read it, it showed
+    "Read"; their answer appeared without a refresh.
+  - **Inbox:** back on the list, a new message moved the conversation up with its
+    unread count, and the badge appeared on the Chats tab.
+  - **Reconnect:** the API container was restarted and a message sent while it was
+    down. The app reconnected by itself and showed it.
+  - **Photo message:** uploaded, processed in 0.5 s, and sent. Deleting it for
+    everyone turned it into "Message deleted".
+  - **Message from a post:** "Message Wanjiku M." on her post opened the existing
+    conversation.
+
+**Fixed along the way:**
+- **Stale state after sign-out:** the feed and inbox outlived a sign-out, so the next
+  account would have seen them. They are now discarded with the signed-in shell.
+- **Accepting a request** left the Chats tab showing Requests. It now returns to the
+  inbox.
+
+**Not yet:** push (needs Firebase), online status and typing (not in the API),
+creating group chats, and listing or service cards in a conversation.
+
 ### Open questions
 
 - **Map tiles** for the home-area picker (slice 1 uses "use my location" only):
