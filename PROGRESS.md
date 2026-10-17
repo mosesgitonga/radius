@@ -2037,6 +2037,29 @@ is added in slice 1.
 - the launcher icon is still Flutter's default;
 - the sign-up screen has no way back to change the number.
 
+### Slice 2 — the neighbourhood feed: plan
+
+- **Feed:** `GET /v1/feed`, newest first, paged with the cursor. Pull to refresh;
+  more loads as you scroll. The header shows the area label and the radius
+  ("Within 3 km").
+- **Post card:**
+  - **Author:** name and avatar initials, plus the neighbour badge.
+  - **Context:** area label, distance band ("1–3 km", never a number) and time.
+  - **Content:** category, text, and photos (the 720-pixel variant).
+  - **Actions:** "helpful" count and comment count.
+  - **Held posts:** a post waiting for review says so, to its author only.
+- **Post page:** the post, its comments (paged), writing a comment, reacting, and
+  reporting (with a reason) from a menu. Reports never say whether anything was
+  hidden.
+- **New post:** a category, text (2,000 characters), and up to 6 photos.
+  - **Photo upload:** each photo is uploaded straight to storage by the signed link
+    the API issues, confirmed, and waited on until processed. The post is created
+    only from processed photos, with an idempotency key.
+  - **Reach:** the response's estimate is shown once the post is up ("Visible to
+    about 340 neighbours").
+- **Dev setup:** storage links are signed for `10.0.2.2:8333` in the local `.env`, so
+  the emulator can load and upload images.
+
 ### Open questions
 
 - **Map tiles** for the home-area picker (slice 1 uses "use my location" only):
