@@ -2002,6 +2002,41 @@ Maps (`flutter_map`) and push (`firebase_messaging`) wait for their slices.
 unit tests for the API client's refresh and retry; `flutter analyze` clean. A CI job
 is added in slice 1.
 
+### Slice 1 — scaffold and sign-in: built and verified (2026-10-17)
+
+**Built.**
+- **Project and look:** the Flutter project in `mobile/` with application ID
+  `ke.myradius`, the Red soil theme, and bundled fonts.
+- **API client:** renews an expired sign-in once (shared by concurrent requests),
+  retries, and keeps the same idempotency key on the retry. It turns the error
+  envelope into the server's message.
+- **Secure storage:** the refresh token and installation ID.
+- **The sign-in flow:** phone, code (submits itself, with a resend countdown),
+  sign-up with separate consents, home area from location, then the four-tab shell.
+  Me shows the account and signs out.
+- **CI:** a job runs `flutter analyze` and `flutter test`.
+
+**Verified.**
+- **Tests:** `flutter test` gives 26 passed; `flutter analyze` is clean. The tests
+  caught one layout bug: the resend row overflowed a phone-width screen, and it now
+  wraps.
+- **Live**, on an Android 36 emulator against the development backend:
+  - a code was requested and the server answered with the masked number;
+  - the code from the API log was entered and a new account created (`201`);
+  - the GPS was set to Kamakwa, and the home area came back as "Nyeri Town" — the
+    k-anonymity fallback on a sparse development database;
+  - after a force-stop and relaunch, the session was restored by refresh (`200`)
+    straight to Home.
+
+**Setup fixes along the way.**
+- **NDK:** Android's new command-line SDK no longer installs the NDK when Gradle
+  asks, so NDK 28.2 was installed by hand.
+- **Emulator window:** sized to fit a 1536×816 screen.
+
+**Small things for later slices:**
+- the launcher icon is still Flutter's default;
+- the sign-up screen has no way back to change the number.
+
 ### Open questions
 
 - **Map tiles** for the home-area picker (slice 1 uses "use my location" only):
