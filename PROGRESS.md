@@ -2180,9 +2180,50 @@ packages; until then a message reaches a closed app only when it is next opened.
 **Not yet:** push (needs Firebase), online status and typing (not in the API),
 creating group chats, and listing or service cards in a conversation.
 
+### Slice 4 — services and jobs: plan
+
+Reached from Home, as in the mockups: an "Around you" row under the feed header
+leads to **Services & jobs**.
+- **Browse** (`GET /v1/services`):
+  - **Tabs:** Offering, Looking for, and Jobs.
+  - **Filters:** a search box (`q`, waits for typing to pause) and category chips.
+    More results load on scroll.
+  - **Offering cards:** the provider's name and badge, what they do, rating ("★ 4.8
+    (12)" or "New"), area and distance band, how far they travel, and their rate.
+  - **Looking for cards:** area, band and time, the title, a short description, the
+    budget, and "I can help".
+  - **Job cards:** pay ("KES 15,000–18,000 / month"), job type and the description.
+    The "never pay to get a job" note sits above the list.
+- **Post page:**
+  - **Contents:** the provider's card, the service details, and the author's
+    reviews with their average and count.
+  - **Contact:** "Message …" or "I can help" opens the conversation about the post
+    (`POST /services/{id}/chat`). A job shows its safety notice before contact.
+  - **Reviews:** someone who has talked with the author about this post can review
+    it (1–5 stars, optional text); the server decides who may. On my own posts I can
+    reply to reviews. Posts and reviews can be reported.
+- **My posts** (`/services/mine`): open, closed and held posts. Each can be edited,
+  closed or reopened, and deleted. A held post says which phrases held it.
+- **New post:** choose a kind, then a category and that kind's own fields:
+  - offering: rate, availability, travel distance;
+  - looking for: budget;
+  - job: type, pay range and pay period.
+
+  The server's refusals are shown as it words them: a duplicate offering, or a new
+  account trying to post a job. A held job post says so at once.
+- **In a conversation about a post:** a card at the top names the post and opens it.
+  The job safety notice is already shown (slice 3).
+- **Categories:** the server's list is configurable, but no endpoint returns it. The
+  app carries labels for the seeded list and shows any other key as plain words.
+  This needs a decision; see the open questions.
+
 ### Open questions
 
 - **Map tiles** for the home-area picker (slice 1 uses "use my location" only):
   OpenStreetMap's public tiles are not for production use, so a tile provider is
   needed before launch.
 - **A Firebase project** for push (slice 3).
+- **Category lists** for services (and later listings) are configurable on the
+  server, but the app can only know them by carrying a copy. A small `GET` endpoint
+  listing them with display names would let a change reach the app without a
+  release. It is not built; the app uses the seeded list until you decide.
