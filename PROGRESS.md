@@ -2060,6 +2060,37 @@ is added in slice 1.
 - **Dev setup:** storage links are signed for `10.0.2.2:8333` in the local `.env`, so
   the emulator can load and upload images.
 
+### Slice 2 — the neighbourhood feed: built and verified (2026-10-17)
+
+**Built,** as planned, with one change: a photo is loaded at the smallest served
+size that fills the screen, not always the 720-pixel one.
+- `features/feed/`: models, a repository (feed, post, comments, reactions, reports,
+  posts, photo upload), the feed controller, and three screens (feed, post, new
+  post).
+- **Helpful** shows at once and is put back if the server refuses.
+- **Opening a post** stays inside the Home tab, so the back button returns to the
+  feed where it was.
+
+**Verified.**
+- **Tests:** `flutter test` gives 34 passed (8 new: models, the controller's paging and
+  helpful rollback, and the feed screen against a scripted API); `flutter analyze` is
+  clean. The screen test caught an overflow: the neighbour badge and the
+  helpful/comments row did not fit a narrow card, so both now shrink or wrap.
+- **Live**, on the emulator against the development backend, with a second test
+  account a few hundred metres away:
+  - the feed showed the neighbour's posts with "under 1 km", and an older post's photo
+    loaded from storage;
+  - helpful toggled on and off;
+  - on the post page, another account's comment showed its area, and a new comment
+    was saved (`201`) and counted;
+  - a new Alert post with a photo from the gallery was uploaded and confirmed
+    (`201`, `202`). The worker processed it into 3 sizes in 1.9 s, the post was saved
+    (`201`), and it appeared at the top of the feed with its photo.
+
+**Defect found and fixed:** tapping the comment box closed the post page. The page
+had been pushed over the tab shell and was rebuilt when the keyboard opened; it is now
+a route inside the Home tab.
+
 ### Open questions
 
 - **Map tiles** for the home-area picker (slice 1 uses "use my location" only):

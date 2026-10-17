@@ -647,6 +647,20 @@ The nightly `run_retention` job now also:
 
 ---
 
+## The mobile app — what stays on the phone
+
+| What | Where | Why | Kept until |
+| --- | --- | --- | --- |
+| Refresh token | Keychain / Android Keystore-backed secure storage | Staying signed in | Sign-out, or the server refusing it |
+| Access token | Memory only | Calling the API | The app closes, or it expires (15 min) |
+| Installation ID | Secure storage | Sent at sign-in so a person can recognise their devices, and so a ban can reach a device (stored server-side only as a keyed hash) | The app is uninstalled |
+| Feed photos | The image cache in the app's cache folder | Not downloading the same image twice | Evicted by size and age, or cleared by the system. **Not yet cleared at sign-out** — to do before shared-phone use is likely |
+| Photos chosen for a post | Resized copies in the app's cache folder, made by the picker | Uploading | Cleared by the system. Location data is stripped server-side whatever the phone sends |
+
+The app keeps no copy of the feed, messages or the account's details on disk.
+
+---
+
 ## Data subject rights — implementation status
 
 | Right | Status | Where |
