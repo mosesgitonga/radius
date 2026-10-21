@@ -16,6 +16,7 @@ class Author {
 
   String get initials => displayName
       .split(RegExp(r'\s+'))
+      .map((part) => part.replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), ''))
       .where((part) => part.isNotEmpty)
       .take(2)
       .map((part) => part[0].toUpperCase())

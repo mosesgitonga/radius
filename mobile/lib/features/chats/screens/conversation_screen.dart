@@ -6,10 +6,12 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api/api_exception.dart';
+import '../../../core/providers.dart';
 import '../../../core/router.dart';
 import '../../../core/theme.dart';
 import '../../auth/auth_controller.dart';
 import '../../feed/widgets/report_sheet.dart';
+import '../../services/service_models.dart';
 import '../chat_models.dart';
 import '../conversation_controller.dart';
 import 'chats_screen.dart';
@@ -274,6 +276,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 ],
               ),
             ),
+          if (conversation?.servicePostId != null) _AboutService(postId: conversation!.servicePostId!),
           Expanded(child: _messages(state, myId)),
           if (conversation != null) _bottom(conversation, state, myId),
         ],
@@ -307,7 +310,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           child: Text(
             other == null
                 ? 'No messages yet.'
-                : 'Say hello to $other. Until they reply, you can send one message.',
+                : 'Say hello to ${other.endsWith('.') ? other : '$other.'} '
+                    'Until they reply, you can send one message.',
             textAlign: TextAlign.center,
             style: text.bodyMedium?.copyWith(color: Palette.muted),
           ),
@@ -455,6 +459,81 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               icon: const Icon(Icons.arrow_forward_rounded, color: Palette.white),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The post a conversation is about: its title and price, a tap away.
+class _AboutService extends ConsumerStatefulWidget {
+  const _AboutService({required this.postId});
+
+  final String postId;
+
+  @override
+  ConsumerState<_AboutService> createState() => _AboutServiceState();
+}
+
+class _AboutServiceState extends ConsumerState<_AboutService> {
+  ServicePost? _post;
+  bool _gone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.read(serviceRepositoryProvider).post(widget.postId).then(
+      (post) {
+        if (mounted) setState(() => _post = post);
+      },
+      onError: (Object _) {
+        if (mounted) setState(() => _gone = true);
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final post = _post;
+    final detail = post == null
+        ? (_gone ? 'This post is no longer available' : 'Loading…')
+        : [
+            post.categoryName,
+            ?switch (post.kind) {
+              ServiceKind.offering => post.rateInfo,
+              ServiceKind.seeking => post.budgetInfo,
+              ServiceKind.hiring => post.pay,
+            },
+            if (!post.isOpen) 'Closed',
+          ].join(' · ');
+    return Material(
+      color: Palette.white,
+      child: InkWell(
+        onTap: post == null ? null : () => context.go(Routes.service(post.id), extra: DateTime.now()),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: Palette.cream, borderRadius: BorderRadius.circular(12)),
+            child: Row(
+              children: [
+                const Icon(Icons.handyman_outlined, color: Palette.inkSoft),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(post?.title ?? 'About a service post',
+                          maxLines: 1, overflow: TextOverflow.ellipsis, style: text.titleSmall?.copyWith(fontSize: 13.5)),
+                      Text(detail, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodySmall?.copyWith(fontSize: 12.5)),
+                    ],
+                  ),
+                ),
+                if (post != null) const Icon(Icons.chevron_right_rounded, color: Palette.muted),
+              ],
+            ),
+          ),
         ),
       ),
     );

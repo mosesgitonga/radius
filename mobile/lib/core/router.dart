@@ -14,6 +14,11 @@ import '../features/feed/screens/compose_screen.dart';
 import '../features/feed/screens/feed_screen.dart';
 import '../features/feed/screens/post_screen.dart';
 import '../features/me/me_screen.dart';
+import '../features/services/screens/my_services_screen.dart';
+import '../features/services/screens/service_compose_screen.dart';
+import '../features/services/screens/service_post_screen.dart';
+import '../features/services/screens/services_screen.dart';
+import '../features/services/service_models.dart';
 import '../features/shell/shell_screen.dart';
 import '../features/shell/tab_placeholder.dart';
 
@@ -33,6 +38,11 @@ class Routes {
   static const compose = '/compose';
   static String post(String id) => '/feed/post/$id';
   static String conversation(String id) => '/chats/c/$id';
+  static const services = '/feed/services';
+  static const myServices = '/feed/services/mine';
+  static String service(String id) => '/feed/services/p/$id';
+  static String newService(ServiceKind kind) => '/services/new?kind=${kind.key}';
+  static String editService(String id) => '/services/$id/edit';
 
   static const _signedOut = {signIn, code, signUp};
   static const _gates = {restoring, offline, signIn, code, signUp, homeArea};
@@ -68,6 +78,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.signUp, builder: (_, _) => const SignupScreen()),
       GoRoute(path: Routes.homeArea, builder: (_, _) => const HomeAreaScreen()),
       GoRoute(path: Routes.compose, builder: (_, _) => const ComposeScreen()),
+      GoRoute(
+        path: '/services/new',
+        builder: (_, state) => ServiceComposeScreen(
+          kind: ServiceKind.values.firstWhere(
+            (k) => k.key == state.uri.queryParameters['kind'],
+            orElse: () => ServiceKind.offering,
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/services/:id/edit',
+        builder: (_, state) => ServiceComposeScreen(editing: state.extra as ServicePost?),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => ShellScreen(
           shell: shell,
@@ -82,6 +105,22 @@ final routerProvider = Provider<GoRouter>((ref) {
                 GoRoute(
                   path: 'post/:id',
                   builder: (_, state) => PostScreen(postId: state.pathParameters['id']!),
+                ),
+                GoRoute(
+                  path: 'services',
+                  builder: (_, _) => const ServicesScreen(),
+                  routes: [
+                    GoRoute(path: 'mine', builder: (_, _) => const MyServicesScreen()),
+                    GoRoute(
+                      path: 'p/:id',
+                      // A fresh `extra` asks for a fresh page: the Home tab may still hold
+                      // an older copy of this post.
+                      builder: (_, state) => ServicePostScreen(
+                        key: ValueKey('${state.pathParameters['id']}:${state.extra}'),
+                        postId: state.pathParameters['id']!,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

@@ -134,6 +134,20 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                         radius == null ? 'Around you' : 'Within ${_km(radius)} km of home',
                         style: text.bodySmall,
                       ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          ActionChip(
+                            avatar: const Icon(Icons.handyman_outlined, size: 18, color: Palette.ink),
+                            label: const Text('Services & jobs'),
+                            backgroundColor: Palette.white,
+                            side: const BorderSide(color: Palette.line),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                            onPressed: () => context.go(Routes.services),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),

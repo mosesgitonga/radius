@@ -129,6 +129,8 @@ class Conversation {
     required this.unreadCount,
     required this.updatedAt,
     this.title,
+    this.listingId,
+    this.servicePostId,
     this.otherUser,
     this.otherLastReadSeq,
     this.safetyNotice,
@@ -140,6 +142,8 @@ class Conversation {
         id: json['id'] as String,
         kind: json['kind'] as String,
         title: json['title'] as String?,
+        listingId: json['listing_id'] as String?,
+        servicePostId: json['service_post_id'] as String?,
         state: json['state'] as String,
         myRole: json['my_role'] as String,
         myStatus: json['my_status'] as String,
@@ -166,6 +170,10 @@ class Conversation {
   /// `direct`, `group`, `listing` or `service`.
   final String kind;
   final String? title;
+
+  /// Set when the conversation is about a listing or a service post.
+  final String? listingId;
+  final String? servicePostId;
 
   /// From my side: `active`, `request_sent`, `request_received` or `declined`.
   final String state;
@@ -206,6 +214,8 @@ class Conversation {
         id: id,
         kind: kind,
         title: title,
+        listingId: listingId,
+        servicePostId: servicePostId,
         state: state,
         myRole: myRole,
         myStatus: myStatus,

@@ -136,9 +136,8 @@ class _ChatRow extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final unread = conversation.unreadCount;
     final last = conversation.lastMessage;
-    final preview = last == null
-        ? (conversation.isRequestSent ? 'Request sent' : 'No messages yet')
-        : messagePreview(last, myId: myId);
+    // Opening a chat about a post makes it "request sent" before anything is.
+    final preview = last == null ? 'No messages yet' : messagePreview(last, myId: myId);
     return InkWell(
       onTap: onTap,
       child: Padding(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/auth/auth_repository.dart';
 import '../features/chats/chat_repository.dart';
 import '../features/feed/feed_repository.dart';
+import '../features/services/service_repository.dart';
 import 'api/api_client.dart';
 import 'api/media_uploader.dart';
 import 'api/token_store.dart';
@@ -26,6 +27,10 @@ final feedRepositoryProvider = Provider<FeedRepository>(
 
 final chatRepositoryProvider = Provider<ChatRepository>(
   (ref) => ChatRepository(ref.watch(apiClientProvider)),
+);
+
+final serviceRepositoryProvider = Provider<ServiceRepository>(
+  (ref) => ServiceRepository(ref.watch(apiClientProvider)),
 );
 
 final mediaUploaderProvider = Provider<MediaUploader>(
