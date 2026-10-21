@@ -2217,6 +2217,63 @@ leads to **Services & jobs**.
   app carries labels for the seeded list and shows any other key as plain words.
   This needs a decision; see the open questions.
 
+### Slice 4 — services and jobs: built and verified (2026-10-21)
+
+**Built,** as planned.
+- `features/services/` holds:
+  - the models;
+  - the repository (browse, mine, post, create, edit, open or close, delete,
+    contact, reviews, reply);
+  - the browse controller;
+  - four screens: browse, post, new or edit, and your posts;
+  - the card and review widgets.
+- A "Services & jobs" chip sits under the feed header.
+- Chats about a post carry a card linking back to it.
+
+**Verified.**
+- **Tests:** `flutter test` gives 52 passed (7 new); `flutter analyze` is clean.
+  - **Models:** pay labels, category names, ratings, and initials.
+  - **Browse:** filters reach the server, and an older search's late answer is
+    dropped.
+  - **Contact:** from a provider to their post, then "Message", which opens the
+    conversation with the post's card.
+  - **Job form:** a job sends only job fields, and a new account is told when it may
+    post one.
+- **Live**, on the emulator against the development backend, with a script playing a
+  second account:
+  - **Tabs:** all three showed the mockups' cards. A job showed its pay range, its
+    type, and the never-pay notice in English and Swahili.
+  - **A job:** "Ask about this job" opened a conversation with the safety notice and
+    the job's card.
+  - **Offering:** Amina posted a plumbing offering (rate, 5 km travel).
+  - **Hiring threshold:** her new account's job post was refused. For the test, the
+    second account was aged past 14 days, in the development database only, to post
+    a job.
+  - **Reviews:** a review before Amina had replied was refused (403,
+    `no_qualifying_conversation`). After she accepted and replied, the review was
+    accepted. It showed with its average, and Amina's reply appeared under it.
+  - **Closing:** closing the post showed the closed banner, and "Your posts" listed
+    it as Closed.
+
+**Fixed along the way:**
+- **Initials:** "Wanjiru (smoke 6)" showed "W(". Initials now use letters and digits
+  only.
+- **Full stops:** "Say hello to Wanjiku M.." had a doubled full stop.
+- **Stale post page:** a post opened from its chat showed the Home tab's older copy.
+  It now opens fresh: checked by editing the review and reopening.
+- **Empty chats:** a chat opened about a post said "Request sent" before anything
+  was. It now says "No messages yet".
+- **Hiring refusal:** it now says when a new account may post a job, and what it
+  can do meanwhile.
+- **Small:** "Hours" instead of "When" on jobs, and no stray dash when there are no
+  reviews.
+
+**Not yet:**
+- **Inbox:** several chats with one person look alike, because the inbox does not
+  show which post each is about (the mockup does). The conversation list would
+  need the post's title from the API; see the open questions.
+- **Category list:** still the app's own copy.
+
 ### Open questions
 
 - **Map tiles** for the home-area picker (slice 1 uses "use my location" only):
@@ -2227,3 +2284,7 @@ leads to **Services & jobs**.
   server, but the app can only know them by carrying a copy. A small `GET` endpoint
   listing them with display names would let a change reach the app without a
   release. It is not built; the app uses the seeded list until you decide.
+- **What a chat is about, in the inbox.** `GET /v1/conversations` gives a post's or
+  listing's ID but not its title, so the inbox cannot say "Plumber for tanks…"
+  without one request per row. Adding a short `about` (title and price) to the
+  conversation response would fix it.
