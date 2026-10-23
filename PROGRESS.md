@@ -2371,6 +2371,43 @@ The Market tab, replacing its placeholder.
 - **Review labels:** a listing review reads "Bought or sold through MyRadius",
   because the app cannot tell which side the reviewer was on.
 
+### Slice 6 — the Me tab: plan
+
+The account screen from the mockup, with settings and the Data Protection Act's
+rights (access, correction, erasure).
+- **Header:** initials, name, home area and rating; Edit changes the display name
+  (`PATCH /me`).
+- **Standing card** (`/me/standing`):
+  - **Badge:** with the badge, says so and what it allows. Without it, how it is
+    earned and how many vouches the account has.
+  - **Moderation:** a restriction or suspension says until when and why, and warnings
+    are listed.
+
+  The mockup's "home on 12 of the last 14 days" bar is left out: the API does not
+  expose that record.
+- **Your things:** Your listings, Saved, Your service posts.
+- **Settings:**
+  - **Home area:** the current area and when it may next change (about once a
+    fortnight). "Move home" reads the location once, as at sign-up.
+  - **Notifications** (`/notifications/preferences`): push and in-app switches per
+    kind, and lock-screen previews (off by default). Push itself still waits for
+    Firebase, which the screen says.
+  - **Privacy:** the consent record. The required consents are shown, with how to
+    withdraw them (delete the account); marketing can be switched.
+  - **Blocked people:** list and unblock.
+  - **Where I'm signed in** (`/auth/sessions`): each device, this one marked, and
+    "Sign out everywhere else".
+  - **Download my data** (`/me/export`): the JSON export, saved as a file and handed
+    to the phone's share sheet. This needs the new package `share_plus`, approved on
+    2026-10-23.
+  - **Delete my account:**
+    - **Request:** a confirmation saying what happens: a 30-day grace period, every
+      device signed out, and a purge afterwards. Backups age out two weeks later.
+      Then it signs out here.
+    - **Cancel:** signing in again during the grace period shows a banner with
+      Cancel deletion. Until then, posting is refused, as the server rules.
+- **Sign out.**
+
 ### Open questions
 
 - **Map tiles** for the home-area picker (slice 1 uses "use my location" only):
