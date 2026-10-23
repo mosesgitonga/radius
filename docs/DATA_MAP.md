@@ -647,6 +647,28 @@ The nightly `run_retention` job now also:
 
 ---
 
+## Profiles (2026-10-23)
+
+### `users` (changes)
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `bio` | A line or two the person writes about themselves, up to 160 characters, shown on their profile | Until changed or cleared; cleared on purge. Exported. The audit log records only that it changed, never the text |
+| `cover_media_id` | The profile's cover photo (a `cover` upload, re-encoded without EXIF like every image) | Until changed or removed; cleared on purge, and the image goes with the account's media |
+
+### What a profile shows, and to whom
+
+- **Everyone who can open it** (not blocked either way) sees the name, photo, cover,
+  bio, area label, distance band, rating, join month, and the person's open listings
+  and open service posts. All of these were already findable by browsing.
+- **Posts** are listed only to viewers whose feed could show them: within their feed
+  radius of home, never of an explore location. A profile surfaces no post the feed
+  would not (DECISIONS M.6).
+- **My own profile** also lists my held posts, which only I can see, and shows no
+  distance to myself.
+
+---
+
 ## The mobile app — what stays on the phone
 
 | What | Where | Why | Kept until |

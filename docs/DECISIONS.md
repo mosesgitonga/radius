@@ -2024,3 +2024,23 @@ export to the clipboard can hit size limits and is easy to lose. The share sheet
 needs no storage permission and leaves the choice of where the file goes to the
 person. The app keeps no copy of it, in line with M.2; the file holds their phone
 number and messages, and the screen says so.
+
+### M.6 Profiles: posts follow the feed, everything else is open
+
+**Choice (decided with the product owner, 2026-10-23).** Anyone who can open a
+profile sees its photo, cover, bio, open listings and open service posts. Its posts
+are listed only to viewers whose feed radius, from home, reaches the person's home
+area, and then all of them, not just recent ones. Further away, the profile says
+posts are shown to neighbours nearby. A block either way is a 404 on the profile
+and on every list, alike.
+
+**Reasoning.** Listings and services exist to be found, so hiding them on a profile
+would protect nothing. Posts are different: a whole history on one page is the
+easiest way to learn someone's routine, so a profile may only gather what the feed
+would already show that viewer. The posts query is the feed's own, narrowed to one
+author, so the two cannot drift apart. Explore locations are excluded so a profile
+is not a way to read a neighbourhood you are only visiting.
+
+**Bio.** 160 characters, tidied of blank lines, cleared on purge, and audited by
+field name only. The edit screen asks people to keep phone numbers and addresses
+out of it.

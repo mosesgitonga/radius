@@ -2492,6 +2492,47 @@ anyone's profile from their name. Decided with you:
   plus Message and Report.
 - **Photos:** profile photos replace initials wherever the API sends them.
 
+### Slice 7 — profiles: built and verified (2026-10-23)
+
+**Built,** as planned, with one change: Settings (standing, things, settings and
+rights) is a page off the profile's gear button, and Edit profile opens over the
+tabs.
+- **Backend:**
+  - migration 0014;
+  - `bio` and `cover_media_id` on users, and the `cover` upload purpose;
+  - `PATCH /me` takes a bio, and `PUT /me/cover`;
+  - `GET /users/{id}` adds the bio, cover and `posts_visible`, with no distance to
+    yourself;
+  - `GET /users/{id}/posts`, `/listings` and `/services`;
+  - the export includes the bio, and the purge clears the bio and cover.
+- **App:** `features/profile/` holds the models, the repository, the profile screen
+  (mine and others') and Edit profile. Photos show wherever an author appears.
+  Names and photos open profiles from posts, comments, listings, service posts and
+  chats.
+- **Docs:** DECISIONS M.6 and DATA_MAP updated.
+
+**Verified.**
+- **Backend:** `pytest` passes in full (the run before the last small change), plus
+  13 new profile tests. They cover the bio (tidied, 160 characters, audited without
+  its text), the cover, posts for neighbours versus someone in Nairobi, held posts
+  shown only to their author, 404 on all four for a block, open listings and services
+  only, export and purge, and no distance to yourself. `ruff` and `mypy` are clean.
+- **App:** `flutter test` gives 70 passed; `flutter analyze` is clean.
+- **Live**, on the emulator against the development backend (migration 0014 applied):
+  - **Photos:** a profile photo and a cover chosen from the gallery were uploaded
+    and processed (1 size for the photo, 3 for the cover), then set.
+  - **Bio:** saved.
+  - **My profile:** the Me tab showed the cover, photo, name, area, rating, join month,
+    bio and my posts, and the new photo next to my post.
+  - **Wanjiku's profile:** tapping her name on a post opened her profile with Message,
+    her two posts, her sofa under Selling, and her job and request under Services.
+
+**Fixed along the way:**
+- **Save hidden:** on Edit profile, the Save button sat half under the tab bar and the
+  page could not scroll to it. Edit profile now opens over the tabs.
+- **Distance to myself:** my own profile said "under 1 km". The API no longer sends a
+  distance band for your own profile.
+
 ### Open questions
 
 - **Map tiles** for the home-area picker (slice 1 uses "use my location" only):
