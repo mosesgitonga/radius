@@ -2274,6 +2274,44 @@ leads to **Services & jobs**.
   need the post's title from the API; see the open questions.
 - **Category list:** still the app's own copy.
 
+### Slice 5 — marketplace: plan
+
+The Market tab, replacing its placeholder.
+- **Browse** (`GET /v1/listings`):
+  - **Grid:** two columns, as in the mockup. Each card has the first photo, the price
+    ("Free" when free), the title, and the area and distance band. Reserved items
+    say so.
+  - **Search and filters:** a search box (waits for typing to pause), a sort chip
+    (newest, nearest, price low to high, price high to low) and category chips.
+    More results load on scroll.
+  - **Header:** a Sell button, Saved, and Your listings.
+- **Listing page:**
+  - **Contents:** swipeable photos with a counter; the price, title, condition,
+    "Negotiable", and the area; the description.
+  - **Seller:** their card, with their rating from the reviews endpoint (a listing
+    does not carry it). The "meet in public, pay on collection" note.
+  - **Actions:** "Ask if it's available" opens the conversation about the listing.
+    The listing can be saved or unsaved, and reported.
+  - **Reviews:** someone who talked with the seller about it can review them.
+  - **Mine:**
+    - edit, mark reserved or available, mark sold (optionally naming who bought it,
+      from the people who asked), renew when expired, and delete;
+    - about how many neighbours can see it, and a banner when it is held, sold or
+      expired.
+- **Sell / edit:**
+  - **Fields:** up to 8 photos (uploaded as in the feed, purpose `listing`), title,
+    description, category, condition, and pricing (fixed, negotiable or free) with a
+    price.
+  - **Refusals:** a prohibited item is refused naming the term, and a duplicate
+    listing is refused as the server words it.
+- **Your listings and Saved:** lists of each, with their state.
+- **In a conversation about a listing:** a card with its photo, title, price and
+  availability, opening the listing (the services card, extended).
+- **Reviews move to their own feature folder,** shared by services and the
+  marketplace.
+- **Categories:** the app carries labels for the seeded list, as for services (same
+  open question).
+
 ### Open questions
 
 - **Map tiles** for the home-area picker (slice 1 uses "use my location" only):
