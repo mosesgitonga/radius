@@ -11,10 +11,11 @@ import '../../auth/auth_controller.dart';
 import '../../feed/feed_models.dart';
 import '../../feed/widgets/post_card.dart';
 import '../../feed/widgets/report_sheet.dart';
+import '../../reviews/review_models.dart';
+import '../../reviews/widgets/review_widgets.dart';
 import '../contact.dart';
 import '../service_models.dart';
 import '../services_controller.dart';
-import '../widgets/review_widgets.dart';
 import '../widgets/service_cards.dart';
 
 /// One service post: who, what, for how much, and what others said.
@@ -45,7 +46,7 @@ class _ServicePostScreenState extends ConsumerState<ServicePostScreen> {
     final repo = ref.read(serviceRepositoryProvider);
     try {
       final post = await repo.post(widget.postId);
-      final reviews = await repo.reviewsOf(post.author.id);
+      final reviews = await ref.read(reviewRepositoryProvider).reviewsOf(post.author.id);
       if (!mounted) return;
       setState(() {
         _post = post;
@@ -70,7 +71,7 @@ class _ServicePostScreenState extends ConsumerState<ServicePostScreen> {
     final cursor = _reviews?.nextCursor;
     if (post == null || cursor == null) return;
     try {
-      final page = await ref.read(serviceRepositoryProvider).reviewsOf(post.author.id, cursor: cursor);
+      final page = await ref.read(reviewRepositoryProvider).reviewsOf(post.author.id, cursor: cursor);
       setState(() {
         _reviews = page;
         _reviewList.addAll(page.items);
@@ -175,9 +176,10 @@ class _ServicePostScreenState extends ConsumerState<ServicePostScreen> {
     final review = await showReviewSheet(
       context,
       name: post.author.displayName,
-      send: (rating, body) => ref.read(serviceRepositoryProvider).review(
+      send: (rating, body) => ref.read(reviewRepositoryProvider).review(
             subjectId: post.author.id,
-            postId: post.id,
+            contextType: 'service_post',
+            contextId: post.id,
             rating: rating,
             body: body,
           ),
@@ -189,7 +191,7 @@ class _ServicePostScreenState extends ConsumerState<ServicePostScreen> {
     final updated = await showReplySheet(
       context,
       to: review.reviewer.displayName,
-      send: (body) => ref.read(serviceRepositoryProvider).reply(review.id, body),
+      send: (body) => ref.read(reviewRepositoryProvider).reply(review.id, body),
     );
     if (updated != null) {
       setState(() {

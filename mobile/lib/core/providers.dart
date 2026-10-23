@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/auth/auth_repository.dart';
 import '../features/chats/chat_repository.dart';
 import '../features/feed/feed_repository.dart';
+import '../features/market/listing_repository.dart';
+import '../features/reviews/review_repository.dart';
 import '../features/services/service_repository.dart';
 import 'api/api_client.dart';
 import 'api/media_uploader.dart';
@@ -31,6 +33,14 @@ final chatRepositoryProvider = Provider<ChatRepository>(
 
 final serviceRepositoryProvider = Provider<ServiceRepository>(
   (ref) => ServiceRepository(ref.watch(apiClientProvider)),
+);
+
+final listingRepositoryProvider = Provider<ListingRepository>(
+  (ref) => ListingRepository(ref.watch(apiClientProvider)),
+);
+
+final reviewRepositoryProvider = Provider<ReviewRepository>(
+  (ref) => ReviewRepository(ref.watch(apiClientProvider)),
 );
 
 final mediaUploaderProvider = Provider<MediaUploader>(

@@ -4,7 +4,7 @@ import '../../../core/api/api_exception.dart';
 import '../../../core/theme.dart';
 import '../../../core/widgets.dart';
 import '../../feed/feed_models.dart';
-import '../service_models.dart';
+import '../review_models.dart';
 
 /// Five stars, [rating] of them filled.
 class Stars extends StatelessWidget {

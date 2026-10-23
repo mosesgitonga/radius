@@ -3,7 +3,7 @@ import '../chats/chat_models.dart';
 import '../feed/feed_models.dart';
 import 'service_models.dart';
 
-/// Services, needs and jobs, and the reviews people leave.
+/// Services, needs and jobs.
 class ServiceRepository {
   ServiceRepository(this._api);
 
@@ -56,32 +56,4 @@ class ServiceRepository {
   /// The conversation with the author about this post, made if need be.
   Future<Conversation> contact(String id) async =>
       Conversation.fromJson(Map<String, dynamic>.from(await _api.post('/services/$id/chat') as Map));
-
-  Future<ReviewPage> reviewsOf(String userId, {String? cursor}) async {
-    final data =
-        Map<String, dynamic>.from(await _api.get('/users/$userId/reviews', query: {'cursor': ?cursor}) as Map);
-    return ReviewPage(
-      [for (final item in data['items'] as List) Review.fromJson(Map<String, dynamic>.from(item as Map))],
-      data['next_cursor'] as String?,
-      average: (data['rating_average'] as num?)?.toDouble(),
-      count: data['rating_count'] as int? ?? 0,
-    );
-  }
-
-  Future<Review> review({
-    required String subjectId,
-    required String postId,
-    required int rating,
-    String? body,
-  }) async =>
-      Review.fromJson(Map<String, dynamic>.from(await _api.post('/reviews', body: {
-        'subject_id': subjectId,
-        'context_type': 'service_post',
-        'context_id': postId,
-        'rating': rating,
-        if (body != null && body.trim().isNotEmpty) 'body': body.trim(),
-      }) as Map));
-
-  Future<Review> reply(String reviewId, String body) async => Review.fromJson(
-      Map<String, dynamic>.from(await _api.put('/reviews/$reviewId/reply', body: {'body': body.trim()}) as Map));
 }

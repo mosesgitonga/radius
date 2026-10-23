@@ -13,6 +13,11 @@ import '../features/chats/screens/conversation_screen.dart';
 import '../features/feed/screens/compose_screen.dart';
 import '../features/feed/screens/feed_screen.dart';
 import '../features/feed/screens/post_screen.dart';
+import '../features/market/listing_models.dart';
+import '../features/market/screens/listing_list_screen.dart';
+import '../features/market/screens/listing_screen.dart';
+import '../features/market/screens/market_screen.dart';
+import '../features/market/screens/sell_screen.dart';
 import '../features/me/me_screen.dart';
 import '../features/services/screens/my_services_screen.dart';
 import '../features/services/screens/service_compose_screen.dart';
@@ -20,7 +25,6 @@ import '../features/services/screens/service_post_screen.dart';
 import '../features/services/screens/services_screen.dart';
 import '../features/services/service_models.dart';
 import '../features/shell/shell_screen.dart';
-import '../features/shell/tab_placeholder.dart';
 
 class Routes {
   const Routes._();
@@ -38,6 +42,11 @@ class Routes {
   static const compose = '/compose';
   static String post(String id) => '/feed/post/$id';
   static String conversation(String id) => '/chats/c/$id';
+  static String listing(String id) => '/market/l/$id';
+  static const myListings = '/market/mine';
+  static const savedListings = '/market/saved';
+  static const sell = '/sell';
+  static String editListing(String id) => '/listings/$id/edit';
   static const services = '/feed/services';
   static const myServices = '/feed/services/mine';
   static String service(String id) => '/feed/services/p/$id';
@@ -78,6 +87,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.signUp, builder: (_, _) => const SignupScreen()),
       GoRoute(path: Routes.homeArea, builder: (_, _) => const HomeAreaScreen()),
       GoRoute(path: Routes.compose, builder: (_, _) => const ComposeScreen()),
+      GoRoute(path: Routes.sell, builder: (_, _) => const SellScreen()),
+      GoRoute(
+        path: '/listings/:id/edit',
+        builder: (_, state) => SellScreen(editing: state.extra as Listing?),
+      ),
       GoRoute(
         path: '/services/new',
         builder: (_, state) => ServiceComposeScreen(
@@ -128,10 +142,19 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [
             GoRoute(
               path: Routes.market,
-              builder: (_, _) => const TabPlaceholder(
-                title: 'Marketplace',
-                message: 'Buying and selling nearby arrives in a later build.',
-              ),
+              builder: (_, _) => const MarketScreen(),
+              routes: [
+                GoRoute(path: 'mine', builder: (_, _) => const ListingListScreen(which: ListingList.mine)),
+                GoRoute(path: 'saved', builder: (_, _) => const ListingListScreen(which: ListingList.saved)),
+                GoRoute(
+                  path: 'l/:id',
+                  // A fresh `extra` asks for a fresh page, as for service posts.
+                  builder: (_, state) => ListingScreen(
+                    key: ValueKey('${state.pathParameters['id']}:${state.extra}'),
+                    listingId: state.pathParameters['id']!,
+                  ),
+                ),
+              ],
             ),
           ]),
           StatefulShellBranch(routes: [

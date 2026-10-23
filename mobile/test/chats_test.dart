@@ -101,6 +101,11 @@ void main() {
       expect(Conversation.fromJson(conversationJson()).awaitsMe, isFalse);
       expect(Conversation.fromJson(conversationJson(state: 'request_received')).awaitsMe, isTrue);
       expect(Conversation.fromJson(conversationJson(myStatus: 'invited')).awaitsMe, isTrue);
+      // Asking about a listing lands in the seller's inbox, as on the server.
+      expect(
+        Conversation.fromJson({...conversationJson(state: 'request_received'), 'kind': 'listing'}).awaitsMe,
+        isFalse,
+      );
       expect(Conversation.fromJson(conversationJson(myStatus: 'left')).isClosed, isTrue);
     });
   });

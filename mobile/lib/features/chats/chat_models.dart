@@ -199,7 +199,9 @@ class Conversation {
   bool get isRequestSent => state == 'request_sent';
 
   /// In the Requests folder: someone wants to talk, and I have not said yes.
-  bool get awaitsMe => isInvitation || isRequestReceived;
+  /// As on the server, only a direct chat is a request: someone asking about my
+  /// listing or service lands in the inbox, and I just reply.
+  bool get awaitsMe => isInvitation || (isRequestReceived && kind == 'direct');
 
   /// Gone from my lists: I left, was removed, or declined.
   bool get isClosed => myStatus == 'left' || myStatus == 'removed' || state == 'declined';

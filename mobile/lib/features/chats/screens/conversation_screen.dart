@@ -11,6 +11,8 @@ import '../../../core/router.dart';
 import '../../../core/theme.dart';
 import '../../auth/auth_controller.dart';
 import '../../feed/widgets/report_sheet.dart';
+import '../../market/listing_models.dart';
+import '../../market/widgets/listing_card.dart';
 import '../../services/service_models.dart';
 import '../chat_models.dart';
 import '../conversation_controller.dart';
@@ -277,6 +279,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               ),
             ),
           if (conversation?.servicePostId != null) _AboutService(postId: conversation!.servicePostId!),
+          if (conversation?.listingId != null) _AboutListing(listingId: conversation!.listingId!),
           Expanded(child: _messages(state, myId)),
           if (conversation != null) _bottom(conversation, state, myId),
         ],
@@ -531,6 +534,85 @@ class _AboutServiceState extends ConsumerState<_AboutService> {
                   ),
                 ),
                 if (post != null) const Icon(Icons.chevron_right_rounded, color: Palette.muted),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The listing a conversation is about: photo, title, price and whether it is
+/// still for sale, a tap away.
+class _AboutListing extends ConsumerStatefulWidget {
+  const _AboutListing({required this.listingId});
+
+  final String listingId;
+
+  @override
+  ConsumerState<_AboutListing> createState() => _AboutListingState();
+}
+
+class _AboutListingState extends ConsumerState<_AboutListing> {
+  Listing? _listing;
+  bool _gone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.read(listingRepositoryProvider).listing(widget.listingId).then(
+      (listing) {
+        if (mounted) setState(() => _listing = listing);
+      },
+      onError: (Object _) {
+        if (mounted) setState(() => _gone = true);
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final listing = _listing;
+    final detail = listing == null
+        ? (_gone ? 'This listing is no longer available' : 'Loading…')
+        : [
+            listing.price,
+            if (listing.isSold) 'Sold' else if (listing.isExpired) 'Expired' else if (listing.isReserved) 'Reserved' else 'Available',
+          ].join(' · ');
+    return Material(
+      color: Palette.white,
+      child: InkWell(
+        onTap: listing == null ? null : () => context.go(Routes.listing(listing.id), extra: DateTime.now()),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: Palette.cream, borderRadius: BorderRadius.circular(12)),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox.square(
+                    dimension: 40,
+                    child: listing == null
+                        ? const ColoredBox(color: Palette.sand)
+                        : ListingPhoto(listing: listing, width: 40),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(listing?.title ?? 'About a listing',
+                          maxLines: 1, overflow: TextOverflow.ellipsis, style: text.titleSmall?.copyWith(fontSize: 13.5)),
+                      Text(detail, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodySmall?.copyWith(fontSize: 12.5)),
+                    ],
+                  ),
+                ),
+                if (listing != null) const Icon(Icons.chevron_right_rounded, color: Palette.muted),
               ],
             ),
           ),
