@@ -54,6 +54,12 @@ class Me {
     required this.hasHomeLocation,
     required this.isVerifiedNeighbour,
     this.areaLabel,
+    this.phoneNumber,
+    this.memberSince,
+    this.ratingAverage,
+    this.ratingCount = 0,
+    this.deletionRequestedAt,
+    this.nextHomeChangeAllowedAt,
   });
 
   factory Me.fromJson(Map<String, dynamic> json) => Me(
@@ -65,7 +71,15 @@ class Me {
         areaLabel: json['area_label'] == null
             ? null
             : AreaLabel.fromJson(Map<String, dynamic>.from(json['area_label'] as Map)),
+        phoneNumber: json['phone_number'] as String?,
+        memberSince: _date(json['member_since']),
+        ratingAverage: (json['rating_average'] as num?)?.toDouble(),
+        ratingCount: json['rating_count'] as int? ?? 0,
+        deletionRequestedAt: _date(json['deletion_requested_at']),
+        nextHomeChangeAllowedAt: _date(json['next_home_change_allowed_at']),
       );
+
+  static DateTime? _date(Object? value) => value == null ? null : DateTime.parse(value as String);
 
   final String id;
   final String displayName;
@@ -73,4 +87,16 @@ class Me {
   final bool hasHomeLocation;
   final bool isVerifiedNeighbour;
   final AreaLabel? areaLabel;
+  final String? phoneNumber;
+  final DateTime? memberSince;
+  final double? ratingAverage;
+  final int ratingCount;
+
+  /// Set while the account is waiting out its deletion grace period.
+  final DateTime? deletionRequestedAt;
+
+  /// Null when the home area may change now.
+  final DateTime? nextHomeChangeAllowedAt;
+
+  bool get deletionPending => deletionRequestedAt != null;
 }

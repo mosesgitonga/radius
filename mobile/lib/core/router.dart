@@ -19,6 +19,8 @@ import '../features/market/screens/listing_screen.dart';
 import '../features/market/screens/market_screen.dart';
 import '../features/market/screens/sell_screen.dart';
 import '../features/me/me_screen.dart';
+import '../features/me/screens/data_screens.dart';
+import '../features/me/screens/settings_screens.dart';
 import '../features/services/screens/my_services_screen.dart';
 import '../features/services/screens/service_compose_screen.dart';
 import '../features/services/screens/service_post_screen.dart';
@@ -47,6 +49,13 @@ class Routes {
   static const savedListings = '/market/saved';
   static const sell = '/sell';
   static String editListing(String id) => '/listings/$id/edit';
+  static const moveHome = '/me/home';
+  static const notificationSettings = '/me/notifications';
+  static const privacy = '/me/privacy';
+  static const blocked = '/me/blocked';
+  static const sessions = '/me/sessions';
+  static const myData = '/me/data';
+  static const deleteAccount = '/me/delete';
   static const services = '/feed/services';
   static const myServices = '/feed/services/mine';
   static String service(String id) => '/feed/services/p/$id';
@@ -170,7 +179,19 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: Routes.me, builder: (_, _) => const MeScreen()),
+            GoRoute(
+              path: Routes.me,
+              builder: (_, _) => const MeScreen(),
+              routes: [
+                GoRoute(path: 'home', builder: (_, _) => const MoveHomeScreen()),
+                GoRoute(path: 'notifications', builder: (_, _) => const NotificationSettingsScreen()),
+                GoRoute(path: 'privacy', builder: (_, _) => const PrivacyScreen()),
+                GoRoute(path: 'blocked', builder: (_, _) => const BlockedScreen()),
+                GoRoute(path: 'sessions', builder: (_, _) => const SessionsScreen()),
+                GoRoute(path: 'data', builder: (_, _) => const MyDataScreen()),
+                GoRoute(path: 'delete', builder: (_, _) => const DeleteAccountScreen()),
+              ],
+            ),
           ]),
         ],
       ),

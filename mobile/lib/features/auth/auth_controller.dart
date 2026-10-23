@@ -76,6 +76,18 @@ class AuthController extends Notifier<AuthState> {
     state = me.hasHomeLocation ? AuthSignedIn(me) : AuthNeedsHome(me);
   }
 
+  /// The account changed (renamed, deletion cancelled): show the new one.
+  void replaceMe(Me me) {
+    if (state is AuthSignedIn) state = AuthSignedIn(me);
+  }
+
+  /// The server has already ended every session (a deletion request does):
+  /// forget this one here too, without asking it again.
+  Future<void> endedByServer() async {
+    await ref.read(apiClientProvider).endSession();
+    state = const AuthSignedOut();
+  }
+
   Future<void> signOut() async {
     final refreshToken = await ref.read(tokenStoreProvider).readRefreshToken();
     try {

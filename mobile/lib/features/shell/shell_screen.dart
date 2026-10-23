@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
 import '../../core/realtime.dart';
+import '../../core/router.dart';
+import '../../core/theme.dart';
+import '../auth/auth_controller.dart';
 import '../chats/chats_controller.dart';
 
 /// The signed-in frame: the four tabs, each keeping its own history.
@@ -49,8 +52,30 @@ class _ShellScreenState extends ConsumerState<ShellScreen> with WidgetsBindingOb
   Widget build(BuildContext context) {
     final shell = widget.shell;
     final unread = ref.watch(chatsControllerProvider.select((s) => s.unread));
+    final auth = ref.watch(authControllerProvider);
+    final deletionPending = auth is AuthSignedIn && auth.me.deletionPending;
     return Scaffold(
-      body: shell,
+      body: deletionPending
+          ? Column(
+              children: [
+                // Signed in during the grace period: nothing can be posted until
+                // the deletion is cancelled, so say so on every tab.
+                Material(
+                  color: Palette.glowTint,
+                  child: SafeArea(
+                    bottom: false,
+                    child: ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.warning_amber_rounded, color: Palette.primaryDark),
+                      title: const Text('Your account is due to be deleted'),
+                      trailing: TextButton(onPressed: () => context.go(Routes.me), child: const Text('Review')),
+                    ),
+                  ),
+                ),
+                Expanded(child: MediaQuery.removePadding(context: context, removeTop: true, child: shell)),
+              ],
+            )
+          : shell,
       bottomNavigationBar: !widget.showTabs
           ? null
           : NavigationBar(
