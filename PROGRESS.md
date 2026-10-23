@@ -2454,6 +2454,44 @@ rights (access, correction, erasure).
 - **Profile photo:** the API supports one, but the app does not upload it yet.
 - **Push:** the notification switches are kept, but push itself waits for Firebase.
 
+### Slice 7 — profiles: plan
+
+Asked for on 2026-10-23: Me becomes a profile with details, a profile photo, a cover
+photo, a bio, the person's posts, and what they offer and sell. Others can open
+anyone's profile from their name. Decided with you:
+- **Posts on a profile** are shown only to neighbours whose feed could show them,
+  and all of them (not just recent ones). Someone further away sees the profile but
+  not the posts.
+- **Bio:** up to 160 characters.
+
+**Backend** (migration 0014):
+- **New fields:** `users.bio` (160 characters, optional) and `users.cover_media_id`
+  (a `cover` upload, processed like post photos). `PATCH /me` takes `bio`, an empty
+  string clears it, and the audit log records only that it changed.
+  `PUT /me/cover` works like `PUT /me/avatar`.
+- **Profiles:** `GET /users/{id}` (public profile) and `GET /me` add the bio and
+  cover. The public profile also says whether the viewer may see the person's
+  posts.
+- **Profile lists:**
+  - `GET /users/{id}/posts`: the feed's own query (radius from the viewer's home,
+    moderation and block filters) narrowed to one author. On my own profile, all my
+    posts, held ones included.
+  - `GET /users/{id}/listings`: open listings.
+  - `GET /users/{id}/services`: open service posts.
+
+  A block either way is a 404 on all of them, as for the profile itself.
+- **Data rights:** the export includes the bio (the cover is already among the
+  exported media). The purge clears both. DATA_MAP and DECISIONS are updated.
+
+**App:**
+- **Me tab:** a profile at the top: cover, photo, name, badge, area, rating, bio,
+  and an Edit profile screen (name, bio, photo, cover). Then tabs for Posts,
+  Selling and Services. The settings and rights rows stay, under a settings button.
+- **Someone else's profile:** opened by tapping their name or photo on posts,
+  comments, listings, services and chats. It has the same layout without editing,
+  plus Message and Report.
+- **Photos:** profile photos replace initials wherever the API sends them.
+
 ### Open questions
 
 - **Map tiles** for the home-area picker (slice 1 uses "use my location" only):
