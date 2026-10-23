@@ -2408,6 +2408,52 @@ rights (access, correction, erasure).
       Cancel deletion. Until then, posting is refused, as the server rules.
 - **Sign out.**
 
+### Slice 6 — the Me tab: built and verified (2026-10-23)
+
+**Built,** as planned.
+- `features/me/` holds the account models, the repository, the Me screen, the settings
+  screens (notifications, privacy, blocked people, signed-in devices), and the data
+  screens (download, delete, home area).
+- The account model now carries the phone number, member-since date, rating, and
+  deletion and home-change dates.
+- `share_plus` was added (DECISIONS M.5), and DATA_MAP lists the export file.
+
+**Verified.**
+- **Tests:** `flutter test` gives 64 passed (7 new); `flutter analyze` is clean.
+  - **Models:** consents, notification names, and standing.
+  - **Account:** the standing card shows a restriction and a warning; renaming
+    works.
+  - **Deletion:** it asks for confirmation, then signs out here. Signing in during
+    the grace period offers Cancel.
+  - **Devices:** "sign out everywhere else" keeps this device.
+- **Live**, on the emulator against the development backend:
+  - **Me tab:** it matched the mockup, with the name, area, rating 4.5 (2), the
+    badge card, and the two groups of rows.
+  - **Export:** "Get my data" opened the share sheet with
+    `myradius-data-2026-10-23.json`.
+  - **Privacy:** the consent record showed three required consents with their
+    versions and dates. Switching marketing on was recorded (`PUT /me/consents`).
+  - **Devices and notifications:** both lists showed the account's own data.
+  - **Deletion:** requesting it showed the purge date (22 Nov 2026) and signed the
+    phone out. Signing in again with a new code showed the banner, and Cancel
+    deletion returned the account to `active` with no deletion date.
+
+**Fixed along the way:**
+- **Nothing on Home:** someone signing in during the grace period saw nothing on
+  Home. A strip now shows on every tab, linking to Me. Checked on the phone with the
+  account marked deletion-pending in the development database.
+- **Edit button:** in the header it hit the theme's full-width button size and broke
+  the layout in tests. It now sizes itself.
+- **Spinner:** the delete button's spinner ran on behind the confirmation dialog.
+- **Small:**
+  - "0 neighbours have vouched" now reads "No one has vouched for you yet";
+  - notification kinds are listed messages first, not in alphabetical key order.
+
+**Not yet:**
+- **Your posts:** a list of my feed posts needs an endpoint the API does not have.
+- **Profile photo:** the API supports one, but the app does not upload it yet.
+- **Push:** the notification switches are kept, but push itself waits for Firebase.
+
 ### Open questions
 
 - **Map tiles** for the home-area picker (slice 1 uses "use my location" only):

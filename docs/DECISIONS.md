@@ -2012,3 +2012,15 @@ goes.
 
 **Reasoning.** Otherwise the next account to sign in on the same phone would briefly
 see the previous one's feed and inbox.
+
+### M.5 The data export goes to the share sheet, through `share_plus`
+
+**Choice.** "Download my data" fetches `GET /v1/me/export`, writes it as one indented
+JSON file, and hands it to the phone's share sheet with `share_plus` (approved
+2026-10-23). The person saves it to Files, emails it, or sends it to themselves.
+
+**Reasoning.** The right of access means a copy the person keeps. Copying a large
+export to the clipboard can hit size limits and is easy to lose. The share sheet
+needs no storage permission and leaves the choice of where the file goes to the
+person. The app keeps no copy of it, in line with M.2; the file holds their phone
+number and messages, and the screen says so.
