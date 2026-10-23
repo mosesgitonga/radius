@@ -320,6 +320,28 @@ async def my_posts(
     )
 
 
+async def profile_posts(
+    session: AsyncSession, *, author: User, params: PageParams
+) -> tuple[list[ServicePost], str | None]:
+    """What a person offers, needs or is hiring for, for their profile: the open,
+    visible posts anyone could find by browsing."""
+    now = datetime.now(UTC)
+    statement = select(ServicePost).where(
+        ServicePost.author_id == author.id,
+        ServicePost.deleted_at.is_(None),
+        ServicePost.status == ContentStatus.visible,
+        ServicePost.closed_at.is_(None),
+        or_(ServicePost.expires_at.is_(None), ServicePost.expires_at > now),
+    )
+    return await paginate(
+        session,
+        statement,
+        sort_column=ServicePost.created_at,
+        id_column=ServicePost.id,
+        params=params,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class BrowsePage:
     posts: list[ServicePost]

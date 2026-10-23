@@ -120,6 +120,17 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     constraint is added after both tables exist, which is also how migration
     0005 created it."""
 
+    cover_media_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="SET NULL", use_alter=True), nullable=True
+    )
+    """The profile's cover photo, as the avatar: `SET NULL` and `use_alter` for the
+    same reasons."""
+
+    bio: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    """A line or two the person writes about themselves, shown on their profile.
+    Free text, so it is personal data: exported, cleared at purge, and never
+    written to the audit log — only the fact that it changed."""
+
     # -- Home location -------------------------------------------------------
     # Four resolutions of the same cell, denormalised on purpose. Deriving the
     # parents in SQL is not possible (H3 is computed in Python), and recomputing

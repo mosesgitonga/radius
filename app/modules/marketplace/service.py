@@ -387,6 +387,24 @@ async def my_listings(
     )
 
 
+async def profile_listings(
+    session: AsyncSession, *, seller: User, params: PageParams
+) -> tuple[list[Listing], str | None]:
+    """What a person is selling now, for their profile: the listings anyone could
+    find by browsing — available or reserved, unexpired, visible. Sold, expired,
+    held and deleted ones are the seller's own business (`/listings/mine`)."""
+    statement = select(Listing).where(
+        Listing.seller_id == seller.id,
+        Listing.deleted_at.is_(None),
+        Listing.status == ContentStatus.visible,
+        Listing.availability.in_(BROWSABLE),
+        Listing.expires_at > datetime.now(UTC),
+    )
+    return await paginate(
+        session, statement, sort_column=Listing.created_at, id_column=Listing.id, params=params
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class BrowsePage:
     listings: list[Listing]

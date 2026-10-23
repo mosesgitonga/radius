@@ -34,6 +34,7 @@ from app.modules.feed.schemas import (
     PostCreatedOut,
     PostCreateIn,
     PostOut,
+    PostPageOut,
     ReactionIn,
     ReactionOut,
     StoryCreateIn,
@@ -42,6 +43,7 @@ from app.modules.feed.schemas import (
     StoryViewerOut,
     StoryViewerPageOut,
 )
+from app.modules.users import service as users_service
 from app.modules.users.models import User
 
 router = APIRouter(tags=["feed"])
@@ -193,6 +195,45 @@ async def get_feed(
         ),
         next_cursor=page.next_cursor,
         radius_km=page.radius.display_km(settings.radius_display_rounding_km),
+    )
+
+
+@router.get(
+    "/users/{user_id}/posts",
+    response_model=PostPageOut,
+    summary="A neighbour's posts, for their profile",
+    description=(
+        "Newest first. To the person themselves: all their posts, held ones "
+        "included. To anyone else: only posts their feed could show them — within "
+        "their feed radius of home — so a profile surfaces nothing the feed would "
+        "not. The profile's `posts_visible` says whether to expect any. 404 if either "
+        "party has blocked the other, as for the profile."
+    ),
+)
+async def get_profile_posts(
+    user_id: uuid.UUID,
+    user: CurrentUser,
+    session: SessionDep,
+    redis: RedisDep,
+    storage: StorageDep,
+    settings: SettingsDep,
+    params: PageDep,
+) -> PostPageOut:
+    author = await users_service.profile_owner(session, viewer=user, user_id=user_id)
+    posts, next_cursor = await feed_service.profile_posts(
+        session, redis, viewer=user, author=author, params=params, settings=settings
+    )
+    return PostPageOut(
+        items=await views.post_views(
+            session,
+            redis,
+            storage,
+            posts=posts,
+            viewer=user,
+            viewer_cell_res8=user.home_cell_res8,
+            settings=settings,
+        ),
+        next_cursor=next_cursor,
     )
 
 

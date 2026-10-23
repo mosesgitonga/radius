@@ -150,3 +150,30 @@ async def set_avatar(
     user.avatar_media_id = asset.id
     await session.flush()
     return media_view(asset, storage)
+
+
+@router.put(
+    "/me/cover",
+    response_model=MediaOut | None,
+    summary="Set or clear my cover photo",
+    description=(
+        "Points the profile at a `ready` upload made with `purpose: cover`. Send "
+        "`null` to remove the cover photo."
+    ),
+)
+async def set_cover(
+    payload: AvatarIn,
+    user: ActiveUser,
+    session: SessionDep,
+    storage: StorageDep,
+) -> MediaOut | None:
+    if payload.media_id is None:
+        user.cover_media_id = None
+        await session.flush()
+        return None
+    (asset,) = await media_service.claim_assets_for(
+        session, media_ids=[payload.media_id], owner_id=user.id, purpose=MediaPurpose.cover
+    )
+    user.cover_media_id = asset.id
+    await session.flush()
+    return media_view(asset, storage)

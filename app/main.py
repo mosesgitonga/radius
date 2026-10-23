@@ -32,6 +32,7 @@ from app.modules.events.router import router as events_router
 from app.modules.feed.router import router as feed_router
 from app.modules.groups.router import router as groups_router
 from app.modules.location.router import router as location_router
+from app.modules.marketplace.router import profile_router as listings_profile_router
 from app.modules.marketplace.router import router as marketplace_router
 from app.modules.media.router import router as media_router
 from app.modules.messaging.router import router as messaging_router
@@ -213,6 +214,7 @@ def build_v1_router(settings: Settings) -> APIRouter:
     router.include_router(feed_router)
     router.include_router(groups_router)
     router.include_router(marketplace_router)
+    router.include_router(listings_profile_router)
     router.include_router(services_router)
     router.include_router(reviews_router)
     router.include_router(events_router)

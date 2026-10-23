@@ -37,9 +37,11 @@ from app.modules.marketplace.schemas import (
 )
 from app.modules.messaging import views as messaging_views
 from app.modules.messaging.schemas import ConversationOut
+from app.modules.users import service as users_service
 from app.modules.users.models import User
 
 router = APIRouter(prefix="/listings", tags=["marketplace"])
+profile_router = APIRouter(tags=["marketplace"])
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 RedisDep = Annotated[Redis, Depends(get_redis)]
@@ -422,3 +424,34 @@ async def open_chat(
         session, storage, conversations=[conversation], viewer=user
     )
     return rendered
+
+
+@profile_router.get(
+    "/users/{user_id}/listings",
+    response_model=ListingPageOut,
+    summary="What a neighbour is selling, for their profile",
+    description=(
+        "Their open listings, newest first: available or reserved, unexpired and "
+        "visible — what anyone could find by browsing. 404 if either party has "
+        "blocked the other, as for the profile."
+    ),
+)
+async def profile_listings(
+    user_id: uuid.UUID,
+    user: CurrentUser,
+    session: SessionDep,
+    redis: RedisDep,
+    storage: StorageDep,
+    settings: SettingsDep,
+    page: PageDep,
+) -> ListingPageOut:
+    seller = await users_service.profile_owner(session, viewer=user, user_id=user_id)
+    listings, next_cursor = await marketplace_service.profile_listings(
+        session, seller=seller, params=page
+    )
+    return ListingPageOut(
+        items=await views.listing_views(
+            session, redis, storage, listings=listings, viewer=user, settings=settings
+        ),
+        next_cursor=next_cursor,
+    )

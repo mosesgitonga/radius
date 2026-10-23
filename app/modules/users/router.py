@@ -68,6 +68,15 @@ async def _avatar(
     return image_variants(asset, storage)
 
 
+async def _cover(
+    session: AsyncSession, storage: StorageProvider, user: User
+) -> dict[str, ImageVariantOut] | None:
+    if user.cover_media_id is None:
+        return None
+    asset = await media_service.get_asset(session, user.cover_media_id)
+    return image_variants(asset, storage)
+
+
 async def _area_label(
     session: AsyncSession, redis: Redis, user: User, settings: Settings
 ) -> AreaLabelOut | None:
@@ -121,6 +130,9 @@ async def get_me(
         deletion_requested_at=user.deletion_requested_at,
         avatar_media_id=user.avatar_media_id,
         avatar=await _avatar(session, storage, user),
+        bio=user.bio,
+        cover_media_id=user.cover_media_id,
+        cover=await _cover(session, storage, user),
     )
 
 
@@ -129,10 +141,10 @@ async def get_me(
     response_model=MeOut,
     summary="Update my profile",
     description=(
-        "Changes the caller's display name. Returns the full profile, so the "
-        "client needs no follow-up request.\n\n"
-        "Audited as a field name only, never the new value: a display name is "
-        "personal data and the audit log is kept for two years."
+        "Changes the caller's display name and bio. Returns the full profile, so "
+        "the client needs no follow-up request.\n\n"
+        "Audited as field names only, never the new values: a display name and a "
+        "bio are personal data and the audit log is kept for two years."
     ),
     dependencies=[Depends(user_rate_limit(bucket="profile_update", limit=10, window_seconds=3600))],
 )
@@ -144,7 +156,9 @@ async def update_me(
     settings: SettingsDep,
     storage: StorageDep,
 ) -> MeOut:
-    await users_service.update_profile(session, user=user, display_name=payload.display_name)
+    await users_service.update_profile(
+        session, user=user, display_name=payload.display_name, bio=payload.bio
+    )
     return await get_me(user, session, redis, settings, storage)
 
 
@@ -176,7 +190,12 @@ async def get_public_profile(
         raise NotFoundError("User not found")
 
     bucket = None
-    if viewer.home_cell_res8 is not None and target.home_cell_res8 is not None:
+    # No distance to yourself.
+    if (
+        target.id != viewer.id
+        and viewer.home_cell_res8 is not None
+        and target.home_cell_res8 is not None
+    ):
         # Computed cell to cell, not point to point, so repeating the measurement
         # from different positions cannot sharpen it.
         bucket = cells.bucket_between_cells(viewer.home_cell_res8, target.home_cell_res8)
@@ -191,6 +210,12 @@ async def get_public_profile(
         is_verified_neighbour=target.is_verified_neighbour,
         rating_average=float(target.rating_average) if target.rating_average else None,
         rating_count=target.rating_count,
+        bio=target.bio,
+        cover=await _cover(session, storage, target),
+        posts_visible=target.id == viewer.id
+        or await feed_service.author_within_feed(
+            session, redis, viewer=viewer, author=target, settings=settings
+        ),
     )
 
 

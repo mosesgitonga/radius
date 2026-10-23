@@ -336,6 +336,70 @@ async def feed_page(
     return FeedPage(posts=posts, next_cursor=next_cursor, radius=radius, anchor=anchor)
 
 
+async def author_within_feed(
+    session: AsyncSession, redis: Redis, *, viewer: User, author: User, settings: Settings
+) -> bool:
+    """Whether the viewer's feed reaches the author's home area — so whether a
+    profile shows them the author's posts.
+
+    The same radius and the same spherical predicate as the feed, from the
+    viewer's home (never an explore location: a profile is not a way to read a
+    neighbourhood you are only visiting).
+    """
+    anchor = await resolve_anchor(redis, user=viewer, mode="home")
+    if anchor is None or author.home_centroid is None:
+        return False
+    radius = await RadiusEngine(session, redis, settings).radius_for(
+        RadiusFeature.feed, anchor.cell_res8
+    )
+    reached = await session.scalar(
+        select(User.id).where(
+            User.id == author.id, bands.within(User.home_centroid, anchor, radius.radius_m)
+        )
+    )
+    return reached is not None
+
+
+async def profile_posts(
+    session: AsyncSession,
+    redis: Redis,
+    *,
+    viewer: User,
+    author: User,
+    params: PageParams,
+    settings: Settings,
+) -> tuple[list[Post], str | None]:
+    """The author's posts, as a profile shows them.
+
+    To the author: every post they have not deleted, held ones included, so they
+    can see what is waiting for a moderator. To anyone else: exactly the posts the
+    feed could show them — visible, outside groups, within their feed radius of
+    home — so a profile surfaces nothing the feed would not. A block either way is
+    the caller's to refuse before asking.
+    """
+    statement: Select[Post] = select(Post).where(
+        Post.author_id == author.id,
+        Post.deleted_at.is_(None),
+        Post.group_id.is_(None),
+    )
+    if author.id == viewer.id:
+        statement = statement.where(Post.status != ContentStatus.removed)
+    else:
+        anchor = await resolve_anchor(redis, user=viewer, mode="home")
+        if anchor is None:
+            return [], None
+        radius = await RadiusEngine(session, redis, settings).radius_for(
+            RadiusFeature.feed, anchor.cell_res8
+        )
+        statement = statement.where(
+            Post.status == ContentStatus.visible,
+            bands.within(Post.centroid, anchor, radius.radius_m),
+        )
+    return await paginate(
+        session, statement, sort_column=Post.created_at, id_column=Post.id, params=params
+    )
+
+
 # ---------------------------------------------------------------------------
 # Comments
 # ---------------------------------------------------------------------------

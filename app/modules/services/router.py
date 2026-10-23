@@ -39,6 +39,7 @@ from app.modules.services.schemas import (
     ServicePostPageOut,
     ServicePostUpdateIn,
 )
+from app.modules.users import service as users_service
 from app.modules.users.models import User
 
 router = APIRouter(tags=["services"])
@@ -185,6 +186,35 @@ async def my_posts(
     page: PageDep,
 ) -> ServicePostPageOut:
     posts, next_cursor = await services_service.my_posts(session, author=user, params=page)
+    return ServicePostPageOut(
+        items=await views.post_views(
+            session, redis, storage, posts=posts, viewer=user, settings=settings
+        ),
+        next_cursor=next_cursor,
+    )
+
+
+@router.get(
+    "/users/{user_id}/services",
+    response_model=ServicePostPageOut,
+    summary="What a neighbour offers, for their profile",
+    description=(
+        "Their open service posts, newest first — offerings, requests and jobs that "
+        "anyone could find by browsing. 404 if either party has blocked the other, "
+        "as for the profile."
+    ),
+)
+async def profile_services(
+    user_id: uuid.UUID,
+    user: CurrentUser,
+    session: SessionDep,
+    redis: RedisDep,
+    storage: StorageDep,
+    settings: SettingsDep,
+    page: PageDep,
+) -> ServicePostPageOut:
+    author = await users_service.profile_owner(session, viewer=user, user_id=user_id)
+    posts, next_cursor = await services_service.profile_posts(session, author=author, params=page)
     return ServicePostPageOut(
         items=await views.post_views(
             session, redis, storage, posts=posts, viewer=user, settings=settings

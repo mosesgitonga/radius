@@ -67,6 +67,18 @@ async def get_user(session: AsyncSession, user_id: uuid.UUID) -> User | None:
     return (await session.execute(statement)).scalar_one_or_none()
 
 
+async def profile_owner(session: AsyncSession, *, viewer: User, user_id: uuid.UUID) -> User:
+    """Whose profile lists — posts, listings, services — the viewer is asking for.
+
+    `NotFoundError` for a missing account and for a block either way, alike: the
+    lists answer exactly as the profile itself does, so neither confirms a block.
+    """
+    target = await get_user(session, user_id)
+    if target is None or await is_blocked_between(session, viewer.id, target.id):
+        raise NotFoundError("User not found")
+    return target
+
+
 async def require_user(session: AsyncSession, user_id: uuid.UUID) -> User:
     user = await get_user(session, user_id)
     if user is None:
@@ -140,7 +152,9 @@ async def create_user(
     return user
 
 
-async def update_profile(session: AsyncSession, *, user: User, display_name: str | None) -> User:
+async def update_profile(
+    session: AsyncSession, *, user: User, display_name: str | None, bio: str | None = None
+) -> User:
     changed: dict[str, Any] = {}
     if display_name is not None:
         cleaned = display_name.strip()
@@ -149,6 +163,13 @@ async def update_profile(session: AsyncSession, *, user: User, display_name: str
         if cleaned != user.display_name:
             changed["display_name"] = True
             user.display_name = cleaned
+    if bio is not None:
+        # Blank lines and stray spaces are tidied away; an empty bio removes it.
+        lines = [line.strip() for line in bio.strip().splitlines()]
+        tidied = "\n".join(line for line in lines if line) or None
+        if tidied != user.bio:
+            changed["bio"] = True
+            user.bio = tidied
 
     if changed:
         await record_audit_event(
@@ -446,6 +467,7 @@ async def export_user_data(
             ),
             "restriction_reason": user.restriction_reason,
             "member_since": user.created_at.isoformat() if user.created_at else None,
+            "bio": user.bio,
             "phone_verified_at": (
                 user.phone_verified_at.isoformat() if user.phone_verified_at else None
             ),
@@ -524,6 +546,8 @@ async def purge_user(session: AsyncSession, *, user: User) -> None:
     user.display_name = "Deleted user"
     user.phone_verified_at = None
     user.avatar_media_id = None
+    user.cover_media_id = None
+    user.bio = None
     user.home_cell_res9 = None
     user.home_cell_res8 = None
     user.home_cell_res7 = None

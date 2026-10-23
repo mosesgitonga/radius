@@ -56,6 +56,8 @@ class MediaPurpose(StrEnum):
     """Phase 5. Declared now so the enum does not need changing then."""
     event_cover = "event_cover"
     """Phase 7."""
+    cover = "cover"
+    """A profile's cover photo. Processed like a post photo: it is shown wide."""
 
 
 _media_status = db_enum(MediaStatus, name="media_status", length=20)

@@ -79,6 +79,11 @@ class MeOut(BaseModel):
     avatar: dict[str, ImageVariantOut] | None = Field(
         default=None, description="Served avatar sizes, keyed by width."
     )
+    bio: str | None = None
+    cover_media_id: uuid.UUID | None = None
+    cover: dict[str, ImageVariantOut] | None = Field(
+        default=None, description="Served cover photo sizes, keyed by width."
+    )
 
 
 class PublicProfileOut(BaseModel):
@@ -107,9 +112,25 @@ class PublicProfileOut(BaseModel):
     rating_average: float | None = None
     rating_count: int
 
+    bio: str | None = None
+    cover: dict[str, ImageVariantOut] | None = None
+    posts_visible: bool = Field(
+        default=False,
+        description=(
+            "Whether `GET /users/{id}/posts` can show the caller anything: their feed "
+            "radius reaches this person's home area. Further away, a profile shows its "
+            "bio, listings and services, but not its posts."
+        ),
+    )
+
 
 class ProfileUpdateIn(BaseModel):
     display_name: str | None = Field(default=None, min_length=2, max_length=50)
+    bio: str | None = Field(
+        default=None,
+        max_length=160,
+        description="A line or two about yourself. An empty string removes it.",
+    )
 
 
 class ConsentOut(BaseModel):

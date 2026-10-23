@@ -143,6 +143,11 @@ class CommentPageOut(BaseModel):
     next_cursor: str | None = None
 
 
+class PostPageOut(BaseModel):
+    items: list[PostOut]
+    next_cursor: str | None = None
+
+
 class ReactionIn(BaseModel):
     kind: str = Field(examples=["like"])
 
