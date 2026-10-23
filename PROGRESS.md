@@ -2312,6 +2312,65 @@ The Market tab, replacing its placeholder.
 - **Categories:** the app carries labels for the seeded list, as for services (same
   open question).
 
+### Slice 5 — marketplace: built and verified (2026-10-23)
+
+**Built,** as planned.
+- `features/market/` holds:
+  - the models and the repository;
+  - the browse controller;
+  - five screens: the Market tab, a listing, sell or edit, Your listings, and Saved;
+  - the listing card.
+- `features/reviews/` now holds reviews for services and listings alike.
+- The Market tab's placeholder is gone.
+
+**Verified.**
+- **Tests:** `flutter test` gives 57 passed (5 new, plus a new check in the chat
+  tests); `flutter analyze` is clean.
+  - **Models:** price labels, category names, and which listings can still be
+    asked about.
+  - **Browse to chat:** browse, open a listing, save it, and ask the seller. The
+    conversation opens with the listing's card.
+  - **Sell form:** the fields reach the server, and a prohibited item is refused
+    naming the word.
+- **Live**, on the emulator against the development backend, with a script playing a
+  second account:
+  - **Script refusals:** the second account listed a sofa. Listing it again was
+    refused as a duplicate (409). "Air rifle" was refused as prohibited (400, term
+    `rifle`).
+  - **Selling:** Amina listed a gas cooker with a photo. It was uploaded, processed
+    into 3 sizes, and listed; the page said "Visible to about 60 neighbours".
+  - **A buyer asks:** the neighbour asked about it. The question arrived in Amina's
+    inbox, not her requests, as on the server, and she replied straight from the
+    message box. The conversation showed the cooker's card ("KES 4,500 ·
+    Available").
+  - **Sold:** Amina marked it sold to the neighbour, chosen from the people who had
+    asked. It showed the Sold banner, left the grid, and showed as Sold in Your
+    listings.
+  - **Review:** the neighbour reviewed Amina for it. The review showed on the listing,
+    and the seller's rating became 4.5 from 2 reviews.
+  - **Saved:** saving the sofa filled the bookmark, and it appeared under Saved.
+
+**Fixed along the way:**
+- **Inquiries filed as requests:** a question about a listing (or a service) was put
+  in Requests with Accept and Decline. The server files only direct chats as
+  requests; the app now does the same, so the seller simply replies.
+- **Covered button:** a "Saved" message covered the "Ask if it's available" button
+  for several seconds. It is gone; the filled bookmark says it.
+- **Prohibited items:** the refusal now names the word that tripped it, which the
+  server sends separately.
+- **Grid cards:** cards no longer overflow at larger text sizes; the photo takes the
+  space the text leaves.
+- **Wording:**
+  - "Who bought it?" now says what naming a buyer does: it invites them to review
+    you. It does not decide who may review.
+  - The duplicate "Listed…" message after selling is gone; the page shows it.
+
+**Not yet:**
+- **Map and distance:** a map, and a distance choice beyond the default radius.
+- **Photo order:** photos cannot be reordered when editing; remove and add instead.
+- **Review labels:** a listing review reads "Bought or sold through MyRadius",
+  because the app cannot tell which side the reviewer was on.
+
 ### Open questions
 
 - **Map tiles** for the home-area picker (slice 1 uses "use my location" only):
