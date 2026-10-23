@@ -7,6 +7,7 @@ import '../../../core/theme.dart';
 import '../../../core/widgets.dart';
 import '../../auth/auth_controller.dart';
 import '../../chats/start_chat.dart';
+import '../../profile/profile_screen.dart';
 import '../feed_controller.dart';
 import '../feed_models.dart';
 import '../widgets/post_card.dart';
@@ -201,6 +202,7 @@ class _PostScreenState extends ConsumerState<PostScreen> {
                           mine: post.author.id == myId,
                           onHelpful: _toggleHelpful,
                           onMore: post.author.id == myId ? null : () => _postMenu(post),
+                          onAuthor: () => openProfile(context, ref, post.author.id),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -211,6 +213,7 @@ class _PostScreenState extends ConsumerState<PostScreen> {
                         for (final comment in _comments)
                           _CommentTile(
                             comment: comment,
+                            onAuthor: () => openProfile(context, ref, comment.author.id),
                             onReport: comment.author.id == myId
                                 ? null
                                 : () => _report('comment', comment.id, 'comment'),
@@ -270,9 +273,10 @@ class _PostScreenState extends ConsumerState<PostScreen> {
 }
 
 class _CommentTile extends StatelessWidget {
-  const _CommentTile({required this.comment, this.onReport});
+  const _CommentTile({required this.comment, required this.onAuthor, this.onReport});
 
   final Comment comment;
+  final VoidCallback onAuthor;
   final VoidCallback? onReport;
 
   @override
@@ -288,7 +292,7 @@ class _CommentTile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          InitialsAvatar(author: comment.author, radius: 16),
+          GestureDetector(onTap: onAuthor, child: InitialsAvatar(author: comment.author, radius: 16)),
           const SizedBox(width: 10),
           Expanded(
             child: Container(

@@ -9,19 +9,18 @@ import '../../core/theme.dart';
 import '../../core/widgets.dart';
 import '../auth/auth_controller.dart';
 import '../auth/auth_models.dart';
-import '../feed/feed_models.dart';
-import '../feed/widgets/post_card.dart';
 import 'account_models.dart';
 
-/// The Me tab: who I am, where I stand, my things, and my settings and rights.
-class MeScreen extends ConsumerStatefulWidget {
-  const MeScreen({super.key});
+/// Settings, reached from my profile: where I stand, my things, and my
+/// settings and rights.
+class AccountScreen extends ConsumerStatefulWidget {
+  const AccountScreen({super.key});
 
   @override
-  ConsumerState<MeScreen> createState() => _MeScreenState();
+  ConsumerState<AccountScreen> createState() => _AccountScreenState();
 }
 
-class _MeScreenState extends ConsumerState<MeScreen> {
+class _AccountScreenState extends ConsumerState<AccountScreen> {
   Standing? _standing;
 
   @override
@@ -44,38 +43,6 @@ class _MeScreenState extends ConsumerState<MeScreen> {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _rename(Me me) async {
-    final controller = TextEditingController(text: me.displayName);
-    final name = await showDialog<String>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        title: const Text('Your name'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 50,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(helperText: 'How neighbours see you. A first name and an initial is enough.'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(dialog).pop(), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.of(dialog).pop(controller.text), child: const Text('Save')),
-        ],
-      ),
-    );
-    if (name == null || name.trim() == me.displayName) return;
-    if (name.trim().length < 2) {
-      _toast('A name needs at least 2 letters.');
-      return;
-    }
-    try {
-      final updated = await ref.read(accountRepositoryProvider).rename(name);
-      ref.read(authControllerProvider.notifier).replaceMe(updated);
-    } on ApiException catch (error) {
-      _toast(error.message);
-    }
-  }
-
   Future<void> _cancelDeletion() async {
     try {
       await ref.read(accountRepositoryProvider).cancelDeletion();
@@ -93,49 +60,20 @@ class _MeScreenState extends ConsumerState<MeScreen> {
     final me = auth is AuthSignedIn ? auth.me : null;
     if (me == null) return const Scaffold();
 
-    final subtitle = [
-      me.areaLabel?.label ?? 'Home area set',
-      if (me.ratingCount > 0) '★ ${me.ratingAverage!.toStringAsFixed(1)} (${me.ratingCount})',
-    ].join(' · ');
-
     return Scaffold(
+      appBar: AppBar(title: const Text('Settings')),
       body: SafeArea(
+        top: false,
         child: RefreshIndicator(
           color: Palette.primary,
           onRefresh: _load,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
               if (me.deletionPending) ...[
                 _DeletionBanner(requestedAt: me.deletionRequestedAt!, onCancel: _cancelDeletion),
                 const SizedBox(height: 14),
               ],
-              Row(
-                children: [
-                  InitialsAvatar(
-                    author: Author(id: me.id, displayName: me.displayName, isVerifiedNeighbour: me.isVerifiedNeighbour),
-                    radius: 32,
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(me.displayName, style: text.headlineSmall),
-                        const SizedBox(height: 2),
-                        Text(subtitle, style: text.bodyMedium?.copyWith(color: Palette.muted)),
-                      ],
-                    ),
-                  ),
-                  OutlinedButton(
-                    onPressed: () => _rename(me),
-                    // The theme makes buttons full-width; in a row it must size itself.
-                    style: OutlinedButton.styleFrom(minimumSize: const Size(0, 40)),
-                    child: const Text('Edit'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
               _StandingCard(me: me, standing: _standing),
               const SizedBox(height: 14),
               _Group(rows: [

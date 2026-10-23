@@ -87,6 +87,7 @@ class ServiceAuthor extends Author {
     required super.id,
     required super.displayName,
     required super.isVerifiedNeighbour,
+    super.avatar,
     this.ratingAverage,
     this.ratingCount = 0,
   });
@@ -95,6 +96,7 @@ class ServiceAuthor extends Author {
         id: json['id'] as String,
         displayName: json['display_name'] as String,
         isVerifiedNeighbour: json['is_verified_neighbour'] as bool? ?? false,
+        avatar: imageSizes(json['avatar']),
         ratingAverage: (json['rating_average'] as num?)?.toDouble(),
         ratingCount: json['rating_count'] as int? ?? 0,
       );

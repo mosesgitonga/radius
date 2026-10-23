@@ -9,6 +9,7 @@ import '../../../core/theme.dart';
 import '../../../core/widgets.dart';
 import '../../auth/auth_controller.dart';
 import '../../chats/start_chat.dart';
+import '../../profile/profile_screen.dart';
 import '../feed_controller.dart';
 import '../feed_models.dart';
 import '../widgets/post_card.dart';
@@ -195,6 +196,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                         onHelpful: () => _toggleHelpful(post.id),
                         onOpen: () => context.go(Routes.post(post.id)),
                         onMore: () => _postMenu(post, mine),
+                        onAuthor: () => openProfile(context, ref, post.author.id),
                       ),
                     );
                   },

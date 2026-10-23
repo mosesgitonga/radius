@@ -13,6 +13,7 @@ import '../../feed/widgets/post_card.dart';
 import '../../feed/widgets/report_sheet.dart';
 import '../../reviews/review_models.dart';
 import '../../reviews/widgets/review_widgets.dart';
+import '../../profile/profile_screen.dart';
 import '../contact.dart';
 import '../service_models.dart';
 import '../services_controller.dart';
@@ -270,9 +271,17 @@ class _ServicePostScreenState extends ConsumerState<ServicePostScreen> {
                     : 'This post is closed.',
               ),
             const SizedBox(height: 4),
-            Center(child: InitialsAvatar(author: post.author, radius: 38)),
+            Center(
+              child: GestureDetector(
+                onTap: () => openProfile(context, ref, post.author.id),
+                child: InitialsAvatar(author: post.author, radius: 38),
+              ),
+            ),
             const SizedBox(height: 10),
-            Text(post.author.displayName, textAlign: TextAlign.center, style: text.headlineSmall),
+            GestureDetector(
+              onTap: () => openProfile(context, ref, post.author.id),
+              child: Text(post.author.displayName, textAlign: TextAlign.center, style: text.headlineSmall),
+            ),
             if (post.author.isVerifiedNeighbour) ...[
               const SizedBox(height: 6),
               const Center(child: NeighbourBadge(long: true)),

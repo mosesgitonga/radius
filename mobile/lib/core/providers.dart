@@ -5,6 +5,7 @@ import '../features/chats/chat_repository.dart';
 import '../features/feed/feed_repository.dart';
 import '../features/market/listing_repository.dart';
 import '../features/me/account_repository.dart';
+import '../features/profile/profile_repository.dart';
 import '../features/reviews/review_repository.dart';
 import '../features/services/service_repository.dart';
 import 'api/api_client.dart';
@@ -42,6 +43,10 @@ final listingRepositoryProvider = Provider<ListingRepository>(
 
 final accountRepositoryProvider = Provider<AccountRepository>(
   (ref) => AccountRepository(ref.watch(apiClientProvider)),
+);
+
+final profileRepositoryProvider = Provider<ProfileRepository>(
+  (ref) => ProfileRepository(ref.watch(apiClientProvider)),
 );
 
 final reviewRepositoryProvider = Provider<ReviewRepository>(

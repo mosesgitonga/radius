@@ -12,6 +12,7 @@ import '../../../core/theme.dart';
 import '../../auth/auth_controller.dart';
 import '../../feed/widgets/report_sheet.dart';
 import '../../market/listing_models.dart';
+import '../../profile/profile_screen.dart';
 import '../../market/widgets/listing_card.dart';
 import '../../services/service_models.dart';
 import '../chat_models.dart';
@@ -221,7 +222,12 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         titleSpacing: 0,
         title: conversation == null
             ? null
-            : Row(
+            : GestureDetector(
+                onTap: conversation.otherUser == null
+                    ? null
+                    : () => openProfile(context, ref, conversation.otherUser!.id),
+                behavior: HitTestBehavior.opaque,
+                child: Row(
                 children: [
                   conversationAvatar(conversation, radius: 18),
                   const SizedBox(width: 10),
@@ -243,6 +249,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                     ),
                   ),
                 ],
+              ),
               ),
         actions: [
           if (conversation != null && !conversation.awaitsMe)

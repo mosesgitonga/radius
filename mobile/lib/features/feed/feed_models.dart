@@ -1,18 +1,42 @@
 import '../auth/auth_models.dart';
 
-/// Someone who wrote something: a name and a badge, nothing more.
+/// Image sizes as the API sends them, `{"320": {"url": ...}}`, keyed by width.
+Map<int, String> imageSizes(Object? json) => json is Map
+    ? {for (final entry in json.entries) int.parse('${entry.key}'): (entry.value as Map)['url'] as String}
+    : const {};
+
+/// The smallest size at least [width] wide, else the largest there is.
+String? sizeFor(Map<int, String> sizes, int width) {
+  if (sizes.isEmpty) return null;
+  final widths = sizes.keys.toList()..sort();
+  for (final size in widths) {
+    if (size >= width) return sizes[size];
+  }
+  return sizes[widths.last];
+}
+
+/// Someone who wrote something: a name, a badge and a photo, nothing more.
 class Author {
-  const Author({required this.id, required this.displayName, required this.isVerifiedNeighbour});
+  const Author({
+    required this.id,
+    required this.displayName,
+    required this.isVerifiedNeighbour,
+    this.avatar = const {},
+  });
 
   factory Author.fromJson(Map<String, dynamic> json) => Author(
         id: json['id'] as String,
         displayName: json['display_name'] as String,
         isVerifiedNeighbour: json['is_verified_neighbour'] as bool? ?? false,
+        avatar: imageSizes(json['avatar']),
       );
 
   final String id;
   final String displayName;
   final bool isVerifiedNeighbour;
+
+  /// The profile photo's sizes, keyed by width; empty when there is none.
+  final Map<int, String> avatar;
 
   String get initials => displayName
       .split(RegExp(r'\s+'))

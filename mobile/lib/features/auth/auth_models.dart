@@ -60,6 +60,9 @@ class Me {
     this.ratingCount = 0,
     this.deletionRequestedAt,
     this.nextHomeChangeAllowedAt,
+    this.bio,
+    this.avatar = const {},
+    this.cover = const {},
   });
 
   factory Me.fromJson(Map<String, dynamic> json) => Me(
@@ -77,9 +80,16 @@ class Me {
         ratingCount: json['rating_count'] as int? ?? 0,
         deletionRequestedAt: _date(json['deletion_requested_at']),
         nextHomeChangeAllowedAt: _date(json['next_home_change_allowed_at']),
+        bio: json['bio'] as String?,
+        avatar: _sizes(json['avatar']),
+        cover: _sizes(json['cover']),
       );
 
   static DateTime? _date(Object? value) => value == null ? null : DateTime.parse(value as String);
+
+  static Map<int, String> _sizes(Object? json) => json is Map
+      ? {for (final entry in json.entries) int.parse('${entry.key}'): (entry.value as Map)['url'] as String}
+      : const {};
 
   final String id;
   final String displayName;
@@ -97,6 +107,12 @@ class Me {
 
   /// Null when the home area may change now.
   final DateTime? nextHomeChangeAllowedAt;
+
+  final String? bio;
+
+  /// Photo and cover sizes, keyed by width; empty when there is none.
+  final Map<int, String> avatar;
+  final Map<int, String> cover;
 
   bool get deletionPending => deletionRequestedAt != null;
 }

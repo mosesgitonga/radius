@@ -21,6 +21,8 @@ import '../features/market/screens/sell_screen.dart';
 import '../features/me/me_screen.dart';
 import '../features/me/screens/data_screens.dart';
 import '../features/me/screens/settings_screens.dart';
+import '../features/profile/edit_profile_screen.dart';
+import '../features/profile/profile_screen.dart';
 import '../features/services/screens/my_services_screen.dart';
 import '../features/services/screens/service_compose_screen.dart';
 import '../features/services/screens/service_post_screen.dart';
@@ -49,6 +51,9 @@ class Routes {
   static const savedListings = '/market/saved';
   static const sell = '/sell';
   static String editListing(String id) => '/listings/$id/edit';
+  static const editProfile = '/profile/edit';
+  static const accountSettings = '/me/settings';
+  static String person(String id) => '/people/$id';
   static const moveHome = '/me/home';
   static const notificationSettings = '/me/notifications';
   static const privacy = '/me/privacy';
@@ -97,6 +102,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.homeArea, builder: (_, _) => const HomeAreaScreen()),
       GoRoute(path: Routes.compose, builder: (_, _) => const ComposeScreen()),
       GoRoute(path: Routes.sell, builder: (_, _) => const SellScreen()),
+      // A form: over the tabs, so the keyboard and its Save button have the room.
+      GoRoute(path: Routes.editProfile, builder: (_, _) => const EditProfileScreen()),
+      GoRoute(
+        path: '/people/:id',
+        builder: (_, state) => ProfileScreen(userId: state.pathParameters['id']!),
+      ),
       GoRoute(
         path: '/listings/:id/edit',
         builder: (_, state) => SellScreen(editing: state.extra as Listing?),
@@ -181,8 +192,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [
             GoRoute(
               path: Routes.me,
-              builder: (_, _) => const MeScreen(),
+              builder: (_, _) => const MyProfileScreen(),
               routes: [
+                GoRoute(path: 'settings', builder: (_, _) => const AccountScreen()),
                 GoRoute(path: 'home', builder: (_, _) => const MoveHomeScreen()),
                 GoRoute(path: 'notifications', builder: (_, _) => const NotificationSettingsScreen()),
                 GoRoute(path: 'privacy', builder: (_, _) => const PrivacyScreen()),

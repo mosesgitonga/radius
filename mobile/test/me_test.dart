@@ -40,14 +40,41 @@ const standingJson = {
   ],
 };
 
-/// Scrolls the Me tab (not the hidden tabs beside it) until [finder] is on screen.
-Future<void> reachInMe(WidgetTester tester, Finder finder) async {
-  final inMe = find.descendant(of: find.byType(MeScreen), matching: finder);
-  await tester.scrollUntilVisible(inMe, 200,
-      scrollable: find.descendant(of: find.byType(MeScreen), matching: find.byType(Scrollable)).first);
-  await tester.ensureVisible(inMe);
+/// Scrolls Settings (not the hidden tabs beside it) until [finder] is on screen.
+Future<void> reachInSettings(WidgetTester tester, Finder finder) async {
+  final inSettings = find.descendant(of: find.byType(AccountScreen), matching: finder);
+  await tester.scrollUntilVisible(inSettings, 200,
+      scrollable: find.descendant(of: find.byType(AccountScreen), matching: find.byType(Scrollable)).first);
+  await tester.ensureVisible(inSettings);
   await tester.pumpAndSettle();
 }
+
+Map<String, dynamic> profileJson(Map<String, dynamic> me) => {
+      'id': me['id'],
+      'display_name': me['display_name'],
+      'is_verified_neighbour': me['is_verified_neighbour'],
+      'area_label': me['area_label'],
+      'member_since': me['member_since'],
+      'rating_average': me['rating_average'],
+      'rating_count': me['rating_count'],
+      'bio': me['bio'],
+      'posts_visible': true,
+    };
+
+const postJson = {
+  'id': 'p1',
+  'author': {'id': 'u1', 'display_name': 'Amina K.', 'is_verified_neighbour': false},
+  'body': 'Matatu stage has moved across the road',
+  'category': 'alert',
+  'images': <Object>[],
+  'area_label': {'label': 'Nyeri Town', 'precision': 'town'},
+  'distance_bucket': null,
+  'comment_count': 0,
+  'reaction_count': 0,
+  'my_reaction': null,
+  'status': 'published',
+  'created_at': '2026-10-20T08:00:00Z',
+};
 
 void main() {
   group('models', () {
@@ -94,8 +121,14 @@ void main() {
       if (path == '/auth/refresh') return FakeReply(200, tokens('a1', 'r2'));
       if (path == '/me' && request.method == 'GET') return FakeReply(200, me);
       if (path == '/me' && request.method == 'PATCH') {
-        me = {...me, 'display_name': (request.data as Map)['display_name']};
+        final body = request.data as Map;
+        me = {...me, 'display_name': body['display_name'], 'bio': body['bio']};
         return FakeReply(200, me);
+      }
+      if (path == '/users/u1') return FakeReply(200, profileJson(me));
+      if (path == '/users/u1/posts') return const FakeReply(200, {'items': [postJson], 'next_cursor': null});
+      if (path == '/users/u1/listings' || path == '/users/u1/services') {
+        return const FakeReply(200, {'items': [], 'next_cursor': null});
       }
       if (path == '/me/standing') return const FakeReply(200, standingJson);
       if (path == '/feed') return const FakeReply(200, {'items': [], 'next_cursor': null, 'radius_km': 15});
@@ -157,30 +190,53 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    Future<void> openSettings(WidgetTester tester) async {
+      await openMe(tester);
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+    }
+
     setUp(() {
       me = meJson();
       extra = (_) => const FakeReply(0);
     });
 
-    testWidgets('the account, its standing, and a new name', (tester) async {
+    testWidgets('the Me tab is my profile, with my posts, and I can edit it', (tester) async {
       await openMe(tester);
-      expect(find.text('Amina K.'), findsOneWidget);
-      expect(find.text('Nyeri Town · ★ 4.5 (2)'), findsOneWidget);
+      expect(find.text('Amina K.'), findsWidgets);
+      expect(find.text('Nyeri Town · ★ 4.5 (2) · Joined Oct 2026'), findsOneWidget);
+      expect(find.text('Matatu stage has moved across the road'), findsOneWidget);
+
+      await tester.tap(find.text('Selling'));
+      await tester.pumpAndSettle();
+      expect(find.text('Nothing for sale. Sell something from the Market.'), findsOneWidget);
+
+      await tester.tap(find.text('Edit profile'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Amina Kariuki');
+      await tester.enterText(find.widgetWithText(TextField, 'Bio'), 'Tailor in Kamakwa. School uniforms.');
+      final save = find.widgetWithText(FilledButton, 'Save');
+      await tester.scrollUntilVisible(save, 200, scrollable: find.byType(Scrollable).last);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+
+      final sent = adapter.requests.lastWhere((r) => r.path == '/me' && r.method == 'PATCH').data as Map;
+      expect(sent, {'display_name': 'Amina Kariuki', 'bio': 'Tailor in Kamakwa. School uniforms.'});
+      // Back on the profile, reloaded.
+      expect(find.text('Amina Kariuki'), findsWidgets);
+      expect(find.text('Tailor in Kamakwa. School uniforms.'), findsOneWidget);
+    });
+
+    testWidgets('settings show where the account stands', (tester) async {
+      await openSettings(tester);
       expect(find.text('Restricted'), findsOneWidget);
       expect(find.textContaining('Several posts were reported as spam.'), findsOneWidget);
       expect(find.textContaining('1 neighbour has vouched for you'), findsOneWidget);
-
-      await tester.tap(find.text('Edit'));
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'Amina Kariuki');
-      await tester.tap(find.text('Save'));
-      await tester.pumpAndSettle();
-      expect(find.text('Amina Kariuki'), findsOneWidget);
     });
 
     testWidgets('deleting asks for understanding, then signs out here', (tester) async {
-      await openMe(tester);
-      await reachInMe(tester, find.text('Delete my account'));
+      await openSettings(tester);
+      await reachInSettings(tester, find.text('Delete my account'));
       await tester.tap(find.text('Delete my account'));
       await tester.pumpAndSettle();
 
@@ -203,7 +259,11 @@ void main() {
     testWidgets('signing in during the grace period offers to cancel', (tester) async {
       me = meJson(deletionRequestedAt: '2026-10-23T09:00:00Z');
       await openMe(tester);
-      // Once across the app, once on the Me tab with the button.
+      // Across the app, on every tab.
+      expect(find.text('Your account is due to be deleted'), findsOneWidget);
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      // And in Settings, with the button.
       expect(find.text('Your account is due to be deleted'), findsNWidgets(2));
       expect(find.text('Delete my account'), findsNothing);
 
@@ -214,8 +274,8 @@ void main() {
     });
 
     testWidgets('signing out other devices keeps this one', (tester) async {
-      await openMe(tester);
-      await reachInMe(tester, find.text("Where I'm signed in"));
+      await openSettings(tester);
+      await reachInSettings(tester, find.text("Where I'm signed in"));
       await tester.tap(find.text("Where I'm signed in"));
       await tester.pumpAndSettle();
       expect(find.text('Android phone · this phone'), findsOneWidget);

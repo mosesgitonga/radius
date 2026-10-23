@@ -11,6 +11,7 @@ import '../../../core/widgets.dart';
 import '../../auth/auth_controller.dart';
 import '../../feed/widgets/post_card.dart';
 import '../../feed/widgets/report_sheet.dart';
+import '../../profile/profile_screen.dart';
 import '../../reviews/review_models.dart';
 import '../../reviews/widgets/review_widgets.dart';
 import '../listing_models.dart';
@@ -379,7 +380,12 @@ class _ListingScreenState extends ConsumerState<ListingScreen> {
                     Text(listing.description, style: text.bodyLarge?.copyWith(color: Palette.inkSoft, height: 1.5)),
                   ],
                   const SizedBox(height: 16),
-                  _SellerCard(listing: listing, average: _reviews?.average, count: _reviews?.count ?? 0),
+                  _SellerCard(
+                    listing: listing,
+                    average: _reviews?.average,
+                    count: _reviews?.count ?? 0,
+                    onTap: () => openProfile(context, ref, listing.seller.id),
+                  ),
                   const SizedBox(height: 12),
                   Text(
                     "Meet in a public place and pay on collection. Never send M-Pesa before you've seen the item.",
@@ -517,11 +523,12 @@ class _Tag extends StatelessWidget {
 }
 
 class _SellerCard extends StatelessWidget {
-  const _SellerCard({required this.listing, required this.average, required this.count});
+  const _SellerCard({required this.listing, required this.average, required this.count, required this.onTap});
 
   final Listing listing;
   final double? average;
   final int count;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -529,7 +536,10 @@ class _SellerCard extends StatelessWidget {
     final rating = average == null || count == 0
         ? 'No reviews yet'
         : '★ ${average!.toStringAsFixed(1)} from $count review${count == 1 ? '' : 's'}';
-    return Container(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
@@ -555,8 +565,10 @@ class _SellerCard extends StatelessWidget {
               ],
             ),
           ),
+          const Icon(Icons.chevron_right_rounded, color: Palette.muted),
         ],
       ),
+    ),
     );
   }
 }

@@ -5,7 +5,8 @@ import '../../../core/theme.dart';
 import '../../../core/widgets.dart';
 import '../feed_models.dart';
 
-/// A round avatar with the author's initials.
+/// A round avatar: the person's photo, or their initials while there is none
+/// (or while it loads).
 class InitialsAvatar extends StatelessWidget {
   const InitialsAvatar({super.key, required this.author, this.radius = 20});
 
@@ -23,12 +24,24 @@ class InitialsAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tone = _tones[author.id.codeUnits.fold<int>(0, (a, b) => a + b) % _tones.length];
-    return CircleAvatar(
+    final initials = CircleAvatar(
       radius: radius,
       backgroundColor: tone,
       child: Text(
         author.initials,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(fontSize: radius * 0.7),
+      ),
+    );
+    final url = sizeFor(author.avatar, (radius * 2 * MediaQuery.devicePixelRatioOf(context)).round());
+    if (url == null) return initials;
+    return ClipOval(
+      child: CachedNetworkImage(
+        imageUrl: url,
+        width: radius * 2,
+        height: radius * 2,
+        fit: BoxFit.cover,
+        placeholder: (_, _) => initials,
+        errorWidget: (_, _, _) => initials,
       ),
     );
   }
@@ -74,6 +87,7 @@ class PostCard extends StatelessWidget {
     required this.onHelpful,
     this.onOpen,
     this.onMore,
+    this.onAuthor,
     this.mine = false,
   });
 
@@ -81,6 +95,9 @@ class PostCard extends StatelessWidget {
   final VoidCallback onHelpful;
   final VoidCallback? onOpen;
   final VoidCallback? onMore;
+
+  /// Opens the author's profile, from their photo or name.
+  final VoidCallback? onAuthor;
   final bool mine;
 
   @override
@@ -100,22 +117,26 @@ class PostCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  InitialsAvatar(author: post.author),
+                  GestureDetector(onTap: onAuthor, child: InitialsAvatar(author: post.author)),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          spacing: 6,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text(post.author.displayName, style: text.titleSmall),
-                            if (post.author.isVerifiedNeighbour) const NeighbourBadge(),
-                          ],
-                        ),
-                        Text(postMeta(post), style: text.bodySmall?.copyWith(fontSize: 12.5)),
-                      ],
+                    child: GestureDetector(
+                      onTap: onAuthor,
+                      behavior: HitTestBehavior.opaque,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(post.author.displayName, style: text.titleSmall),
+                              if (post.author.isVerifiedNeighbour) const NeighbourBadge(),
+                            ],
+                          ),
+                          Text(postMeta(post), style: text.bodySmall?.copyWith(fontSize: 12.5)),
+                        ],
+                      ),
                     ),
                   ),
                   CategoryTag(post.category),
