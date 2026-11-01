@@ -2533,11 +2533,57 @@ tabs.
 - **Distance to myself:** my own profile said "under 1 km". The API no longer sends a
   distance band for your own profile.
 
+### Slice 8 — home by GPS only, and proving it: plan
+
+Asked for on 2026-11-01. Home is found only by GPS, never chosen. There will be no
+"pick your spot on a map" screen, so that open question is withdrawn. Someone who
+fakes a location to join a richer neighbourhood must not be able to approach its
+residents. Decided with you:
+- **Daily check:** once a day, while the app is open, it checks whether the phone is
+  at home. Only the area is kept.
+- **Newcomers:** they can post, comment and react at once. They cannot **contact
+  strangers** until they have been at home on **4 days in a row**.
+
+**What it closes:**
+- **Fake-location apps:** a reading Android marks as mocked is refused by the app.
+  The server refuses any reading that says it is mocked, or that is not accurate to
+  150 m or better.
+- **Faking it once:** the badge (10 of 14 days at home) and the new contact rule now
+  need a daily check, so a fake location must be kept up for days, not set once.
+
+**Backend** (migration 0015):
+- **New columns:** `users.contact_unlocked_at` and `users.presence_checked_on`.
+- **Home readings:** `PUT /me/location` requires `accuracy_metres` (at most
+  `LOCATION_MAX_ACCURACY_METRES`, 150) and refuses `is_mocked: true`.
+- **Daily check:** `POST /me/presence` takes the same reading and records one bit for
+  today: at home or not. It never moves home. Once the run reaches
+  `CONTACT_UNLOCK_DAYS` (4), contact is unlocked. Moving home locks it again until
+  the new area is proven. Verified neighbours are always unlocked.
+- **Contact with strangers** is refused while locked (403,
+  `details.reason = contact_locked`, with the run so far):
+  - the first message of a new chat (direct, about a listing, about a service);
+  - inviting someone you have no accepted chat with into a group chat, a group or
+    an event.
+
+  Replying to someone who wrote to you first stays allowed, and so does everything
+  else.
+- **`GET /me`** says whether contact is unlocked, the run so far, and whether
+  today's check is due.
+- **Data rights:** the export says when contact was unlocked; the purge clears both
+  new columns. DECISIONS and DATA_MAP are updated.
+
+**App:**
+- **Location:** one helper for reading location everywhere: fresh, high accuracy,
+  refuses mocked readings, and explains a poor fix.
+- **The daily check** runs when the app opens or comes back, if due and if location
+  permission is already given. It never asks for permission and is silent on
+  failure.
+- **When locked,** Message, "Ask if it's available", "I can help" and the rest
+  explain the rule and the day count instead of opening a chat. Settings shows the
+  progress.
+
 ### Open questions
 
-- **Map tiles** for the home-area picker (slice 1 uses "use my location" only):
-  OpenStreetMap's public tiles are not for production use, so a tile provider is
-  needed before launch.
 - **A Firebase project** for push (slice 3).
 - **Category lists** for services (and later listings) are configurable on the
   server, but the app can only know them by carrying a copy. A small `GET` endpoint
