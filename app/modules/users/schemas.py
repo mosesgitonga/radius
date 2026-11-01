@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.location.cells import DistanceBucket
 from app.modules.media.schemas import ImageVariantOut
-from app.modules.users.models import ConsentType, UserStatus
+from app.modules.users.models import CircleRequestPolicy, ConsentType, UserStatus
 
 
 class AreaLabelOut(BaseModel):
@@ -102,6 +102,10 @@ class MeOut(BaseModel):
     cover: dict[str, ImageVariantOut] | None = Field(
         default=None, description="Served cover photo sizes, keyed by width."
     )
+    circle_request_policy: CircleRequestPolicy = Field(
+        default=CircleRequestPolicy.everyone,
+        description="Who may ask to join my circle. Changed with `PATCH /me`.",
+    )
 
 
 class PublicProfileOut(BaseModel):
@@ -136,8 +140,16 @@ class PublicProfileOut(BaseModel):
         default=False,
         description=(
             "Whether `GET /users/{id}/posts` can show the caller anything: their feed "
-            "radius reaches this person's home area. Further away, a profile shows its "
-            "bio, listings and services, but not its posts."
+            "radius reaches this person's home area, or they are in each other's "
+            "circle. Otherwise a profile shows its bio, listings and services, but not "
+            "its posts."
+        ),
+    )
+    relationship: Literal["none", "request_sent", "request_received", "in_circle"] = Field(
+        default="none",
+        description=(
+            "Where the caller stands with this person's circle. A request they declined "
+            "still reads `request_sent` until it expires; there is no `declined`."
         ),
     )
 
@@ -148,6 +160,14 @@ class ProfileUpdateIn(BaseModel):
         default=None,
         max_length=160,
         description="A line or two about yourself. An empty string removes it.",
+    )
+    circle_request_policy: CircleRequestPolicy | None = Field(
+        default=None,
+        description=(
+            "Who may ask to join your circle: `everyone`, `nearby_only` (people your "
+            "feed reaches), `contacts_only` (people you have an accepted conversation "
+            "with) or `nobody`. Whoever is refused is not told why."
+        ),
     )
 
 

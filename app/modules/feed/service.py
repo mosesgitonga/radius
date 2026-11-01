@@ -24,12 +24,13 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from redis.asyncio import Redis
-from sqlalchemy import Select, delete, select, update
+from sqlalchemy import Select, delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,7 +38,9 @@ from app.core.config import RadiusFeature, Settings
 from app.core.db import execute_dml
 from app.core.errors import BadRequestError, ConflictError, ForbiddenError, NotFoundError
 from app.core.pagination import PageParams, paginate
+from app.modules.circle import links as circle_links
 from app.modules.feed.models import (
+    Audience,
     Comment,
     Post,
     PostApproval,
@@ -47,6 +50,8 @@ from app.modules.feed.models import (
     StoryKind,
     StoryView,
 )
+from app.modules.follows import links as follow_links
+from app.modules.follows.models import FollowEntityType
 from app.modules.groups import access as group_access
 from app.modules.groups.models import ROLE_RANK, Group, GroupRole
 from app.modules.location import bands
@@ -64,6 +69,7 @@ from app.modules.moderation.holds import hold_if_restricted
 from app.modules.moderation.models import ContentStatus
 from app.modules.notifications import service as notifications_service
 from app.modules.notifications.models import NotificationType
+from app.modules.services.models import ServiceKind, ServicePost
 from app.modules.users.models import User
 from app.modules.users.service import blocked_user_ids, is_blocked_between
 
@@ -136,6 +142,8 @@ async def create_post(
     settings: Settings,
     group: Group | None = None,
     needs_approval: bool = False,
+    audience: Audience = Audience.neighbours_and_circle,
+    service_post_id: uuid.UUID | None = None,
 ) -> tuple[Post, int]:
     """Create a post, and estimate who can see it.
 
@@ -143,8 +151,17 @@ async def create_post(
     neighbourhood feed; the caller (the groups service) has already checked the
     author may post there and decided whether it needs approval. Its "reach" is
     then the group's membership, not a radius.
+
+    `audience` says whether the author's circle (and a service's followers) see
+    it as well as neighbours. `service_post_id` makes it a post *as* one of the
+    author's offerings, which is what reaches that offering's followers
+    (decision C.5).
     """
     location = _require_home(author)
+    if service_post_id is not None:
+        if group is not None:
+            raise BadRequestError("A post in a group cannot be made as a service")
+        await _require_own_offering(session, author=author, service_post_id=service_post_id)
 
     cleaned = body.strip()
     if not cleaned:
@@ -175,6 +192,8 @@ async def create_post(
         category=category,
         group_id=group.id if group is not None else None,
         approval_status=PostApproval.pending if needs_approval else None,
+        audience=audience,
+        service_post_id=service_post_id,
         **location,
     )
     post.images = [
@@ -197,6 +216,25 @@ async def create_post(
         extra={"post_id": str(post.id), "images": len(assets), "category": category},
     )
     return post, reach
+
+
+async def _require_own_offering(
+    session: AsyncSession, *, author: User, service_post_id: uuid.UUID
+) -> None:
+    found = await session.scalar(
+        select(ServicePost.id).where(
+            ServicePost.id == service_post_id,
+            ServicePost.author_id == author.id,
+            ServicePost.kind == ServiceKind.offering,
+            ServicePost.deleted_at.is_(None),
+            ServicePost.status != ContentStatus.removed,
+        )
+    )
+    if found is None:
+        raise BadRequestError(
+            "You can post only as one of your own service offerings",
+            details={"field": "service_post_id"},
+        )
 
 
 async def estimate_reach(
@@ -374,8 +412,10 @@ async def profile_posts(
     To the author: every post they have not deleted, held ones included, so they
     can see what is waiting for a moderator. To anyone else: exactly the posts the
     feed could show them — visible, outside groups, within their feed radius of
-    home — so a profile surfaces nothing the feed would not. A block either way is
-    the caller's to refuse before asking.
+    home — so a profile surfaces nothing the feed would not. A member of the
+    author's circle also sees the posts the author shared with their circle,
+    wherever they live, as the circle feed does. A block either way is the
+    caller's to refuse before asking.
     """
     statement: Select[Post] = select(Post).where(
         Post.author_id == author.id,
@@ -385,19 +425,87 @@ async def profile_posts(
     if author.id == viewer.id:
         statement = statement.where(Post.status != ContentStatus.removed)
     else:
+        shared = Post.audience == Audience.neighbours_and_circle
+        circle = await circle_links.in_circle(session, viewer.id, author.id)
         anchor = await resolve_anchor(redis, user=viewer, mode="home")
         if anchor is None:
-            return [], None
-        radius = await RadiusEngine(session, redis, settings).radius_for(
-            RadiusFeature.feed, anchor.cell_res8
-        )
-        statement = statement.where(
-            Post.status == ContentStatus.visible,
-            bands.within(Post.centroid, anchor, radius.radius_m),
-        )
+            if not circle:
+                return [], None
+            reach: Any = shared
+        else:
+            radius = await RadiusEngine(session, redis, settings).radius_for(
+                RadiusFeature.feed, anchor.cell_res8
+            )
+            nearby = bands.within(Post.centroid, anchor, radius.radius_m)
+            reach = or_(nearby, shared) if circle else nearby
+        statement = statement.where(Post.status == ContentStatus.visible, reach)
     return await paginate(
         session, statement, sort_column=Post.created_at, id_column=Post.id, params=params
     )
+
+
+async def circle_feed_page(
+    session: AsyncSession, *, viewer: User, params: PageParams
+) -> tuple[list[Post], str | None]:
+    """Posts from my circle and from services I follow, from anywhere, newest first.
+
+    Only what their authors shared beyond the neighbourhood: a `neighbours_only`
+    post stays with its neighbours. Blocking and moderation apply as in the
+    feed. A follow brings in posts made as the followed service, never the
+    provider's own posts (decision C.5). No home area is needed: the circle is
+    people, not a place.
+    """
+    blocked = await blocked_user_ids(session, viewer.id)
+    statement: Select[Post] = select(Post).where(
+        Post.status == ContentStatus.visible,
+        Post.deleted_at.is_(None),
+        Post.group_id.is_(None),
+        Post.audience == Audience.neighbours_and_circle,
+        or_(
+            Post.author_id.in_(circle_links.member_ids(viewer.id)),
+            Post.service_post_id.in_(
+                follow_links.followed_ids(viewer.id, FollowEntityType.service_provider)
+            ),
+        ),
+    )
+    if blocked:
+        statement = statement.where(Post.author_id.not_in(blocked))
+    return await paginate(
+        session, statement, sort_column=Post.created_at, id_column=Post.id, params=params
+    )
+
+
+async def beyond_feed(
+    session: AsyncSession,
+    redis: Redis,
+    *,
+    viewer: User,
+    model: type[Post] | type[Story],
+    items: Sequence[Post] | Sequence[Story],
+    settings: Settings,
+) -> set[uuid.UUID]:
+    """Which of these posts or stories lie outside the viewer's feed radius of home.
+
+    Those are shown by their town only and with no distance band (decision C.6).
+    The viewer's own are never beyond.
+    """
+    others = [item.id for item in items if item.author_id != viewer.id]
+    if not others:
+        return set()
+    anchor = await resolve_anchor(redis, user=viewer, mode="home")
+    if anchor is None:
+        return set(others)
+    radius = await RadiusEngine(session, redis, settings).radius_for(
+        RadiusFeature.feed, anchor.cell_res8
+    )
+    nearby = set(
+        await session.scalars(
+            select(model.id).where(
+                model.id.in_(others), bands.within(model.centroid, anchor, radius.radius_m)
+            )
+        )
+    )
+    return set(others) - nearby
 
 
 # ---------------------------------------------------------------------------
@@ -764,6 +872,7 @@ async def create_story(
     media_id: uuid.UUID | None,
     text: str | None,
     settings: Settings,
+    audience: Audience = Audience.neighbours_and_circle,
 ) -> Story:
     location = _require_home(author)
 
@@ -789,6 +898,7 @@ async def create_story(
         kind=kind,
         media_id=media_id if kind == StoryKind.image else None,
         text=text if kind == StoryKind.text else None,
+        audience=audience,
         expires_at=datetime.now(UTC) + settings.story_ttl,
         **location,
     )
@@ -831,6 +941,25 @@ async def stories_page(
         session, statement, sort_column=Story.created_at, id_column=Story.id, params=params
     )
     return StoryPage(stories=stories, next_cursor=next_cursor, anchor=anchor)
+
+
+async def circle_stories_page(
+    session: AsyncSession, *, viewer: User, params: PageParams
+) -> tuple[list[Story], str | None]:
+    """Live stories my circle shared beyond their neighbourhood, from anywhere."""
+    blocked = await blocked_user_ids(session, viewer.id)
+    statement: Select[Story] = select(Story).where(
+        Story.status == ContentStatus.visible,
+        Story.deleted_at.is_(None),
+        Story.expires_at > datetime.now(UTC),
+        Story.audience == Audience.neighbours_and_circle,
+        Story.author_id.in_(circle_links.member_ids(viewer.id)),
+    )
+    if blocked:
+        statement = statement.where(Story.author_id.not_in(blocked))
+    return await paginate(
+        session, statement, sort_column=Story.created_at, id_column=Story.id, params=params
+    )
 
 
 async def get_story(session: AsyncSession, *, viewer: User, story_id: uuid.UUID) -> Story:

@@ -19,8 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.core.idempotency
 import app.modules.auth.models
+import app.modules.circle.models
 import app.modules.events.models
 import app.modules.feed.models
+import app.modules.follows.models
 import app.modules.groups.models
 import app.modules.location.models
 import app.modules.marketplace.models
@@ -67,10 +69,14 @@ async def test_enum_column_is_constrained_to_exactly_its_values(
     ).scalars()
     # The column name in parentheses, so `status` does not also match the
     # constraint on `approval_status`.
+    # A one-value enum is rendered as a plain equality instead of `= ANY (ARRAY[...])`.
+    single = f"(({column})::text = '"
     definitions = [
         definition
         for definition in rows
-        if f"({column})::text = ANY" in definition or f"({column} = ANY" in definition
+        if f"({column})::text = ANY" in definition
+        or f"({column} = ANY" in definition
+        or single in definition
     ]
 
     assert definitions, f"{table}.{column} has no CHECK constraint on its values"
@@ -79,7 +85,11 @@ async def test_enum_column_is_constrained_to_exactly_its_values(
     allowed = {
         part.split("'")[1]
         for definition in definitions
-        for part in definition.split("ARRAY[", 1)[1].split(",")
+        for part in (
+            definition.split("ARRAY[", 1)[1].split(",")
+            if "ARRAY[" in definition
+            else ["'" + definition.split(single, 1)[1]]
+        )
         if "'" in part
     }
     missing = set(values) - allowed

@@ -28,8 +28,10 @@ from app.core.queue import close_queue
 from app.core.realtime import close_hub
 from app.core.redis import close_redis
 from app.modules.auth.router import router as auth_router
+from app.modules.circle.router import router as circle_router
 from app.modules.events.router import router as events_router
 from app.modules.feed.router import router as feed_router
+from app.modules.follows.router import router as follows_router
 from app.modules.groups.router import router as groups_router
 from app.modules.location.router import router as location_router
 from app.modules.marketplace.router import profile_router as listings_profile_router
@@ -94,6 +96,21 @@ TAGS_METADATA = [
         "name": "feed",
         "description": (
             "Posts, comments, reactions and stories within the caller's adaptive radius."
+        ),
+    },
+    {
+        "name": "circle",
+        "description": (
+            "Mutual connections that reach beyond the neighbourhood: requests, the "
+            "circle itself, and what people share with it. Declines and removals are "
+            "silent; nobody is shown more than a town beyond their feed radius."
+        ),
+    },
+    {
+        "name": "follows",
+        "description": (
+            "Following a service provider's offering, from anywhere. People are never "
+            "followed, and nobody sees who follows them."
         ),
     },
     {
@@ -212,6 +229,8 @@ def build_v1_router(settings: Settings) -> APIRouter:
     router.include_router(location_router)
     router.include_router(media_router)
     router.include_router(feed_router)
+    router.include_router(circle_router)
+    router.include_router(follows_router)
     router.include_router(groups_router)
     router.include_router(marketplace_router)
     router.include_router(listings_profile_router)

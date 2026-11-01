@@ -30,6 +30,7 @@ from app.workers.tasks import (
     catch_up_media,
     deliver_message_push,
     deliver_notification_push,
+    expire_circle_requests,
     expire_old_stories,
     heartbeat,
     lift_suspensions,
@@ -76,6 +77,7 @@ class WorkerSettings:
         as_worker_task(send_event_reminders),
         as_worker_task(recompute_badges),
         as_worker_task(lift_suspensions),
+        as_worker_task(expire_circle_requests),
     ]
 
     cron_jobs: ClassVar[list[CronJob]] = [
@@ -98,6 +100,7 @@ class WorkerSettings:
         # After the presence roll, so the badge reads the new day's window.
         cron(as_worker_task(recompute_badges), hour={0}, minute={30}, second=0),
         cron(as_worker_task(lift_suspensions), minute={3}, second=0),
+        cron(as_worker_task(expire_circle_requests), minute={11}, second=0),
         # Every minute, so a one-hour reminder is never more than a minute late.
         cron(as_worker_task(send_event_reminders), second=5, run_at_startup=True),
         cron(as_worker_task(heartbeat), minute={0}, second=0, run_at_startup=False),

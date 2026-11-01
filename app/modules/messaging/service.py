@@ -48,6 +48,7 @@ from app.core.queue import get_queue
 from app.core.ratelimit import get_rate_limiter
 from app.core.realtime import publish_after_commit
 from app.modules.auth.dependencies import is_new_account
+from app.modules.circle import links as circle_links
 from app.modules.media import service as media_service
 from app.modules.media.models import MediaAsset, MediaPurpose
 from app.modules.messaging.models import (
@@ -712,7 +713,13 @@ async def send_message(
         await _contactable(session, viewer=sender, other_id=recipient_id)
 
         if conversation.state != ConversationState.active:
-            if conversation.last_seq == 0:
+            if await circle_links.in_circle(session, sender.id, recipient_id):
+                # People in each other's circle skip message requests. Once accepted
+                # this way it stays accepted, even if one later removes the other
+                # (decision C.3).
+                conversation.state = ConversationState.active
+                _announce_conversation(session, [sender.id, recipient_id], conversation)
+            elif conversation.last_seq == 0:
                 # Whoever sends first is the one asking — not whoever happened to
                 # open the empty conversation.
                 conversation.request_sender_id = sender.id
@@ -1288,12 +1295,16 @@ async def require_can_reach(
     session: AsyncSession, *, actor: User, user_ids: Sequence[uuid.UUID], settings: Settings
 ) -> None:
     """Inviting someone into a group chat, a group or an event is contacting them.
-    For anyone the actor has no accepted conversation with — a stranger — the
-    actor must be able to contact strangers (decision M.7)."""
+    For anyone the actor has no accepted conversation with and is not in a circle
+    with — a stranger — the actor must be able to contact strangers (decision M.7)."""
     if contact.can_contact_strangers(actor):
         return
     for user_id in user_ids:
-        if user_id != actor.id and not await has_accepted_conversation(session, actor.id, user_id):
+        if (
+            user_id != actor.id
+            and not await has_accepted_conversation(session, actor.id, user_id)
+            and not await circle_links.in_circle(session, actor.id, user_id)
+        ):
             contact.require_can_contact_strangers(actor, settings=settings, now=datetime.now(UTC))
 
 

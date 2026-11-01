@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.providers.storage import StorageProvider
 from app.modules.feed.views import author_view, load_assets, load_users
+from app.modules.follows import links as follow_links
+from app.modules.follows.models import FollowEntityType
 from app.modules.location import cells
 from app.modules.location.service import area_label_for_cell
 from app.modules.messaging.views import JOB_SAFETY_NOTICE
@@ -39,6 +41,13 @@ async def post_views(
     assets = await load_assets(session, [user.avatar_media_id for user in authors.values()])
     chats = await services_service.my_conversations_about(
         session, viewer=viewer, post_ids=[post.id for post in posts]
+    )
+    offerings = [post.id for post in posts if post.kind == ServiceKind.offering]
+    followers = await follow_links.follower_counts(
+        session, FollowEntityType.service_provider, offerings
+    )
+    followed = await follow_links.following(
+        session, viewer.id, FollowEntityType.service_provider, offerings
     )
     labels: dict[int, AreaLabelOut] = {}
     for cell in {post.cell_res9 for post in posts}:
@@ -86,6 +95,10 @@ async def post_views(
                 closed_at=post.closed_at,
                 is_mine=mine,
                 my_conversation_id=chats.get(post.id),
+                follower_count=(
+                    followers.get(post.id, 0) if post.kind == ServiceKind.offering else None
+                ),
+                is_following=(post.id in followed) if post.kind == ServiceKind.offering else None,
                 safety_notice=JOB_SAFETY_NOTICE if post.kind == ServiceKind.hiring else None,
                 status=post.status,
                 held_for=(

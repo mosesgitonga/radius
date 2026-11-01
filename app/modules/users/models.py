@@ -48,6 +48,18 @@ class UserStatus(StrEnum):
     """Deletion requested and inside the grace period. Still reversible."""
 
 
+class CircleRequestPolicy(StrEnum):
+    """Who may ask to join someone's circle. Enforced on the server, and every
+    refusal looks the same (decision C.1)."""
+
+    everyone = "everyone"
+    nearby_only = "nearby_only"
+    """Only people whose home is within the recipient's feed radius."""
+    contacts_only = "contacts_only"
+    """Only people the recipient has an accepted conversation with."""
+    nobody = "nobody"
+
+
 class ConsentType(StrEnum):
     terms = "terms"
     privacy_policy = "privacy_policy"
@@ -61,6 +73,7 @@ class ConsentType(StrEnum):
 # constraint is an ordinary, reversible migration.
 _user_status = db_enum(UserStatus, name="user_status", length=32)
 _consent_type = db_enum(ConsentType, name="consent_type", length=32)
+_circle_request_policy = db_enum(CircleRequestPolicy, name="circle_request_policy", length=16)
 
 
 class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
@@ -140,6 +153,12 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     """A line or two the person writes about themselves, shown on their profile.
     Free text, so it is personal data: exported, cleared at purge, and never
     written to the audit log — only the fact that it changed."""
+
+    circle_request_policy: Mapped[CircleRequestPolicy] = mapped_column(
+        _circle_request_policy,
+        default=CircleRequestPolicy.everyone,
+        server_default=CircleRequestPolicy.everyone.value,
+    )
 
     # -- Home location -------------------------------------------------------
     # Four resolutions of the same cell, denormalised on purpose. Deriving the

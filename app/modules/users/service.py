@@ -28,10 +28,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.db import execute_dml
 from app.core.errors import BadRequestError, ConflictError, NotFoundError
+from app.modules.circle import links as circle_links
 from app.modules.moderation.audit import record_audit_event
 from app.modules.moderation.models import AuditAction, AuditActorType
 from app.modules.users.models import (
     Block,
+    CircleRequestPolicy,
     Consent,
     ConsentType,
     User,
@@ -153,7 +155,12 @@ async def create_user(
 
 
 async def update_profile(
-    session: AsyncSession, *, user: User, display_name: str | None, bio: str | None = None
+    session: AsyncSession,
+    *,
+    user: User,
+    display_name: str | None,
+    bio: str | None = None,
+    circle_request_policy: CircleRequestPolicy | None = None,
 ) -> User:
     changed: dict[str, Any] = {}
     if display_name is not None:
@@ -170,6 +177,9 @@ async def update_profile(
         if tidied != user.bio:
             changed["bio"] = True
             user.bio = tidied
+    if circle_request_policy is not None and circle_request_policy != user.circle_request_policy:
+        changed["circle_request_policy"] = True
+        user.circle_request_policy = circle_request_policy
 
     if changed:
         await record_audit_event(
@@ -331,6 +341,8 @@ async def block_user(session: AsyncSession, *, blocker: User, blocked_id: uuid.U
 
     block = Block(blocker_id=blocker.id, blocked_id=blocked_id)
     session.add(block)
+    # A block ends the two people's circle link and every request between them.
+    await circle_links.remove_all_between(session, blocker.id, blocked_id)
     await record_audit_event(
         session,
         action=AuditAction.user_blocked,
@@ -551,6 +563,7 @@ async def purge_user(session: AsyncSession, *, user: User) -> None:
     user.avatar_media_id = None
     user.cover_media_id = None
     user.bio = None
+    user.circle_request_policy = CircleRequestPolicy.everyone
     user.contact_unlocked_at = None
     user.presence_checked_on = None
     user.home_cell_res9 = None

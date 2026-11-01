@@ -88,6 +88,13 @@ class ServicePostOut(BaseModel):
     closed_at: datetime | None = None
     is_mine: bool
     my_conversation_id: uuid.UUID | None = None
+    follower_count: int | None = Field(
+        default=None,
+        description="Offerings only: how many people follow this service. Never who.",
+    )
+    is_following: bool | None = Field(
+        default=None, description="Offerings only: whether the caller follows it."
+    )
     safety_notice: str | None = Field(
         default=None, description="Set on job posts. Show it before the caller makes contact."
     )

@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.modules.feed.models import PostApproval
+from app.modules.feed.models import Audience, PostApproval
 from app.modules.location.cells import DistanceBucket
 from app.modules.media.schemas import ImageVariantOut
 from app.modules.moderation.models import ContentStatus
@@ -43,6 +43,21 @@ class PostCreateIn(BaseModel):
         default_factory=list,
         description="Ready `post` uploads, in display order. At most six.",
     )
+    audience: Audience = Field(
+        default=Audience.neighbours_and_circle,
+        description=(
+            "`neighbours_and_circle` also shows it to the author's circle, wherever they "
+            "live (and, for a post made as a service, to its followers). "
+            "`neighbours_only` keeps it to the neighbourhood feed."
+        ),
+    )
+    service_post_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "Post as one of your own service offerings. People who follow that service "
+            "see it in their circle feed."
+        ),
+    )
 
 
 class PostOut(BaseModel):
@@ -54,7 +69,14 @@ class PostOut(BaseModel):
     area_label: AreaLabelOut
     distance_bucket: DistanceBucket | None = Field(
         default=None,
-        description="How far from the viewer, as a band. Null on the author's own posts.",
+        description=(
+            "How far from the viewer, as a band. Null on the author's own posts, and on "
+            "posts beyond the viewer's feed radius, which show their town only."
+        ),
+    )
+    audience: Audience = Audience.neighbours_and_circle
+    service_post_id: uuid.UUID | None = Field(
+        default=None, description="Set when the post was made as this service offering."
     )
     comment_count: int
     reaction_count: int
@@ -161,6 +183,10 @@ class StoryCreateIn(BaseModel):
     kind: Literal["image", "text"]
     media_id: uuid.UUID | None = None
     text: str | None = Field(default=None, max_length=500)
+    audience: Audience = Field(
+        default=Audience.neighbours_and_circle,
+        description="Whether the author's circle sees it too, wherever they live.",
+    )
 
 
 class StoryOut(BaseModel):
@@ -171,6 +197,7 @@ class StoryOut(BaseModel):
     text: str | None = None
     area_label: AreaLabelOut
     distance_bucket: DistanceBucket | None = None
+    audience: Audience = Audience.neighbours_and_circle
     expires_at: datetime
     created_at: datetime
     view_count: int | None = Field(default=None, description="Shown to the author only.")

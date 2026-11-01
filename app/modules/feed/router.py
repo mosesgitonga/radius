@@ -25,7 +25,7 @@ from app.modules.auth.dependencies import (
 )
 from app.modules.feed import service as feed_service
 from app.modules.feed import views
-from app.modules.feed.models import Post, StoryKind
+from app.modules.feed.models import Post, Story, StoryKind
 from app.modules.feed.schemas import (
     CommentCreateIn,
     CommentOut,
@@ -93,6 +93,13 @@ async def _one_post_view(
     viewer: User,
     settings: Settings,
 ) -> PostOut:
+    beyond = (
+        await feed_service.beyond_feed(
+            session, redis, viewer=viewer, model=Post, items=[post], settings=settings
+        )
+        if post.group_id is None
+        else set()
+    )
     (rendered,) = await views.post_views(
         session,
         redis,
@@ -101,6 +108,7 @@ async def _one_post_view(
         viewer=viewer,
         viewer_cell_res8=viewer.home_cell_res8,
         settings=settings,
+        beyond=beyond,
     )
     return rendered
 
@@ -117,6 +125,9 @@ async def _one_post_view(
         "Posts to the caller's **home** area, even while exploring elsewhere — that "
         "is what stops posts being dropped into neighbourhoods somebody does not live "
         "in. Returns an estimate of how many active neighbours can see it.\n\n"
+        "`audience` decides whether the author's circle sees it too, wherever they live; "
+        "`service_post_id` posts it as one of the author's service offerings, so the "
+        "service's followers see it in their circle feed.\n\n"
         "New accounts have a lower daily limit than established ones." + IDEMPOTENCY_DOC
     ),
     dependencies=[Depends(_post_limit)],
@@ -139,6 +150,8 @@ async def create_post(
             category=payload.category,
             media_ids=payload.media_ids,
             settings=settings,
+            audience=payload.audience,
+            service_post_id=payload.service_post_id,
         )
         await session.refresh(post, attribute_names=["images", "created_at"])
         return PostCreatedOut(
@@ -199,6 +212,47 @@ async def get_feed(
 
 
 @router.get(
+    "/feed/circle",
+    response_model=PostPageOut,
+    summary="My circle's feed",
+    description=(
+        "Posts from people in my circle and from services I follow, from anywhere, "
+        "newest first. Only posts shared beyond the neighbourhood "
+        "(`audience = neighbours_and_circle`); never the provider's own posts for a "
+        "followed service, only those made as the service. Excludes anyone either "
+        "party has blocked, and anything hidden or removed. A post beyond my feed "
+        "radius shows its town only and no distance. The neighbourhood feed, "
+        "`GET /feed`, is unchanged by any of this."
+    ),
+)
+async def get_circle_feed(
+    user: CurrentUser,
+    session: SessionDep,
+    redis: RedisDep,
+    storage: StorageDep,
+    settings: SettingsDep,
+    params: PageDep,
+) -> PostPageOut:
+    posts, next_cursor = await feed_service.circle_feed_page(session, viewer=user, params=params)
+    beyond = await feed_service.beyond_feed(
+        session, redis, viewer=user, model=Post, items=posts, settings=settings
+    )
+    return PostPageOut(
+        items=await views.post_views(
+            session,
+            redis,
+            storage,
+            posts=posts,
+            viewer=user,
+            viewer_cell_res8=user.home_cell_res8,
+            settings=settings,
+            beyond=beyond,
+        ),
+        next_cursor=next_cursor,
+    )
+
+
+@router.get(
     "/users/{user_id}/posts",
     response_model=PostPageOut,
     summary="A neighbour's posts, for their profile",
@@ -206,8 +260,10 @@ async def get_feed(
         "Newest first. To the person themselves: all their posts, held ones "
         "included. To anyone else: only posts their feed could show them — within "
         "their feed radius of home — so a profile surfaces nothing the feed would "
-        "not. The profile's `posts_visible` says whether to expect any. 404 if either "
-        "party has blocked the other, as for the profile."
+        "not. Someone in the person's circle also sees what they shared with their "
+        "circle, wherever they live, by town and with no distance. The profile's "
+        "`posts_visible` says whether to expect any. 404 if either party has blocked "
+        "the other, as for the profile."
     ),
 )
 async def get_profile_posts(
@@ -223,6 +279,9 @@ async def get_profile_posts(
     posts, next_cursor = await feed_service.profile_posts(
         session, redis, viewer=user, author=author, params=params, settings=settings
     )
+    beyond = await feed_service.beyond_feed(
+        session, redis, viewer=user, model=Post, items=posts, settings=settings
+    )
     return PostPageOut(
         items=await views.post_views(
             session,
@@ -232,6 +291,7 @@ async def get_profile_posts(
             viewer=user,
             viewer_cell_res8=user.home_cell_res8,
             settings=settings,
+            beyond=beyond,
         ),
         next_cursor=next_cursor,
     )
@@ -444,7 +504,8 @@ async def unreact_to_comment(
     summary="Post a story",
     description=(
         "An image (a ready `story` upload) or a line of text, gone after 24 hours. "
-        "Placed in the caller's home area." + IDEMPOTENCY_DOC
+        "Placed in the caller's home area. `audience` decides whether the caller's "
+        "circle sees it too, wherever they live." + IDEMPOTENCY_DOC
     ),
     dependencies=[Depends(_story_limit)],
 )
@@ -465,6 +526,7 @@ async def create_story(
             media_id=payload.media_id,
             text=payload.text,
             settings=settings,
+            audience=payload.audience,
         )
         await session.refresh(story)
         (rendered,) = await views.story_views(
@@ -518,6 +580,45 @@ async def list_stories(
             settings=settings,
         ),
         next_cursor=page.next_cursor,
+    )
+
+
+@router.get(
+    "/stories/circle",
+    response_model=StoryPageOut,
+    summary="My circle's stories",
+    description=(
+        "Live stories from people in my circle, from anywhere, newest first: only "
+        "those shared beyond the neighbourhood. A story beyond my feed radius shows "
+        "its town only and no distance."
+    ),
+)
+async def list_circle_stories(
+    user: CurrentUser,
+    session: SessionDep,
+    redis: RedisDep,
+    storage: StorageDep,
+    settings: SettingsDep,
+    params: PageDep,
+) -> StoryPageOut:
+    stories, next_cursor = await feed_service.circle_stories_page(
+        session, viewer=user, params=params
+    )
+    beyond = await feed_service.beyond_feed(
+        session, redis, viewer=user, model=Story, items=stories, settings=settings
+    )
+    return StoryPageOut(
+        items=await views.story_views(
+            session,
+            redis,
+            storage,
+            stories=stories,
+            viewer=user,
+            viewer_cell_res8=user.home_cell_res8,
+            settings=settings,
+            beyond=beyond,
+        ),
+        next_cursor=next_cursor,
     )
 
 

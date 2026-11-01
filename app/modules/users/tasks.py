@@ -20,8 +20,10 @@ from app.core.db import execute_dml
 from app.core.providers.storage import StorageProvider
 from app.modules.auth import service as auth_service
 from app.modules.auth.models import DeviceSession
+from app.modules.circle import service as circle_service
 from app.modules.events import service as events_service
 from app.modules.feed import service as feed_service
+from app.modules.follows import service as follows_service
 from app.modules.groups import service as groups_service
 from app.modules.marketplace import service as marketplace_service
 from app.modules.media import service as media_service
@@ -92,6 +94,8 @@ async def purge_deleted_accounts(
         await reviews_service.purge_user_reviews(session, user_id=user.id)
         await events_service.purge_user_events(session, user_id=user.id, settings=settings)
         await notifications_service.purge_user_notifications(session, user_id=user.id)
+        await circle_service.purge_user_circle(session, user_id=user.id)
+        await follows_service.purge_user_follows(session, user_id=user.id)
         await moderation_retention.purge_user_moderation(session, user_id=user.id)
         if storage is not None:
             await media_service.purge_owner_media(session, storage, owner_id=user.id)

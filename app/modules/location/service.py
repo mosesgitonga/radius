@@ -40,7 +40,7 @@ from app.core.errors import BadRequestError, ConflictError
 from app.core.redis import CACHE_ERRORS
 from app.modules.location import cells
 from app.modules.location.cells import CellLocation, InvalidCoordinatesError
-from app.modules.location.models import Area, CellActivity
+from app.modules.location.models import Area, AreaKind, CellActivity
 from app.modules.moderation.audit import record_audit_event
 from app.modules.moderation.models import AuditAction
 from app.modules.users import contact
@@ -50,6 +50,8 @@ logger = logging.getLogger(__name__)
 
 EXPLORE_KEY_PREFIX = "explore"
 AREA_LABEL_KEY_PREFIX = "arealabel"
+TOWN_LABEL_KEY_PREFIX = "townlabel"
+TOWN_LABEL_RESOLUTION = 7
 AREA_LABEL_CACHE_TTL_SECONDS = 3600
 
 GENERIC_LABEL = "nearby"
@@ -350,12 +352,12 @@ async def area_label_for_cell(
     remote user, or a deployment whose density worker has not run — the result is
     the generic label, which is the safe direction to fail in.
     """
-    cached = await _read_label_cache(redis, cell_res9)
+    cached = await _read_label_cache(redis, _label_cache_key(cell_res9))
     if cached is not None:
         return cached
 
     label = await _compute_area_label(session, cell_res9=cell_res9, settings=settings)
-    await _write_label_cache(redis, cell_res9, label)
+    await _write_label_cache(redis, _label_cache_key(cell_res9), label)
     return label
 
 
@@ -385,6 +387,48 @@ async def _compute_area_label(
             return AreaLabel(label=f"near {nearby_town}", precision="town")
 
     return AreaLabel(label=GENERIC_LABEL, precision="generic")
+
+
+async def town_label_for_cell(
+    session: AsyncSession, redis: Redis, *, cell_res9: int, settings: Settings
+) -> AreaLabel:
+    """The town a cell is in, and nothing finer.
+
+    Shown for someone outside the viewer's feed radius, such as a circle member
+    in another town (decision C.6). Worked out from the res-7 parent (a couple
+    of kilometres across), never the cell itself, so neighbours get the same
+    answer:
+    - a seeded town covering that cell's centre;
+    - otherwise, the town named on the smallest area covering it;
+    - otherwise, "near" the closest town within 50 km;
+    - otherwise, the generic label.
+    """
+    coarse = cells.parent_cell(cell_res9, TOWN_LABEL_RESOLUTION)
+    key = f"{TOWN_LABEL_KEY_PREFIX}:{coarse}"
+    cached = await _read_label_cache(redis, key)
+    if cached is not None:
+        return cached
+
+    latitude, longitude = cells.cell_centroid(coarse)
+    point = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
+    covering = (
+        await session.execute(
+            select(Area.kind, Area.name, Area.town)
+            .where(Area.is_active.is_(True), func.ST_Covers(Area.boundary, point))
+            .order_by(func.ST_Area(Area.boundary).asc())
+        )
+    ).all()
+    town = next((row.name for row in covering if row.kind == AreaKind.TOWN), None) or next(
+        (row.town for row in covering if row.town), None
+    )
+    if town:
+        label = AreaLabel(label=town, precision="town")
+    elif nearby := await _nearest_town_name(session, latitude, longitude):
+        label = AreaLabel(label=f"near {nearby}", precision="town")
+    else:
+        label = AreaLabel(label=GENERIC_LABEL, precision="generic")
+    await _write_label_cache(redis, key, label)
+    return label
 
 
 async def _registered_in_cell(session: AsyncSession, resolution: int, cell: int) -> int:
@@ -438,9 +482,9 @@ def _label_cache_key(cell_res9: int) -> str:
     return f"{AREA_LABEL_KEY_PREFIX}:{cell_res9}"
 
 
-async def _read_label_cache(redis: Redis, cell_res9: int) -> AreaLabel | None:
+async def _read_label_cache(redis: Redis, key: str) -> AreaLabel | None:
     try:
-        raw = await redis.get(_label_cache_key(cell_res9))
+        raw = await redis.get(key)
     except CACHE_ERRORS:
         return None
     if not raw:
@@ -457,7 +501,7 @@ async def _read_label_cache(redis: Redis, cell_res9: int) -> AreaLabel | None:
         return None
 
 
-async def _write_label_cache(redis: Redis, cell_res9: int, label: AreaLabel) -> None:
+async def _write_label_cache(redis: Redis, key: str, label: AreaLabel) -> None:
     payload = {
         "label": label.label,
         "precision": label.precision,
@@ -465,7 +509,7 @@ async def _write_label_cache(redis: Redis, cell_res9: int, label: AreaLabel) -> 
     }
     try:
         await redis.set(
-            _label_cache_key(cell_res9),
+            key,
             json.dumps(payload),
             ex=AREA_LABEL_CACHE_TTL_SECONDS,
         )

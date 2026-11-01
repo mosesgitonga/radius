@@ -65,6 +65,10 @@ class NotificationType(StrEnum):
     event_reminder = "event_reminder"
     event_updated = "event_updated"
     event_cancelled = "event_cancelled"
+    circle = "circle"
+    """Someone asked to join your circle, or accepted your request: `data.event`
+    is `request` or `accepted`. One type, so one preference covers both. Nothing
+    is sent for a decline, a removal or an expiry (decision C.2)."""
     account_notice = "account_notice"
     """From the moderators: a warning, a suspension, a restriction, content taken
     down. The `data` says which; the push carries the wording."""

@@ -559,6 +559,10 @@ _PUSH_TEXT: dict[NotificationType, tuple[str, str]] = {
         "{actor} asked about your listing",
         "{actor} and {others} asked about your listing",
     ),
+    NotificationType.circle: (
+        "{actor} and you are now in each other's circle",
+        "{actor} and you are now in each other's circle",
+    ),
     NotificationType.account_notice: (
         "A message about your account",
         "A message about your account",
@@ -595,7 +599,7 @@ async def deliver_notification_push(
     when there is one, so the push and the list agree. A system notice (no actor)
     is worded by its `push_text`.
     """
-    actor_name = "MyRadius"
+    actor_name = settings.app_name
     if actor_id is not None:
         if await is_blocked_between(session, recipient_id, actor_id):
             return PushOutcome(sent=False, reason="blocked")
@@ -630,7 +634,7 @@ async def deliver_notification_push(
         provider,
         user_id=recipient_id,
         kind=kind,
-        title="MyRadius",
+        title=settings.app_name,
         body=text,
         preview=None,
         collapse_key=collapse_key,

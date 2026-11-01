@@ -33,8 +33,10 @@ from app.core.metrics import record_job
 from app.core.providers.push import get_push_provider
 from app.core.providers.storage import get_storage_provider
 from app.core.redis import get_redis
+from app.modules.circle import service as circle_service
 from app.modules.events import service as events_service
 from app.modules.feed.tasks import expire_stories
+from app.modules.follows import service as follows_service
 from app.modules.groups import service as groups_service
 from app.modules.location.tasks import refresh_cell_activity, roll_home_presence
 from app.modules.media import service as media_service
@@ -196,6 +198,10 @@ async def run_retention(ctx: JobContext) -> dict[str, int]:
             session, settings=settings
         )
         invite_links_removed = await groups_service.delete_old_invite_links(session)
+        circle_requests_purged = await circle_service.purge_closed_requests(
+            session, settings=settings
+        )
+        follows_removed = await follows_service.delete_orphaned_follows(session)
         content = await moderation_retention.purge_old_content(session, storage, settings=settings)
         records = await moderation_retention.purge_old_records(session, settings=settings)
     return {
@@ -206,9 +212,21 @@ async def run_retention(ctx: JobContext) -> dict[str, int]:
         "notifications_purged": notifications_purged,
         "stale_device_tokens_deleted": tokens_removed,
         "old_invite_links_deleted": invite_links_removed,
+        "circle_requests_purged": circle_requests_purged,
+        "orphaned_follows_deleted": follows_removed,
         **{f"purged_{name}": count for name, count in content.items()},
         **{f"expired_{name}": count for name, count in records.items()},
     }
+
+
+@with_job_context
+async def expire_circle_requests(ctx: JobContext) -> dict[str, int]:
+    """Hourly: mark circle requests nobody answered within
+    `CIRCLE_REQUEST_EXPIRY_DAYS` as expired. Nobody is told."""
+    settings = get_settings()
+    async with task_session(ctx) as session:
+        expired = await circle_service.expire_requests(session, settings=settings)
+    return {"expired": expired}
 
 
 @with_job_context

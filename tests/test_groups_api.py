@@ -814,3 +814,41 @@ async def test_group_settings_are_validated(settings: Any) -> None:
         "business",
         "other",
     }
+
+
+# ---------------------------------------------------------------------------
+# Membership never depends on where someone lives
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("visibility", ["public", "private"])
+async def test_moving_home_far_away_keeps_every_membership(
+    db_session: AsyncSession, authenticate: Authenticate, visibility: str
+) -> None:
+    owner = await neighbour(db_session)
+    member = await neighbour(db_session)
+    group = await create(await authenticate(owner), visibility=visibility)
+    link = (
+        await (await authenticate(owner)).post(f"/v1/groups/{group['id']}/invite-links", json={})
+    ).json()
+    joined = await (await authenticate(member)).post(
+        f"/v1/groups/invite-links/{link['token']}/join"
+    )
+    assert joined.status_code == 200, joined.text
+
+    # The member moves to Nairobi, far outside the group's discovery radius.
+    moved = await make_user(db_session, at=NAIROBI)
+    for column in ("home_cell_res9", "home_cell_res8", "home_cell_res7", "home_cell_res6"):
+        setattr(member, column, getattr(moved, column))
+    member.home_centroid = moved.home_centroid
+    await db_session.flush()
+
+    client = await authenticate(member)
+    shown = (await client.get(f"/v1/groups/{group['id']}")).json()
+    assert shown["my_membership"]["status"] == "active"
+    assert (await client.get(f"/v1/groups/{group['id']}/posts")).status_code == 200
+    posted = await client.post(
+        f"/v1/groups/{group['id']}/posts",
+        json={"body": "Greetings from Nairobi", "category": "general"},
+    )
+    assert posted.status_code == 201, posted.text
+    mine = (await client.get("/v1/groups/mine")).json()
+    assert group["id"] in {item["id"] for item in mine["items"]}

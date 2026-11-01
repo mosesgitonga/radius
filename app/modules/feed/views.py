@@ -31,7 +31,7 @@ from app.modules.feed.schemas import (
 )
 from app.modules.feed.service import reactions_by
 from app.modules.location import cells
-from app.modules.location.service import area_label_for_cell
+from app.modules.location.service import area_label_for_cell, town_label_for_cell
 from app.modules.media.models import MediaAsset
 from app.modules.media.views import image_variants
 from app.modules.users.models import User
@@ -84,6 +84,17 @@ async def _labels(
     return labels
 
 
+async def _town_labels(
+    session: AsyncSession, redis: Redis, cells_res9: Iterable[int], settings: Settings
+) -> dict[int, AreaLabelOut]:
+    """The town only, for content beyond the viewer's feed radius (decision C.6)."""
+    labels: dict[int, AreaLabelOut] = {}
+    for cell in set(cells_res9):
+        label = await town_label_for_cell(session, redis, cell_res9=cell, settings=settings)
+        labels[cell] = AreaLabelOut(label=label.label, precision=label.precision)
+    return labels
+
+
 async def post_views(
     session: AsyncSession,
     redis: Redis,
@@ -93,15 +104,24 @@ async def post_views(
     viewer: User,
     viewer_cell_res8: int | None,
     settings: Settings,
+    beyond: set[uuid.UUID] | None = None,
 ) -> list[PostOut]:
+    """`beyond` names posts outside the viewer's feed radius, such as a circle
+    member's in another town: they show their town only, and no distance."""
     if not posts:
         return []
+    far = beyond or set()
 
     authors = await load_users(session, (post.author_id for post in posts))
     image_ids = [image.media_id for post in posts for image in post.images]
     avatar_ids = [author.avatar_media_id for author in authors.values()]
     assets = await load_assets(session, [*image_ids, *avatar_ids])
-    labels = await _labels(session, redis, (post.cell_res9 for post in posts), settings)
+    labels = await _labels(
+        session, redis, (post.cell_res9 for post in posts if post.id not in far), settings
+    )
+    towns = await _town_labels(
+        session, redis, (post.cell_res9 for post in posts if post.id in far), settings
+    )
     mine = await reactions_by(session, user_id=viewer.id, post_ids=[post.id for post in posts])
 
     views: list[PostOut] = []
@@ -110,7 +130,7 @@ async def post_views(
         if author is None:  # pragma: no cover — the author row cascades with the post
             continue
         bucket = None
-        if viewer_cell_res8 is not None and post.author_id != viewer.id:
+        if viewer_cell_res8 is not None and post.author_id != viewer.id and post.id not in far:
             bucket = cells.bucket_between_cells(viewer_cell_res8, post.cell_res8)
         views.append(
             PostOut(
@@ -123,8 +143,10 @@ async def post_views(
                     for image in post.images
                     if (variants := image_variants(assets.get(image.media_id), storage))
                 ],
-                area_label=labels[post.cell_res9],
+                area_label=towns[post.cell_res9] if post.id in far else labels[post.cell_res9],
                 distance_bucket=bucket,
+                audience=post.audience,
+                service_post_id=post.service_post_id,
                 comment_count=post.comment_count,
                 reaction_count=post.reaction_count,
                 my_reaction=mine.get(post.id),
@@ -199,9 +221,11 @@ async def story_views(
     viewer: User,
     viewer_cell_res8: int | None,
     settings: Settings,
+    beyond: set[uuid.UUID] | None = None,
 ) -> list[StoryOut]:
     if not stories:
         return []
+    far = beyond or set()
 
     authors = await load_users(session, (story.author_id for story in stories))
     assets = await load_assets(
@@ -211,7 +235,12 @@ async def story_views(
             *(author.avatar_media_id for author in authors.values()),
         ],
     )
-    labels = await _labels(session, redis, (story.cell_res9 for story in stories), settings)
+    labels = await _labels(
+        session, redis, (story.cell_res9 for story in stories if story.id not in far), settings
+    )
+    towns = await _town_labels(
+        session, redis, (story.cell_res9 for story in stories if story.id in far), settings
+    )
 
     views: list[StoryOut] = []
     for story in stories:
@@ -221,7 +250,7 @@ async def story_views(
         own = story.author_id == viewer.id
         bucket = (
             None
-            if own or viewer_cell_res8 is None
+            if own or viewer_cell_res8 is None or story.id in far
             else cells.bucket_between_cells(viewer_cell_res8, story.cell_res8)
         )
         views.append(
@@ -235,8 +264,9 @@ async def story_views(
                     else None
                 ),
                 text=story.text,
-                area_label=labels[story.cell_res9],
+                area_label=towns[story.cell_res9] if story.id in far else labels[story.cell_res9],
                 distance_bucket=bucket,
+                audience=story.audience,
                 expires_at=story.expires_at,
                 created_at=story.created_at,
                 # Only the author learns how many people looked.

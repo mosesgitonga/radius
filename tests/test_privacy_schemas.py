@@ -215,3 +215,56 @@ def test_the_approved_location_vocabulary_is_allowed(field: str) -> None:
     design; it says nothing about anyone else's position.
     """
     assert field.lower() not in FORBIDDEN_RESPONSE_FIELDS
+
+
+# ---------------------------------------------------------------------------
+# Circle and follows (decision C.6)
+# ---------------------------------------------------------------------------
+CIRCLE_AND_FOLLOW_SCHEMAS: frozenset[str] = frozenset(
+    {
+        "CircleRequestOut",
+        "CircleRequestSentOut",
+        "CircleRequestPageOut",
+        "CircleMemberOut",
+        "CircleMemberPageOut",
+        "FollowOut",
+        "FollowPageOut",
+        "FollowedServiceOut",
+        "PublicProfileOut",
+    }
+)
+
+# Whether or when someone was last around is as telling as where: a circle reaches
+# people who do not live nearby, and must not become a way to watch them.
+PRESENCE_FIELDS: frozenset[str] = frozenset(
+    {
+        "last_seen",
+        "last_seen_at",
+        "last_active",
+        "last_active_at",
+        "online",
+        "is_online",
+        "presence",
+        "followers",
+        "follower_ids",
+    }
+)
+
+
+def test_every_circle_and_follow_schema_is_scanned(app: FastAPI) -> None:
+    """The location scan above covers them only if they are reachable from a
+    response; a schema dropped from every route would escape it silently."""
+    scanned = response_schema_fields(app)
+    missing = sorted(CIRCLE_AND_FOLLOW_SCHEMAS - set(scanned))
+    assert not missing, f"Not reachable from any response: {missing}"
+
+
+def test_circle_and_follow_schemas_show_no_presence_and_no_followers(app: FastAPI) -> None:
+    scanned = response_schema_fields(app)
+    leaks = sorted(
+        f"{schema}.{field}"
+        for schema in CIRCLE_AND_FOLLOW_SCHEMAS
+        for field in scanned.get(schema, set())
+        if field.lower() in PRESENCE_FIELDS
+    )
+    assert not leaks, f"Presence or follower lists in a circle or follow response: {leaks}"

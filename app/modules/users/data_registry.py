@@ -33,6 +33,11 @@ PURGE_REGISTRY: dict[str, tuple[Handling, str]] = {
     # -- Erased at purge ------------------------------------------------------
     "blocks.blocker_id": (Handling.erased, "Both directions"),
     "blocks.blocked_id": (Handling.erased, "Both directions"),
+    "circle_links.user_low_id": (Handling.erased, "Both directions"),
+    "circle_links.user_high_id": (Handling.erased, "Both directions"),
+    "circle_requests.requester_id": (Handling.erased, "Both directions"),
+    "circle_requests.recipient_id": (Handling.erased, "Both directions"),
+    "follows.follower_id": (Handling.erased, "What the person follows"),
     "device_tokens.user_id": (Handling.erased, "Push addresses"),
     "notifications.user_id": (Handling.erased, "The in-app list"),
     "notification_preferences.user_id": (Handling.erased, "Settings"),

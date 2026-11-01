@@ -131,11 +131,25 @@ async def test_a_public_profile_omits_the_phone_number(
 async def test_a_far_away_neighbour_is_in_the_furthest_band(
     auth_client: httpx.AsyncClient, db_session: AsyncSession
 ) -> None:
-    distant = await make_user(db_session, at=KARATINA)
+    # Within the feed radius, which sits at its 15 km maximum in a sparse area.
+    distant = await make_user(db_session, at=offset_km(NYERI_TOWN, east=12.0))
 
     body = (await auth_client.get(f"/v1/users/{distant.id}")).json()
 
     assert body["distance_bucket"] == "10km_plus"
+
+
+async def test_beyond_the_feed_radius_there_is_no_distance(
+    auth_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """Decision C.6: someone outside the viewer's feed radius shows their town
+    only, and no distance band at all."""
+    distant = await make_user(db_session, at=KARATINA)
+
+    body = (await auth_client.get(f"/v1/users/{distant.id}")).json()
+
+    assert body["distance_bucket"] is None
+    assert body["area_label"]["precision"] in ("town", "generic")
 
 
 async def test_a_neighbour_with_no_location_has_no_band(

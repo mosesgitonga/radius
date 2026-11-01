@@ -221,6 +221,24 @@ class Settings(BaseSettings):
     contact_unlock_window_days: int = Field(default=7, ge=1, le=14)
     """The window those days are counted in: 4 of the last 7 by default."""
 
+    # -- Circle and follows (decisions C.1-C.6) --------------------------------
+    circle_requests_per_day: int = Field(default=20, ge=1)
+    new_account_circle_requests_per_day: int = Field(default=5, ge=1)
+    circle_new_account_days: int = Field(default=7, ge=0, le=365)
+    """Below this age an account gets the smaller daily allowance of circle
+    requests. Longer than `NEW_ACCOUNT_AGE_HOURS`, because a request names you to
+    someone who may live anywhere."""
+    circle_max_pending_outgoing: int = Field(default=50, ge=1)
+    circle_max_members: int = Field(default=1000, ge=1)
+    circle_request_expiry_days: int = Field(default=30, ge=1, le=365)
+    """A request nobody answers expires after this. A declined one looks pending to
+    its sender for exactly as long, so a decline cannot be told from silence."""
+    circle_request_cooldown_days: int = Field(default=30, ge=0, le=365)
+    """After a decline or an expiry, how long before the same person may ask again."""
+    circle_request_retention_days: int = Field(default=60, ge=1, le=3650)
+    """Closed request records are deleted this long after they closed."""
+    follows_per_day: int = Field(default=100, ge=1)
+
     location_spoof_max_speed_kmh: float = Field(default=900.0, gt=0)
     """Above this a jump is implausible for ground travel and the update is
     flagged. Set at airliner speed deliberately: people do fly between Kenyan

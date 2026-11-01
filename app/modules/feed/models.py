@@ -52,6 +52,19 @@ class StoryKind(StrEnum):
 _story_kind = db_enum(StoryKind, name="story_kind", length=20)
 
 
+class Audience(StrEnum):
+    """Who beyond the neighbourhood sees a post or story (decision C.4). The
+    neighbourhood feed is the same either way."""
+
+    neighbours_and_circle = "neighbours_and_circle"
+    """Neighbours, the author's circle, and, for a post made as a service, its
+    followers, wherever they live."""
+    neighbours_only = "neighbours_only"
+
+
+_audience = db_enum(Audience, name="audience", length=32)
+
+
 class PostApproval(StrEnum):
     """A group post's place in its group's approval queue.
 
@@ -114,6 +127,18 @@ class Post(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, LocatedCo
 
     pinned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     """Pinned to the top of its group by an admin."""
+
+    audience: Mapped[Audience] = mapped_column(
+        _audience,
+        default=Audience.neighbours_and_circle,
+        server_default=Audience.neighbours_and_circle.value,
+    )
+
+    service_post_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("service_posts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    """Set when the post is made as one of the author's service offerings, which
+    is what lets the offering's followers see it (decision C.5)."""
 
     body: Mapped[str] = mapped_column(String(4000))
     """Capped well above the configured limit. The configuration is the product
@@ -213,6 +238,12 @@ class Story(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, LocatedC
         ForeignKey("media_assets.id", ondelete="RESTRICT"), nullable=True
     )
     text: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    audience: Mapped[Audience] = mapped_column(
+        _audience,
+        default=Audience.neighbours_and_circle,
+        server_default=Audience.neighbours_and_circle.value,
+    )
 
     status: Mapped[ContentStatus] = mapped_column(
         _content_status,

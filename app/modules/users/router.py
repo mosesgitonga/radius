@@ -18,8 +18,10 @@ from app.core.providers.storage import StorageProvider, get_storage_provider
 from app.core.redis import get_redis
 from app.modules.auth import service as auth_service
 from app.modules.auth.dependencies import ActiveUser, CurrentUser, user_rate_limit
+from app.modules.circle import service as circle_service
 from app.modules.events import service as events_service
 from app.modules.feed import service as feed_service
+from app.modules.follows import service as follows_service
 from app.modules.groups import service as groups_service
 from app.modules.location import cells
 from app.modules.location import service as location_service
@@ -88,6 +90,17 @@ async def _area_label(
     return AreaLabelOut(label=label.label, precision=label.precision)
 
 
+async def _town_label(
+    session: AsyncSession, redis: Redis, user: User, settings: Settings
+) -> AreaLabelOut | None:
+    if user.home_cell_res9 is None:
+        return None
+    label = await location_service.town_label_for_cell(
+        session, redis, cell_res9=user.home_cell_res9, settings=settings
+    )
+    return AreaLabelOut(label=label.label, precision=label.precision)
+
+
 def _next_home_change_allowed_at(user: User, settings: Settings):  # type: ignore[no-untyped-def]
     if user.home_changed_at is None or settings.home_change_cooldown_days <= 0:
         return None
@@ -139,6 +152,7 @@ async def get_me(
         presence_check_due=user.has_home_location and user.presence_checked_on != today,
         cover_media_id=user.cover_media_id,
         cover=await _cover(session, storage, user),
+        circle_request_policy=user.circle_request_policy,
     )
 
 
@@ -163,7 +177,11 @@ async def update_me(
     storage: StorageDep,
 ) -> MeOut:
     await users_service.update_profile(
-        session, user=user, display_name=payload.display_name, bio=payload.bio
+        session,
+        user=user,
+        display_name=payload.display_name,
+        bio=payload.bio,
+        circle_request_policy=payload.circle_request_policy,
     )
     return await get_me(user, session, redis, settings, storage)
 
@@ -173,7 +191,8 @@ async def update_me(
     response_model=PublicProfileOut,
     summary="A neighbour's public profile",
     description=(
-        "Shows an area label and a distance band, never a position. Returns 404 "
+        "Shows an area label and a distance band, never a position. Beyond the "
+        "caller's feed radius, only the person's town and no distance. Returns 404 "
         "if either party has blocked the other, so a block is not discoverable by "
         "probing."
     ),
@@ -195,10 +214,23 @@ async def get_public_profile(
     if await users_service.is_blocked_between(session, viewer.id, target.id):
         raise NotFoundError("User not found")
 
+    own = target.id == viewer.id
+    within = own or await feed_service.author_within_feed(
+        session, redis, viewer=viewer, author=target, settings=settings
+    )
+    relationship = (
+        circle_service.Relationship.none
+        if own
+        else await circle_service.relationship(
+            session, viewer_id=viewer.id, other_id=target.id, settings=settings
+        )
+    )
+
     bucket = None
-    # No distance to yourself.
+    # No distance to yourself, nor to anyone beyond your feed radius (decision C.6).
     if (
-        target.id != viewer.id
+        not own
+        and within
         and viewer.home_cell_res8 is not None
         and target.home_cell_res8 is not None
     ):
@@ -210,7 +242,11 @@ async def get_public_profile(
         id=target.id,
         display_name=target.display_name,
         avatar=await _avatar(session, storage, target),
-        area_label=await _area_label(session, redis, target, settings),
+        area_label=(
+            await _area_label(session, redis, target, settings)
+            if within
+            else await _town_label(session, redis, target, settings)
+        ),
         member_since=target.created_at,
         distance_bucket=bucket,
         is_verified_neighbour=target.is_verified_neighbour,
@@ -218,10 +254,8 @@ async def get_public_profile(
         rating_count=target.rating_count,
         bio=target.bio,
         cover=await _cover(session, storage, target),
-        posts_visible=target.id == viewer.id
-        or await feed_service.author_within_feed(
-            session, redis, viewer=viewer, author=target, settings=settings
-        ),
+        posts_visible=within or relationship == circle_service.Relationship.in_circle,
+        relationship=relationship.value,
     )
 
 
@@ -434,6 +468,10 @@ async def export_my_data(
     export["notifications"] = await notifications_service.export_user_notifications(
         session, user_id=user.id
     )
+    export["circle"] = await circle_service.export_user_circle(
+        session, user=user, settings=settings
+    )
+    export["follows"] = await follows_service.export_user_follows(session, user_id=user.id)
     export["moderation"] = await moderation_retention.export_user_moderation(
         session, user_id=user.id
     )
