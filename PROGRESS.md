@@ -2653,6 +2653,9 @@ are unlocked as before. `GET /me` and `POST /me/presence` report
 Friends, friend requests and People nearby were planned alongside this, and then
 paused on 2026-11-01 at the product owner's request. No code for them remains.
 
+**Built (2026-11-01).** Backend, app wording and tests updated; 4 of 7 days, gaps
+allowed, and days older than the week no longer count.
+
 ### Open questions
 
 - **A Firebase project** for push (slice 3).
@@ -2664,3 +2667,104 @@ paused on 2026-11-01 at the product owner's request. No code for them remains.
   listing's ID but not its title, so the inbox cannot say "Plumber for tanks…"
   without one request per row. Adding a short `about` (title and price) to the
   conversation response would fix it.
+
+## Circle and Follows — backend
+
+Asked for on 2026-11-01 in the "Circle (mutual connections) and Follows" brief.
+Backend only: the app's screens for it are a later slice.
+
+### Plan
+
+**Answered before building (2026-11-01):**
+- **Following a service provider** means following one of their offerings. Posts
+  can be made *as* that service, and only those reach followers. The person's
+  own posts stay with their neighbours, so a person is still never followable.
+- **`contacts_only`** means someone you have an accepted conversation with. No
+  address book is collected.
+
+**Choices made without asking (recorded in DECISIONS C.1-C.6):**
+- **Contact rule:** circle requests follow the contact rule (M.7). A newcomer
+  may send one only to someone they have an accepted conversation with, which
+  matches the earlier answer for friend requests.
+- **`nearby_only`** means the recipient's feed radius reaches the requester's
+  home.
+- **Profiles:** for anyone outside the viewer's feed radius, a profile shows the
+  person's town and no distance band. This applies to everyone, not only circle
+  members, so a stranger never sees more than a circle member does.
+- **`areas.level` is not added.** Areas already have `kind` (estate, ward, town,
+  county and others) and a `town` column, so a second column would duplicate it.
+- **Notifications:** one notification type, `circle`, with `data.event` set to
+  `request` or `accepted`. That gives the one preference the brief asks for.
+- **Brand name:** new wording comes from `settings.app_name`. The push title,
+  which was hardcoded, now does too.
+
+**Models (migration 0016):**
+- **`circle_requests`:**
+  - columns: requester, recipient, status (pending, accepted, declined,
+    cancelled, expired), `created_at`, `responded_at`, `cancelled_at`;
+  - a partial unique index allows one pending request per pair, either way round.
+- **`circle_links`:** `user_low_id`, `user_high_id`, `created_at`; unique per
+  pair; low below high.
+- **`follows`:** follower, `entity_type`, `entity_id`, `created_at`; unique on
+  all three. `entity_type` is `service_provider` only.
+- **`users.circle_request_policy`:** everyone (default), nearby_only,
+  contacts_only or nobody.
+- **`posts` and `stories`:**
+  - `audience`: neighbours_and_circle (default) or neighbours_only;
+  - `posts.service_post_id`: set when a post is made as a service.
+
+**Endpoints:**
+- **Circle requests:**
+  - `POST /v1/circle/requests`;
+  - `GET /v1/circle/requests?direction=`;
+  - `POST /v1/circle/requests/{id}/accept`, and `/decline`;
+  - `DELETE /v1/circle/requests/{id}`.
+- **The circle:** `GET /v1/circle` and `DELETE /v1/circle/{user_id}`.
+- **Follows:** `POST /v1/follows`, `DELETE /v1/follows/{entity_type}/{entity_id}`,
+  `GET /v1/me/follows`.
+- **Feed:** `GET /v1/feed/circle` and `GET /v1/stories/circle`.
+- **Changed:**
+  - `PATCH /v1/me` takes `circle_request_policy`;
+  - `GET /v1/users/{id}` gains `relationship`;
+  - `POST /v1/posts` takes `audience` and `service_post_id`;
+  - `POST /v1/stories` takes `audience`;
+  - service offerings gain `follower_count` and `is_following`.
+
+**Rules:**
+- **Accepting:** crossed requests accept each other.
+- **Silent declines:** a declined request still looks pending to its sender
+  until it would have expired. Removing someone is silent too.
+- **Cooldown:** 30 days after a decline or an expiry before the same person can
+  ask again.
+- **Blocking** removes links and requests both ways.
+- **Limits, all in config:**
+  - 20 requests a day, 5 for accounts under 7 days old;
+  - 50 pending outgoing requests;
+  - 1,000 people in a circle;
+  - 100 follows a day.
+- **Messaging:** circle members skip message requests. A conversation accepted
+  that way stays accepted after a removal.
+
+**Workers:**
+- `expire_circle_requests` runs hourly.
+- The daily retention run deletes request records 60 days after they closed, and
+  follows of services that no longer exist.
+
+**Data rights:**
+- **Export:** your circle, your requests (sent ones as you see them), your follows.
+- **Purge:** erases all of it.
+- **DATA_MAP:** a new section.
+- **Privacy schema test:** extended to the circle and follow models, and to "no
+  last seen or online".
+
+**Tests:**
+- every endpoint;
+- crossed requests, silent declines, cooldown, expiry and the purge;
+- each policy, and the limits;
+- blocking, the feed and its privacy, and messaging;
+- notifications;
+- that group membership never depends on home.
+
+**Deferred:**
+- business follows wait for business profiles (Phase 10, added to the brief);
+- the app's Circle screens.
