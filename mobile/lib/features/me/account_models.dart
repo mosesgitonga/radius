@@ -174,6 +174,7 @@ const notificationNames = <String, String>{
   'event_reminder': 'Event reminders',
   'event_updated': 'Changes to events I am going to',
   'event_cancelled': 'Events cancelled',
+  'circle': 'Circle requests',
   'account_notice': 'Notices about my account',
 };
 
