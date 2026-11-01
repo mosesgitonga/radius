@@ -2582,6 +2582,67 @@ residents. Decided with you:
   explain the rule and the day count instead of opening a chat. Settings shows the
   progress.
 
+### Slice 8 — home by GPS only, and proving it: built and verified (2026-11-01)
+
+**Built,** as planned, with one change: "at home" for the daily check is now within
+1.5 km of the home cell's centre (`HOME_PRESENCE_RADIUS_KM`), not a shared
+resolution-7 cell. The new tests showed that someone living near a hexagon's edge was
+"away" a few hundred metres from home and could never string four days together.
+- **Backend:**
+  - migration 0015;
+  - `users/contact.py` holds the rule;
+  - `PUT /me/location` takes only accurate, unfaked readings;
+  - `POST /me/presence` is the daily check;
+  - the contact checks sit in messaging (first messages and group chats), groups and
+    events;
+  - `GET /me` reports the unlock, the run so far and whether the check is due;
+  - the export and purge cover the new columns.
+- **App:**
+  - one `LocationReader`: fresh, best accuracy, refuses mocked readings;
+  - the daily check in the signed-in shell, on open and on return;
+  - "Settle in first" before a first contact while locked;
+  - the progress in Settings.
+- **Docs:**
+  - DECISIONS M.7, which also corrects 1.1's resolution-7 rule;
+  - DATA_MAP;
+  - the open question about map tiles for a home-area picker is withdrawn.
+
+**Verified.**
+- **Backend:** `pytest` gives 1152 passed; `ruff` and `mypy` are clean. There are 15
+  new tests:
+  - readings: faked, vague and accuracy-less ones are refused;
+  - the daily check: it needs a home, records home and away, and never moves home;
+  - unlocking: four days unlock, a broken run does not, and moving home locks again;
+  - what a newcomer may do: post, comment and react, and reply to someone who wrote
+    first;
+  - what a newcomer may not do: message a stranger, ask a seller, or invite a
+    stranger into a group chat;
+  - verified neighbours are always unlocked, and the purge clears the unlock.
+- **App:** `flutter test` gives 71 passed; `flutter analyze` is clean. The new test
+  checks that a newcomer pressing Message gets the explanation and no message is
+  sent.
+- **Live**, on the emulator against the development backend, with Amina made a
+  day-1 newcomer in the development database:
+  - **Locked:** Settings showed "Starting conversations: day 1 of 4". "Ask if it's
+    available" on Wanjiku's sofa showed "Settle in first … day 1 of 4", and no chat
+    opened.
+  - **The daily check:** with her last three days at home and today's check due,
+    reopening the app at her home sent the check on its own (`POST /me/presence`,
+    200). That made four days in a row, which unlocked contact. Asking about the sofa
+    then opened the conversation.
+
+**Fixed along the way:** the events test "today and this weekend are local" had
+failed every Sunday since Phase 7. On a Sunday it put its weekend event on the
+following Saturday, while the app rightly treats "this weekend" as the rest of
+Sunday. The test now places it later the same day at weekends.
+
+**Not yet:**
+- **Device attestation** (Play Integrity, App Attest) would stop a modified app
+  sending invented readings. It is still deferred, as in Phase 8.
+- **Faked locations on the emulator:** the emulator cannot fake a location the way
+  a "Fake GPS" app does, so the app's mock check is untested live. The server's
+  check is tested.
+
 ### Open questions
 
 - **A Firebase project** for push (slice 3).

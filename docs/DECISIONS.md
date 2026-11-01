@@ -2044,3 +2044,45 @@ is not a way to read a neighbourhood you are only visiting.
 **Bio.** 160 characters, tidied of blank lines, cleared on purge, and audited by
 field name only. The edit screen asks people to keep phone numbers and addresses
 out of it.
+
+### M.7 Home is found by GPS only, and newcomers prove it before contacting strangers
+
+**Choice (decided with the product owner, 2026-11-01).**
+- **GPS only:** home is set only from a GPS reading of where the phone is. There is
+  no screen for choosing an area, and none is planned.
+- **Readings:** a home reading must carry its accuracy, at most
+  `LOCATION_MAX_ACCURACY_METRES` (150 m). One the phone marks as faked is refused,
+  by the app and by the server.
+- **The daily check:** once a day, while the app is open and only if location is
+  already allowed, the app sends a reading to `POST /me/presence`. It records one
+  bit: at home today or not, where at home means within `HOME_PRESENCE_RADIUS_KM`
+  (1.5 km) of the home cell's centre. It never moves home.
+- **Contacting strangers:** someone new may post, comment and react at once. Until
+  they have been at home on `CONTACT_UNLOCK_DAYS` (4) days in a row, they may not:
+  - send the first message of a new conversation (direct, about a listing or about
+    a service);
+  - invite someone they have no accepted conversation with into a group chat, a
+    group or an event.
+
+  Replying to someone who wrote first is allowed. Verified neighbours are always
+  unlocked. Moving home locks it again until the new area is proven.
+
+**Reasoning.** A neighbourhood app is only worth as much as its claim that people
+are neighbours. Choosing an area would let anyone claim to live in a richer
+neighbourhood to approach its residents. The server cannot see a phone's GPS, so
+nothing here makes faking impossible:
+- **The mock check** stops the casual fake-location apps.
+- **The accuracy limit** stops vague network fixes from placing someone in the
+  wrong neighbourhood.
+- **The daily check** turns a one-off fake into one that must be kept up every day.
+
+Contact is the gate rather than posting, because contact is where harm happens.
+Gating posting would leave every genuine newcomer with nothing to do. Device
+attestation (Play Integrity, App Attest), already deferred from Phase 8, would
+close the modified-app route.
+
+**At home by distance, not a shared cell (corrects 1.1's resolution-7 rule).** A
+shared parent cell meant someone living near a hexagon's edge was "away" a few
+hundred metres from their door. They would rarely string four days together, while
+someone at a hexagon's centre had more room. A distance from the home cell's centre
+treats everyone alike.

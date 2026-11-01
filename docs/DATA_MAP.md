@@ -669,6 +669,25 @@ The nightly `run_retention` job now also:
 
 ---
 
+## Proving a home area (2026-11-01)
+
+### `users` (changes)
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `contact_unlocked_at` | When the account was first at home on enough days in a row to start conversations with strangers (DECISIONS M.7) | Cleared when home moves, and on purge. Exported |
+| `presence_checked_on` | The last day the app checked whether the phone was at home, so it checks once a day | Overwritten daily; cleared on purge |
+
+### The daily check
+
+Once a day, while the app is open and only if location is already allowed, the app
+sends a GPS reading. As with setting home, the coordinates are turned into a cell,
+compared and discarded: never stored, logged or returned. What is kept is one bit
+for the day, at home or not, in the existing 14-day `home_presence_mask`. No
+reading is taken in the background, and the app never asks for permission for it.
+
+---
+
 ## The mobile app — what stays on the phone
 
 | What | Where | Why | Kept until |
