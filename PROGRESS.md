@@ -2643,6 +2643,56 @@ Sunday. The test now places it later the same day at weekends.
   a "Fake GPS" app does, so the app's mock check is untested live. The server's
   check is tested.
 
+### Slice 9 — friends, people nearby, and a gentler unlock: plan
+
+Asked for on 2026-11-01. Decided with you:
+- **Unlock rule:** contact unlocks after being at home on **4 of the last 7 days**,
+  instead of 4 in a row. Verified neighbours are unlocked as before.
+- **People nearby:** lists only people who **opt in** ("Show me in People nearby",
+  off by default). Only **proven** viewers can browse it: unlocked, or verified.
+  It shows the area label and distance band, never a position, and only people
+  within the viewer's feed radius of home.
+- **Friend requests** count as contacting a stranger, so they follow the same rule.
+- **Friends** get:
+  - a Friends list;
+  - messaging each other directly, with no request step and no one-message limit,
+    wherever either lives;
+  - each other's posts on profiles, even beyond the feed radius.
+
+**Backend** (migration 0016):
+- **Unlock:** `contact.py` counts days at home in the last
+  `CONTACT_UNLOCK_WINDOW_DAYS` (7). `GET /me` and `POST /me/presence` report
+  `presence_days_this_week`.
+- **Listing yourself:** `users.show_in_nearby`, set through `PATCH /me`, exported,
+  and cleared on purge.
+- **Friendships:** a `friendships` table (requester, addressee, pending or
+  accepted), one row per pair; a block either way removes it. Endpoints:
+  - `POST /friends/requests` (accepts at once if the other already asked);
+  - `GET /friends/requests?direction=incoming|outgoing`;
+  - `POST /friends/requests/{id}/accept`, `/decline`, and
+    `DELETE /friends/requests/{id}`;
+  - `GET /friends` and `DELETE /friends/{user_id}`.
+
+  Notifications cover a request received and a request accepted. Both ends are
+  erased at purge, are in the export, and are in the purge registry.
+- **`GET /people/nearby`:** proven viewers only (403 `contact_locked` otherwise).
+- **Friends in the rest of the system:**
+  - a friend counts as known, the same as an accepted conversation, so the first
+    message is not a request, group invitations join at once, and the contact
+    rule does not apply;
+  - profile posts are shown to friends whatever the distance;
+  - `GET /users/{id}` says how the viewer and the person are connected.
+
+**App:**
+- **Home:** a menu button by the town name opens a drawer with the town, Services &
+  jobs, People nearby and Friends.
+- **People nearby:** the list with Add friend, an explanation when locked, and a
+  prompt to show yourself.
+- **Friends:** a Friends tab and a Requests tab (accept, decline, cancel).
+- **Profiles:** Add friend, Request sent, Accept, or Friends (with Unfriend).
+- **Privacy settings:** a "Show me in People nearby" switch.
+- **The unlock wording** changes to "4 of the last 7 days".
+
 ### Open questions
 
 - **A Firebase project** for push (slice 3).
