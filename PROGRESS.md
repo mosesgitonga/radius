@@ -2768,3 +2768,110 @@ Backend only: the app's screens for it are a later slice.
 **Deferred:**
 - business follows wait for business profiles (Phase 10, added to the brief);
 - the app's Circle screens.
+
+### Built (2026-11-01)
+
+**Circle** (`app/modules/circle/`):
+- **Requests:**
+  - send, list (incoming or outgoing), accept, decline and withdraw;
+  - crossed requests accept each other;
+  - asking twice returns the same request.
+- **The circle:** `GET /v1/circle` and `DELETE /v1/circle/{user_id}`.
+- **Silent declines:** a declined request looks pending to its sender in every
+  place, the export included, until it would have expired.
+- **The cooldown** follows a decline or an expiry, one way only. Withdrawing a
+  declined request keeps the cooldown.
+- **Refusals look alike:** `circle_request_not_allowed` for any policy refusal,
+  any cooldown, or a full circle on the other side.
+- **The contact rule:** M.7 applies to requests; accepting one is allowed at
+  once.
+- **Limits:** a daily allowance (smaller for accounts under 7 days old), at
+  most 50 waiting requests, and 1,000 in a circle.
+- **Blocking** removes the link and every request, both ways, inside
+  `users.service.block_user`. Every block path goes through it.
+- **Notifications:** one `circle` type, with `data.event` set to `request` or
+  `accepted`. Nothing for a decline, a removal or an expiry.
+- **`relationship`** on `GET /v1/users/{id}`, and `circle_request_policy` on
+  `GET` and `PATCH /v1/me`.
+
+**Follows** (`app/modules/follows/`):
+- **Endpoints:** follow, unfollow, and `GET /v1/me/follows`.
+- **What can be followed:** only offerings (`service_provider`); anything else
+  is a 422.
+- **Counts only:** offerings show `follower_count` and `is_following`; there is
+  no follower list anywhere.
+- **Posting as a service:** `POST /v1/posts` takes `service_post_id`, which must
+  be one of your own offerings.
+- **Limits and clean-up:** 100 follows a day. Follows of deleted services are
+  cleared by the retention run.
+
+**Feed:**
+- **`audience`** on posts and stories.
+- **`GET /v1/feed/circle`:** circle posts and posts made as followed services,
+  from anywhere.
+- **`GET /v1/stories/circle`.**
+- **Profiles:** a circle member also sees what the person shared with their
+  circle. `GET /v1/feed` is unchanged.
+
+**Privacy (C.6):**
+- **Beyond the viewer's feed radius:** a town label and no distance band. This
+  covers profiles, the circle list, the circle feed, profile posts and posts
+  opened by link.
+- **New label:** `town_label_for_cell`, from a seeded town area, then an area's
+  `town` name, then "near" the nearest town, then the generic label.
+
+**Messaging:**
+- **Circle members** skip message requests, and stay accepted after a removal.
+- **Invitations:** circle members count as known for invitations under M.7.
+
+**Workers and data rights:**
+- **Expiry:** `expire_circle_requests` runs hourly.
+- **Retention:** the daily retention run deletes closed requests 60 days after
+  closing, and orphaned follows.
+- **Export and purge** cover the circle, its requests and follows, and the purge
+  resets the policy.
+- **Records:** the purge registry, DATA_MAP and the privacy schema test are
+  extended, the last with "no presence fields, no follower lists".
+
+**Also:**
+- the push title and fallback sender name now come from `APP_NAME`;
+- `.env.example` gains the circle limits and the M.7 settings it was missing;
+- the app labels the new notification type.
+
+**Migration 0016:** applies, reverses and re-applies on the test database, and
+`alembic check` finds no drift.
+
+**Tests:**
+- `tests/test_circle.py` and `tests/test_follows.py` are new;
+- a group test shows that moving home far away keeps every membership;
+- the privacy schema test now covers circle and follow schemas.
+- **Changed tests:**
+  - "a far-away neighbour is in the furthest band" now places them at 12 km,
+    inside the radius. A new test shows that Karatina, beyond it, gets no band
+    (C.6).
+  - the enum-constraint check now reads a one-value constraint, which
+    PostgreSQL writes as `=` rather than `= ANY`.
+- **Results:** backend 1,219 passed, with ruff and mypy (app and tests) clean. The app: `flutter analyze` is clean and
+  `flutter test` gives 70 passed.
+
+### Deferred
+
+- **Business follows:** wait for business profiles, now listed in the brief's
+  Phase 10.
+- **The app's screens:** circle requests, the circle, the circle feed,
+  follow buttons, "post as my service", and the audience choice when posting.
+- **Push notifications** still need a Firebase project (slice 3).
+
+### How to try it
+
+1. **Send a request:** with two accounts, A posts `/v1/circle/requests` with
+   `{"user_id": B}`. B sees it at `GET /v1/circle/requests?direction=incoming`
+   and accepts it with `POST /v1/circle/requests/{id}/accept`.
+2. **Post:** B posts normally. A sees it at `GET /v1/feed/circle`, wherever B
+   lives, labelled with B's town only if B is beyond A's radius.
+3. **Follow a service:** A follows one of B's offerings with `POST /v1/follows`.
+   B posts with `"service_post_id"` set to that offering, and A sees the post
+   in the circle feed.
+4. **Decline:** B declines a request from C. C still sees the request as
+   pending, and gets 403 `circle_request_not_allowed` if they ask again
+   within 30 days.

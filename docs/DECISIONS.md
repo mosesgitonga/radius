@@ -2093,3 +2093,140 @@ request).** A run broke on any day spent away, such as a weekend at a parent's
 home, and started again from nothing. Counting days in the last seven keeps the
 same bar for someone faking a location, who must still fake it on four separate
 days, and stops punishing a genuine newcomer for one day away.
+
+## Circle and follows
+
+From the "Circle (mutual connections) and Follows" brief of 2026-11-01. The
+product owner answered two questions before the build (C.5 and the contacts part
+of C.1). Everything else follows the brief or is recorded here.
+
+### C.1 Who may ask, and every refusal looks the same
+
+**Context.** A circle reaches people who do not live nearby, so it is a new way to
+reach strangers.
+
+**Choice.**
+- **`circle_request_policy`:** `everyone` (default), `nearby_only`,
+  `contacts_only` or `nobody`.
+  - `nearby_only` means the recipient's feed radius, from home, reaches the
+    requester's home. It is the same test a profile uses to show posts.
+  - `contacts_only` means someone the recipient has an accepted conversation
+    with (decided with the product owner). The app has no address-book sync,
+    and one would mean collecting phone numbers of people who never signed up.
+- **One refusal:** a policy refusal, a cooldown (C.2) and a full circle on the
+  other side all give 403 with `details.reason = circle_request_not_allowed`. A
+  block is a 404, as everywhere.
+- **The contact rule (M.7) applies.** Until someone has proven their home, they
+  may ask only people they have an accepted conversation with. Accepting a
+  request is allowed at once, as replying is.
+
+**Reasoning.** A different answer for each refusal would tell a requester what the
+other person chose, or that they are in someone's full circle. The contact rule is
+there for this exact case: a request names you to a stranger. The product owner
+gave the same answer earlier for friend requests.
+
+**Alternatives.** Separate codes for each refusal: more helpful to the requester,
+but they leak the recipient's choices. Phone contacts: no data for them, and a
+data-minimisation problem.
+
+### C.2 Silent declines, silent removals, and a cooldown
+
+**Choice.**
+- **Declines:** a declined request stays `declined` in the table, but its
+  sender sees it exactly as pending until `CIRCLE_REQUEST_EXPIRY_DAYS` (30)
+  after it was sent. After that it disappears, as an unanswered one does. This
+  holds in the requests list, on the profile (`relationship = request_sent`),
+  in the data export, and when asking again (which returns the same request).
+- **Withdrawing a declined request** hides it from its sender but keeps it
+  `declined`, so the cooldown still holds. A `cancelled_at` column records the
+  withdrawal without overwriting the decline.
+- **Cooldown:** for `CIRCLE_REQUEST_COOLDOWN_DAYS` (30) after a decline or an
+  expiry, the same requester cannot ask the same person. It runs one way only:
+  the one who declined may still ask.
+- **No notifications** for a decline, a removal or an expiry.
+- **Blocking** deletes the link and every request between the two, both ways.
+
+**Reasoning.** Saying "declined" invites a sour message by another route. The
+cooldown stops "no" being answered with the same request every morning. The only
+thing a requester can still learn is that a fresh request is refused, and that is
+the same answer a policy gives.
+
+**Expiry before the worker.** Every read treats a pending request older than 30
+days as expired, so the hourly `expire_circle_requests` job only keeps the table
+honest. A stale pending row between a pair is expired when either of them asks
+again, so the one-pending-per-pair index never blocks a new request.
+
+### C.3 Circle members skip message requests
+
+**Choice.** A message between people in each other's circle activates the
+conversation at once: no request and no request notification. Once active, a
+conversation stays active even after one removes the other. A block still ends
+all messaging. Circle members also count as people you know when inviting someone
+into a group chat, a group or an event (M.7).
+
+### C.4 A post's and a story's audience
+
+**Choice.**
+- **`audience`:** posts and stories carry `neighbours_and_circle` (the default,
+  and the value existing rows took) or `neighbours_only`.
+- **The neighbourhood feed** is unchanged either way.
+- **`GET /v1/feed/circle`** shows circle members' posts (not `neighbours_only`)
+  and posts made as followed services, from anywhere, newest first.
+  `GET /v1/stories/circle` does the same for circle members' stories.
+- **Profiles:** a circle member also sees, on the person's profile, the posts
+  they shared with their circle, as the circle feed would.
+
+### C.5 Follows are of a service, never a person
+
+**Context.** The brief allows following a service provider but never a user. In
+this codebase a provider is a person with one offering per category.
+
+**Choice (decided with the product owner, 2026-11-01).**
+- **What is followed:** an offering (`entity_type = service_provider`,
+  `entity_id` = the offering's service post).
+- **Posting as a service:** a post can be made *as* one of the author's
+  offerings (`posts.service_post_id`). Those posts reach the offering's
+  followers in the circle feed, from anywhere. The provider's own posts never
+  do.
+- **Counts, not lists:** an offering shows `follower_count` and `is_following`.
+  Nobody can see who follows them.
+- **Allowed types:** `entity_type` accepts only `service_provider`; anything
+  else is a validation error. `business` waits for business profiles
+  (Phase 10).
+- **Follows outlast moves:** a follow lasts wherever either side lives or moves
+  to.
+- **Limits and clean-up:** 100 follows a day (`FOLLOWS_PER_DAY`). A blocked
+  owner's services disappear from the follower's list and feed. Follows of a
+  deleted service are deleted by the daily retention run.
+
+**Alternatives.** Showing followers the provider's own posts: that would amount
+to following a person. Follows as a bookmark only, with nothing in the feed:
+simpler, but followers would get nothing from following.
+
+### C.6 Beyond the feed radius, a town and no distance
+
+**Choice.** For anyone whose home lies outside the viewer's feed radius, measured
+from the viewer's home:
+- **Label:** their area label is their town only (`town_label_for_cell`). The
+  town is a seeded `town` area covering their res-7 cell's centre. Failing that,
+  it is the `town` named on the smallest area covering it, then "near" the
+  nearest town within 50 km, then the generic label.
+- **No distance band.**
+- **Where:** circle lists, profiles, the circle feed, profile posts, and posts
+  opened by link.
+
+This applies to everyone, not only circle members, so a stranger is never shown
+more than a circle member. Explore mode changes none of it, because it is
+measured from home. Circle responses carry no last-seen time or online status,
+and a move is never announced. The privacy schema test holds every circle and
+follow schema to this.
+
+**`areas.level` is not added.** The brief asked for it "if absent". Areas already
+have `kind` (estate, ward, town, county and others) and a `town` name column,
+which together give the town level.
+
+**Reasoning.** "Town only" is what a circle across towns needs to say, and it is
+coarse enough to say about anyone. Leaving strangers with the finer label would
+have made a circle member the less private party.
+
+**Alternatives.** Town labels for circle members only: inconsistent, as above.

@@ -304,6 +304,9 @@ Because each viewer has their own radius, a post's audience is not simply the po
 ### Phase 10 — Monetisation II and expansion (outline; we'll refine it later)
 
 - Business profiles (verified businesses, opening hours, catalogue, basic analytics).
+- Following a business: add `business` to the follow entity types, with posts made as
+  the business reaching its followers' circle feed, as service follows do today
+  (deferred from the Circle and Follows brief, DECISIONS C.5).
 - Marketplace fees if in-app payments for items are introduced.
 - Event ticketing (paid tickets via M-Pesa, QR check-in).
 - Expansion tooling: seeding areas for Karatina, Othaya, Nanyuki, and Nairobi.

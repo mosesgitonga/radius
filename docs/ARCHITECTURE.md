@@ -69,6 +69,8 @@ app/
     marketplace/     access.py (who can see a listing), service.py, views.py, router.py
     services/        access.py, ratings.py (the cached rating), service.py, reviews.py
     events/          access.py (who sees an event, and its venue), times.py, service.py
+    circle/          links.py (who is in whose circle; a leaf), service.py, router.py
+    follows/         links.py (counts and lookups; a leaf), service.py, router.py
     messaging/       service.py, views.py, router.py, socket.py (the `/v1/ws` endpoint)
     notifications/   service.py (devices, preferences, collapsing, push), router.py
     moderation/      service.py (reports), console.py (the queue and staff actions),

@@ -688,6 +688,61 @@ reading is taken in the background, and the app never asks for permission for it
 
 ---
 
+## Circle and follows (2026-11-01)
+
+### `circle_requests`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `requester_id`, `recipient_id` | Who asked whom to join their circle | Deleted 60 days after the request closed (`CIRCLE_REQUEST_RETENTION_DAYS`), and on either person's purge or a block between them |
+| `status` | Pending, accepted, declined, cancelled or expired. A decline is never shown to the sender (DECISIONS C.2) | As above |
+| `created_at`, `responded_at`, `cancelled_at` | When it was sent, answered and withdrawn. They drive expiry after 30 days and the 30-day cooldown | As above |
+
+A closed request is kept only as long as the cooldown needs it, plus a margin. That
+covers declined and expired requests, as the brief requires, and also accepted and
+cancelled ones, because once a request is accepted the link records the fact.
+
+### `circle_links`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `user_low_id`, `user_high_id` | Two people in each other's circle | Until either removes the other, either blocks the other, or either account is purged |
+| `created_at` | Shown as "in your circle since" | As above |
+
+### `follows`
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `follower_id` | Who follows | Until they unfollow, or their account is purged |
+| `entity_type`, `entity_id` | What is followed: a service offering. Never a person (DECISIONS C.5) | Deleted by the daily retention run once the service is gone |
+| `created_at` | Shown in "What I follow" | As above |
+
+Nobody can see who follows them, only how many: there is no follower list in any
+response, export or admin screen.
+
+### `users`, `posts`, `stories` (changes)
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `users.circle_request_policy` | Who may ask to join the person's circle | Reset to the default on purge. Exported |
+| `posts.audience`, `stories.audience` | Whether the author's circle sees the post or story beyond the neighbourhood | With the content |
+| `posts.service_post_id` | The post was made as this service offering, so its followers see it | With the post; nulled if the service post is hard-deleted |
+
+### What a circle shows, and to whom
+
+- **Places:** someone within my feed radius, from home, shows their area label
+  and a distance band. Anyone beyond it shows their town only and no distance.
+  This holds on profiles, in the circle list, in the circle feed and on posts
+  opened by link (DECISIONS C.6).
+- **Never shown:** a last-seen time, an online status, or that someone moved.
+- **Exploring** changes nothing: every measure is from home.
+- **The export** lists my circle, the requests I received with their real status,
+  and the requests I sent as I was shown them: a request someone declined appears
+  pending until it would have expired. The decline belongs to the person who
+  declined, and is in their export.
+
+---
+
 ## The mobile app — what stays on the phone
 
 | What | Where | Why | Kept until |
@@ -709,9 +764,9 @@ drops an unsent message.
 
 | Right | Status | Where |
 | --- | --- | --- |
-| Access (export as JSON) | **Implemented** (through Phase 8) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, group memberships and groups created, listings and saved listings, service posts, reviews written and received, events organised and replied to, conversations, messages sent, devices, notification preferences and notifications, standing, vouches, warnings received and reports filed |
+| Access (export as JSON) | **Implemented** (through Phase 8) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, group memberships and groups created, listings and saved listings, service posts, reviews written and received, events organised and replied to, conversations, messages sent, devices, notification preferences and notifications, standing, vouches, warnings received and reports filed, the circle and its requests, and follows |
 | Rectification | **Implemented** | `PATCH /v1/me` |
-| Erasure | **Implemented** (through Phase 8) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its group memberships (passing on groups it owned), its listings and saved listings, its service posts and reviews, its events and replies, its messages, its devices and notifications, its stored images, its blocks, vouches and warnings, and the installation hashes on its sessions. Content and records are then hard-deleted by retention |
+| Erasure | **Implemented** (through Phase 8) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its group memberships (passing on groups it owned), its listings and saved listings, its service posts and reviews, its events and replies, its messages, its devices and notifications, its stored images, its blocks, vouches and warnings, its circle links and requests (both ways) and follows, and the installation hashes on its sessions. Content and records are then hard-deleted by retention |
 | Restriction of processing | **Implemented** | Moderators suspend or restrict an account (`/v1/admin/users/{id}/suspend`, `/restrict`); the person sees it at `GET /v1/me/standing` |
 | Objection to marketing | **Implemented** | `PUT /v1/me/consents`, marketing consent is withdrawable |
 | Data portability | **Implemented** | Covered by the JSON export |
@@ -756,6 +811,9 @@ becomes a worker job in the phase that owns the data.
 | Reviews | Until deleted by the reviewer, or either account is purged |
 | Events | Until deleted by the organiser, or the organiser's account is purged |
 | Event reminder records | Until the event's time changes, or the person is purged |
+| Circle requests | Expire 30 days after sending; deleted 60 days after closing |
+| Circle links | Until removed, blocked, or either account is purged |
+| Follows | Until unfollowed, the service is gone, or the follower is purged |
 | Application logs | 30 days |
 
 ---
