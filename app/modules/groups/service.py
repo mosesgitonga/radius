@@ -743,6 +743,9 @@ async def invite(
     if not result.allowed:
         raise RateLimitedError(retry_after_seconds=result.retry_after_seconds)
 
+    await messaging_service.require_can_reach(
+        session, actor=actor, user_ids=wanted, settings=settings
+    )
     invited: list[uuid.UUID] = []
     for user_id in wanted:
         await _contactable(session, actor=actor, user_id=user_id)

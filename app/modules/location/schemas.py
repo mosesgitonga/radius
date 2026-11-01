@@ -39,6 +39,34 @@ class LocationIn(BaseModel):
     )
 
 
+class HomeReadingIn(LocationIn):
+    """A GPS reading of where the phone is now, for home and the daily check.
+
+    Home is found only by GPS, never chosen (decision M.7), so a reading must say
+    how accurate it is and whether the phone marked it as faked. The server cannot
+    see the GPS itself; these stop the casual fake-location apps, and the daily
+    check makes a faked home costly to keep up.
+    """
+
+    accuracy_metres: float = Field(
+        ge=0,
+        description="The phone's reported accuracy. Must be within `LOCATION_MAX_ACCURACY_METRES`.",
+    )
+    is_mocked: bool = Field(
+        default=False,
+        description="True when the phone reports the reading as coming from a fake-location app.",
+    )
+
+
+class PresenceOut(BaseModel):
+    """The result of the daily check."""
+
+    at_home: bool = Field(description="Whether the phone was in the home area today.")
+    streak_days: int = Field(description="Days at home in a row, today included if at home.")
+    can_contact_strangers: bool
+    contact_unlock_days: int
+
+
 class HomeLocationOut(BaseModel):
     """The result of setting a home area."""
 

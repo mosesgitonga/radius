@@ -43,6 +43,7 @@ from app.modules.location.cells import CellLocation, InvalidCoordinatesError
 from app.modules.location.models import Area, CellActivity
 from app.modules.moderation.audit import record_audit_event
 from app.modules.moderation.models import AuditAction
+from app.modules.users import contact
 from app.modules.users.models import HOME_PRESENCE_WINDOW_DAYS, User
 
 logger = logging.getLogger(__name__)
@@ -180,6 +181,8 @@ async def set_home_location(
         # so the window starts again. Vouching is the fast path back (Phase 8).
         user.home_presence_mask = 0
         user.home_presence_updated_on = None
+        # And the new area must be proven before contacting strangers there.
+        user.contact_unlocked_at = None
 
     await record_audit_event(
         session,
@@ -198,6 +201,8 @@ async def set_home_location(
         today=now.date(),
         settings=settings,
     )
+    user.presence_checked_on = now.date()
+    contact.note_presence(user, settings=settings, now=now)
 
     label = await area_label_for_cells(session, redis, user=user, settings=settings)
     return HomeLocationOutcome(
@@ -205,6 +210,68 @@ async def set_home_location(
         area_label=label,
         is_first_time=is_first_time,
         spoof_suspected=spoof_suspected,
+    )
+
+
+def require_trustworthy_reading(
+    *, accuracy_metres: float, is_mocked: bool, settings: Settings
+) -> None:
+    """Home is found only by GPS, never chosen (decision M.7). A reading the phone
+    marks as faked, or one too vague to place someone in a neighbourhood, is
+    refused. The server cannot see the GPS itself: this stops the casual
+    fake-location apps, and the daily check makes a faked home costly to keep up.
+    """
+    if is_mocked:
+        raise BadRequestError(
+            "Your phone is using a fake location. "
+            "Turn off any location-changing app and try again.",
+            details={"reason": "mocked_location"},
+        )
+    if accuracy_metres > settings.location_max_accuracy_metres:
+        raise BadRequestError(
+            "We couldn't get an accurate enough fix. Turn on precise location, step outside "
+            "or near a window, and try again.",
+            details={
+                "reason": "inaccurate_location",
+                "max_accuracy_metres": settings.location_max_accuracy_metres,
+            },
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PresenceOutcome:
+    at_home: bool
+    streak_days: int
+    can_contact_strangers: bool
+
+
+async def check_presence(
+    session: AsyncSession,
+    *,
+    user: User,
+    latitude: float,
+    longitude: float,
+    settings: Settings,
+) -> PresenceOutcome:
+    """The daily check: was the phone in the home area today?
+
+    Records one bit for today and never moves home. Run by the app once a day
+    while it is open. A run of `CONTACT_UNLOCK_DAYS` unlocks starting
+    conversations with strangers; ten days in fourteen feed the badge.
+    """
+    if user.home_cell_res9 is None:
+        raise ConflictError("Set your home area first", details={"action": "PUT /v1/me/location"})
+    location = _to_cell_location(latitude, longitude, settings)
+    now = datetime.now(UTC)
+    record_home_presence(
+        user, reported_cell_res9=location.cell_res9, today=now.date(), settings=settings
+    )
+    user.presence_checked_on = now.date()
+    contact.note_presence(user, settings=settings, now=now)
+    return PresenceOutcome(
+        at_home=bool(user.home_presence_mask & 1),
+        streak_days=contact.presence_streak(user, now.date()),
+        can_contact_strangers=contact.can_contact_strangers(user),
     )
 
 
@@ -520,9 +587,10 @@ def record_home_presence(
     This is the *only* thing the badge ever learns about where somebody was: one
     bit per day, never a position. See decision 1.1.
 
-    Compared at resolution 7 rather than 9, because "in my home area" means the
-    neighbourhood, not the exact cell — a user at the shops two streets away is
-    still at home in every sense that matters.
+    "In my home area" means the neighbourhood, not the exact cell: within
+    `HOME_PRESENCE_RADIUS_KM` of the home cell's centre, so a user at the shops two
+    streets away is still at home. A distance, not a shared parent cell, so that
+    someone living near a hexagon's edge is treated like everyone else (decision M.7).
 
     `reported_cell_res9` of None means the day is **excluded**, neither a yes nor
     a no. That covers explore mode: penalising someone for deliberately browsing
@@ -535,11 +603,13 @@ def record_home_presence(
     )
     user.home_presence_updated_on = today
 
-    if reported_cell_res9 is None or user.home_cell_res7 is None:
+    if reported_cell_res9 is None or user.home_cell_res9 is None:
         return
 
-    reported_res7 = cells.parent_cell(reported_cell_res9, settings.h3_storage_resolution - 2)
-    if reported_res7 == user.home_cell_res7:
+    distance_km = h3.great_circle_distance(
+        cells.cell_centroid(reported_cell_res9), cells.cell_centroid(user.home_cell_res9), unit="km"
+    )
+    if distance_km <= settings.home_presence_radius_km:
         user.home_presence_mask |= 1
 
 

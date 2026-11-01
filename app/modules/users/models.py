@@ -126,6 +126,16 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     """The profile's cover photo, as the avatar: `SET NULL` and `use_alter` for the
     same reasons."""
 
+    contact_unlocked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """When the account was first at home on enough days in a row to start
+    conversations with strangers. Cleared when home moves. Decision M.7."""
+
+    presence_checked_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    """The last day the app checked whether the phone was at home. Not
+    `home_presence_updated_on`, which the nightly roll also advances."""
+
     bio: Mapped[str | None] = mapped_column(String(160), nullable=True)
     """A line or two the person writes about themselves, shown on their profile.
     Free text, so it is personal data: exported, cleared at purge, and never

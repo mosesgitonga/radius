@@ -468,6 +468,9 @@ async def export_user_data(
             "restriction_reason": user.restriction_reason,
             "member_since": user.created_at.isoformat() if user.created_at else None,
             "bio": user.bio,
+            "contact_unlocked_at": (
+                user.contact_unlocked_at.isoformat() if user.contact_unlocked_at else None
+            ),
             "phone_verified_at": (
                 user.phone_verified_at.isoformat() if user.phone_verified_at else None
             ),
@@ -548,6 +551,8 @@ async def purge_user(session: AsyncSession, *, user: User) -> None:
     user.avatar_media_id = None
     user.cover_media_id = None
     user.bio = None
+    user.contact_unlocked_at = None
+    user.presence_checked_on = None
     user.home_cell_res9 = None
     user.home_cell_res8 = None
     user.home_cell_res7 = None

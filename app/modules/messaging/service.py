@@ -70,6 +70,7 @@ from app.modules.moderation.models import (
 )
 from app.modules.notifications import service as notifications_service
 from app.modules.notifications.models import NotificationType
+from app.modules.users import contact
 from app.modules.users import service as users_service
 from app.modules.users.models import User, UserStatus
 from app.modules.users.standing import is_restricted
@@ -553,6 +554,9 @@ async def _check_request_allowance(
             "Your account is restricted and cannot start new conversations for now",
             details={"reason": "restricted"},
         )
+    # Someone not yet proven to live where they say starts no conversations with
+    # strangers (decision M.7). Replying to someone who wrote first is not this.
+    contact.require_can_contact_strangers(user, settings=settings, now=datetime.now(UTC))
     new = is_new_account(user, settings)
     if kind == ConversationKind.service:
         bucket = "service_inquiry"
@@ -1257,6 +1261,7 @@ async def create_group(
             conversation_id=conversation.id, user_id=creator.id, role=MemberRole.owner
         )
     )
+    await require_can_reach(session, actor=creator, user_ids=wanted, settings=settings)
     invited = await _add_people(session, conversation, actor=creator, user_ids=wanted)
     await session.flush()
 
@@ -1277,6 +1282,19 @@ async def create_group(
     )
     _announce_conversation(session, [creator.id, *joined], conversation)
     return conversation
+
+
+async def require_can_reach(
+    session: AsyncSession, *, actor: User, user_ids: Sequence[uuid.UUID], settings: Settings
+) -> None:
+    """Inviting someone into a group chat, a group or an event is contacting them.
+    For anyone the actor has no accepted conversation with — a stranger — the
+    actor must be able to contact strangers (decision M.7)."""
+    if contact.can_contact_strangers(actor):
+        return
+    for user_id in user_ids:
+        if user_id != actor.id and not await has_accepted_conversation(session, actor.id, user_id):
+            contact.require_can_contact_strangers(actor, settings=settings, now=datetime.now(UTC))
 
 
 async def _add_people(
@@ -1491,6 +1509,7 @@ async def add_members(
             details={"member_limit": settings.group_chat_member_limit},
         )
 
+    await require_can_reach(session, actor=actor, user_ids=new, settings=settings)
     invited = await _add_people(session, conversation, actor=actor, user_ids=new)
     await session.flush()
     joined = [member_id for member_id in new if member_id not in invited]

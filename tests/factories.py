@@ -63,8 +63,8 @@ class Coordinates:
         return f"POINT({self.longitude} {self.latitude})"
 
     def as_payload(self) -> dict[str, float]:
-        """Shaped for `LocationIn`."""
-        return {"latitude": self.latitude, "longitude": self.longitude}
+        """Shaped for `HomeReadingIn`: a good GPS fix, as the app sends."""
+        return {"latitude": self.latitude, "longitude": self.longitude, "accuracy_metres": 12.0}
 
 
 # Approximate anchors for the launch towns. Nyeri is first (the brief's launch
@@ -166,6 +166,7 @@ async def make_user(
     is_verified_neighbour: bool = False,
     storage_resolution: int = 9,
     created_days_ago: float | None = None,
+    contact_unlocked: bool = True,
 ) -> User:
     """A user, optionally with a home location already set.
 
@@ -182,6 +183,9 @@ async def make_user(
         last_active_at=last_active_at or now,
         status=status,
         is_verified_neighbour=is_verified_neighbour,
+        # Most tests are about something other than proving a home area, so their
+        # people may contact each other. Tests of decision M.7 pass False.
+        contact_unlocked_at=now if contact_unlocked else None,
     )
     if created_days_ago is not None:
         # Account age drives new-account rate limits and reporter trust, so tests

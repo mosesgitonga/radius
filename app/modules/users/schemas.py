@@ -80,6 +80,20 @@ class MeOut(BaseModel):
         default=None, description="Served avatar sizes, keyed by width."
     )
     bio: str | None = None
+    can_contact_strangers: bool = Field(
+        default=False,
+        description=(
+            "Whether the account may start conversations with people it has not talked "
+            "to. Unlocked by being at home on `contact_unlock_days` days in a row, or by "
+            "the badge. Decision M.7."
+        ),
+    )
+    presence_streak_days: int = Field(default=0, description="Days at home in a row so far.")
+    contact_unlock_days: int = 4
+    presence_check_due: bool = Field(
+        default=False,
+        description="True when the app has not yet checked today whether the phone is at home.",
+    )
     cover_media_id: uuid.UUID | None = None
     cover: dict[str, ImageVariantOut] | None = Field(
         default=None, description="Served cover photo sizes, keyed by width."

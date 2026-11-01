@@ -20,8 +20,10 @@ from app.modules.location.schemas import (
     AreaOut,
     ExploreOut,
     HomeLocationOut,
+    HomeReadingIn,
     LocationIn,
     MyRadiusOut,
+    PresenceOut,
     RadiusOut,
 )
 from app.modules.users.schemas import AreaLabelOut
@@ -53,12 +55,15 @@ RedisDep = Annotated[Redis, Depends(get_redis)]
     ],
 )
 async def set_home_location(
-    payload: LocationIn,
+    payload: HomeReadingIn,
     user: ActiveUser,
     session: SessionDep,
     redis: RedisDep,
     settings: SettingsDep,
 ) -> HomeLocationOut:
+    location_service.require_trustworthy_reading(
+        accuracy_metres=payload.accuracy_metres, is_mocked=payload.is_mocked, settings=settings
+    )
     outcome = await location_service.set_home_location(
         session,
         redis,
@@ -80,6 +85,47 @@ async def set_home_location(
         ),
         is_first_time=outcome.is_first_time,
         next_change_allowed_at=next_change,
+    )
+
+
+@router.post(
+    "/me/presence",
+    response_model=PresenceOut,
+    summary="The daily check: am I at home today?",
+    description=(
+        "Sent by the app once a day while it is open, with a GPS reading of where the "
+        "phone is. Records one bit for today — at home or not — and never moves home. "
+        "The coordinates are discarded, as everywhere.\n\n"
+        "Days at home build the verified-neighbour badge, and a run of "
+        "`CONTACT_UNLOCK_DAYS` lets someone new start conversations with strangers "
+        "(decision M.7). The same accuracy and fake-location rules as setting home."
+    ),
+    responses={409: {"description": "No home area set yet"}},
+    dependencies=[
+        Depends(user_rate_limit(bucket="presence_check", limit=24, window_seconds=86_400))
+    ],
+)
+async def check_presence(
+    payload: HomeReadingIn,
+    user: CurrentUser,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> PresenceOut:
+    location_service.require_trustworthy_reading(
+        accuracy_metres=payload.accuracy_metres, is_mocked=payload.is_mocked, settings=settings
+    )
+    outcome = await location_service.check_presence(
+        session,
+        user=user,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        settings=settings,
+    )
+    return PresenceOut(
+        at_home=outcome.at_home,
+        streak_days=outcome.streak_days,
+        can_contact_strangers=outcome.can_contact_strangers,
+        contact_unlock_days=settings.contact_unlock_days,
     )
 
 

@@ -119,7 +119,7 @@ async def test_a_location_outside_every_area_still_works(
     assert user.home_area_id is None
 
 
-NANYUKI_PAYLOAD = {"latitude": 0.0167, "longitude": 37.0725}
+NANYUKI_PAYLOAD = {"latitude": 0.0167, "longitude": 37.0725, "accuracy_metres": 15.0}
 
 
 @pytest.mark.parametrize(

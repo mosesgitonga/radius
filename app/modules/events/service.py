@@ -51,6 +51,7 @@ from app.modules.location.service import AnchorMode, resolve_anchor
 from app.modules.marketplace.models import Listing, ListingAvailability
 from app.modules.media.models import MediaPurpose
 from app.modules.media.service import claim_assets_for
+from app.modules.messaging import service as messaging_service
 from app.modules.moderation.holds import hold_if_restricted
 from app.modules.moderation.models import ContentStatus
 from app.modules.notifications import service as notifications_service
@@ -411,6 +412,9 @@ async def invite(
 ) -> list[uuid.UUID]:
     """Invite people. Invited people are approved already: the organiser chose them."""
     event = await _manageable(session, user=user, event_id=event_id)
+    await messaging_service.require_can_reach(
+        session, actor=user, user_ids=list(user_ids), settings=settings
+    )
     invited: list[uuid.UUID] = []
     for user_id in dict.fromkeys(user_ids):
         if user_id == event.organiser_id:

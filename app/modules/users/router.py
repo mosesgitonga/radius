@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, status
@@ -33,7 +33,7 @@ from app.modules.moderation.models import ModerationWarning
 from app.modules.notifications import service as notifications_service
 from app.modules.services import reviews as reviews_service
 from app.modules.services import service as services_service
-from app.modules.users import badge
+from app.modules.users import badge, contact
 from app.modules.users import service as users_service
 from app.modules.users.models import Block, User
 from app.modules.users.schemas import (
@@ -114,6 +114,7 @@ async def get_me(
     settings: SettingsDep,
     storage: StorageDep,
 ) -> MeOut:
+    today = datetime.now(UTC).date()
     return MeOut(
         id=user.id,
         display_name=user.display_name,
@@ -131,6 +132,10 @@ async def get_me(
         avatar_media_id=user.avatar_media_id,
         avatar=await _avatar(session, storage, user),
         bio=user.bio,
+        can_contact_strangers=contact.can_contact_strangers(user),
+        presence_streak_days=contact.presence_streak(user, today),
+        contact_unlock_days=settings.contact_unlock_days,
+        presence_check_due=user.has_home_location and user.presence_checked_on != today,
         cover_media_id=user.cover_media_id,
         cover=await _cover(session, storage, user),
     )

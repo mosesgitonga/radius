@@ -204,6 +204,19 @@ class Settings(BaseSettings):
     """Explore mode lives in Redis only, for about two hours, and never reaches
     PostgreSQL. See decision 1.1."""
 
+    location_max_accuracy_metres: float = Field(default=150.0, gt=0, le=5000)
+    """A home reading must be at least this accurate. Home is found only by GPS
+    (decision M.7), and a network-only fix — often a kilometre or two out — could
+    put someone in the wrong neighbourhood."""
+
+    home_presence_radius_km: float = Field(default=1.5, gt=0, le=10)
+    """How far from the home cell's centre the daily check still counts as being at
+    home. Decision M.7."""
+
+    contact_unlock_days: int = Field(default=4, ge=1, le=14)
+    """Days at home in a row before someone may start conversations with strangers.
+    Verified neighbours are always unlocked. Decision M.7."""
+
     location_spoof_max_speed_kmh: float = Field(default=900.0, gt=0)
     """Above this a jump is implausible for ground travel and the update is
     flagged. Set at airliner speed deliberately: people do fly between Kenyan

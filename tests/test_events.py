@@ -394,12 +394,16 @@ async def test_today_and_this_weekend_are_local(
     client = await authenticate(await person(db_session))
     now_local = datetime.now(NAIROBI_TZ)
     later_today = now_local + timedelta(minutes=30)
-    if later_today.date() != now_local.date():
+    if (later_today + timedelta(minutes=10)).date() != now_local.date():
         pytest.skip("Too close to local midnight to have an event later today")
     today = await organise(client, title="Today", start=later_today)
-    weekend = await organise(
-        client, title="Weekend", start=next_saturday_six_pm(weeks_ahead=0) + timedelta(days=0)
+    # On a Saturday or Sunday, "this weekend" is the rest of it: later today. On a
+    # weekday, the coming Saturday evening.
+    on_a_weekend = now_local.weekday() >= 5
+    weekend_start = (
+        later_today + timedelta(minutes=10) if on_a_weekend else next_saturday_six_pm(weeks_ahead=0)
     )
+    weekend = await organise(client, title="Weekend", start=weekend_start)
     much_later = await organise(
         client, title="Next month", start=next_saturday_six_pm(weeks_ahead=4)
     )
