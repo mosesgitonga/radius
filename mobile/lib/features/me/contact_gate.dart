@@ -12,14 +12,15 @@ Future<bool> mayContactStrangers(BuildContext context, WidgetRef ref) async {
   final auth = ref.read(authControllerProvider);
   if (auth is! AuthSignedIn || auth.me.canContactStrangers) return true;
   final needed = auth.me.contactUnlockDays;
-  final soFar = min(auth.me.presenceStreakDays, needed);
+  final window = auth.me.contactUnlockWindowDays;
+  final soFar = min(auth.me.presenceDaysThisWeek, needed);
   await showDialog<void>(
     context: context,
     builder: (dialog) => AlertDialog(
       title: const Text('Settle in first'),
       content: Text(
         "To keep neighbourhoods safe, you can start conversations with people once you've been at home "
-        'in your area on $needed days in a row. You are on day $soFar of $needed.\n\n'
+        'in your area on $needed of the last $window days. So far: $soFar of $needed.\n\n'
         'Until then you can post, comment and mark posts helpful, and reply to anyone who writes to you. '
         'MyRadius checks once a day while the app is open.',
       ),

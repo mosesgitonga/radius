@@ -129,7 +129,7 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     contact_unlocked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    """When the account was first at home on enough days in a row to start
+    """When the account was first at home on enough days of a week to start
     conversations with strangers. Cleared when home moves. Decision M.7."""
 
     presence_checked_on: Mapped[date | None] = mapped_column(Date, nullable=True)

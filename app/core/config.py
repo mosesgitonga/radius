@@ -214,8 +214,12 @@ class Settings(BaseSettings):
     home. Decision M.7."""
 
     contact_unlock_days: int = Field(default=4, ge=1, le=14)
-    """Days at home in a row before someone may start conversations with strangers.
-    Verified neighbours are always unlocked. Decision M.7."""
+    """Days at home, within `contact_unlock_window_days`, before someone may start
+    conversations with strangers. Verified neighbours are always unlocked.
+    Decision M.7."""
+
+    contact_unlock_window_days: int = Field(default=7, ge=1, le=14)
+    """The window those days are counted in: 4 of the last 7 by default."""
 
     location_spoof_max_speed_kmh: float = Field(default=900.0, gt=0)
     """Above this a jump is implausible for ground travel and the update is

@@ -174,13 +174,13 @@ void main() {
 
     testWidgets('a newcomer is told why before a first message, and no chat opens', (tester) async {
       profile = kamau();
-      me = {...meJson, 'can_contact_strangers': false, 'presence_streak_days': 2, 'contact_unlock_days': 4};
+      me = {...meJson, 'can_contact_strangers': false, 'presence_days_this_week': 2, 'contact_unlock_days': 4};
       await openKamau(tester);
 
       await tester.tap(find.text('Message Kamau'));
       await tester.pumpAndSettle();
       expect(find.text('Settle in first'), findsOneWidget);
-      expect(find.textContaining('You are on day 2 of 4.'), findsOneWidget);
+      expect(find.textContaining('So far: 2 of 4.'), findsOneWidget);
 
       await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();

@@ -675,7 +675,7 @@ The nightly `run_retention` job now also:
 
 | Field | Why | Retention |
 | --- | --- | --- |
-| `contact_unlocked_at` | When the account was first at home on enough days in a row to start conversations with strangers (DECISIONS M.7) | Cleared when home moves, and on purge. Exported |
+| `contact_unlocked_at` | When the account was first at home on enough days of a week to start conversations with strangers (DECISIONS M.7) | Cleared when home moves, and on purge. Exported |
 | `presence_checked_on` | The last day the app checked whether the phone was at home, so it checks once a day | Overwritten daily; cleared on purge |
 
 ### The daily check

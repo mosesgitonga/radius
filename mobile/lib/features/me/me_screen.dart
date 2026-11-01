@@ -231,14 +231,14 @@ class _StandingCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Starting conversations: day ${me.presenceStreakDays.clamp(0, me.contactUnlockDays)} '
-                    'of ${me.contactUnlockDays}',
+                    'Starting conversations: ${me.presenceDaysThisWeek.clamp(0, me.contactUnlockDays)} '
+                    'of ${me.contactUnlockDays} days',
                     style: text.titleSmall?.copyWith(fontSize: 14),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    "You can message people you haven't talked to after ${me.contactUnlockDays} days in a row "
-                    'at home. MyRadius checks once a day while the app is open. You can already post, comment, '
+                    "You can message people you haven't talked to once you've been at home on "
+                    '${me.contactUnlockDays} of the last ${me.contactUnlockWindowDays} days. MyRadius checks once a day while the app is open. You can already post, comment, '
                     'and reply to anyone who writes to you.',
                     style: text.bodySmall?.copyWith(color: Palette.ink),
                   ),

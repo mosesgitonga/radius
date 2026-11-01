@@ -2058,7 +2058,8 @@ out of it.
   bit: at home today or not, where at home means within `HOME_PRESENCE_RADIUS_KM`
   (1.5 km) of the home cell's centre. It never moves home.
 - **Contacting strangers:** someone new may post, comment and react at once. Until
-  they have been at home on `CONTACT_UNLOCK_DAYS` (4) days in a row, they may not:
+  they have been at home on `CONTACT_UNLOCK_DAYS` (4) of the last
+  `CONTACT_UNLOCK_WINDOW_DAYS` (7) days, they may not:
   - send the first message of a new conversation (direct, about a listing or about
     a service);
   - invite someone they have no accepted conversation with into a group chat, a
@@ -2086,3 +2087,9 @@ shared parent cell meant someone living near a hexagon's edge was "away" a few
 hundred metres from their door. They would rarely string four days together, while
 someone at a hexagon's centre had more room. A distance from the home cell's centre
 treats everyone alike.
+
+**Four days in a week, not in a row (amended 2026-11-01, at the product owner's
+request).** A run broke on any day spent away, such as a weekend at a parent's
+home, and started again from nothing. Counting days in the last seven keeps the
+same bar for someone faking a location, who must still fake it on four separate
+days, and stops punishing a genuine newcomer for one day away.

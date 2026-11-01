@@ -83,13 +83,17 @@ class MeOut(BaseModel):
     can_contact_strangers: bool = Field(
         default=False,
         description=(
-            "Whether the account may start conversations with people it has not talked "
-            "to. Unlocked by being at home on `contact_unlock_days` days in a row, or by "
+            "Whether the account may contact people it does not know: start a "
+            "conversation, or invite them anywhere. Unlocked by being at home on "
+            "`contact_unlock_days` of the last `contact_unlock_window_days` days, or by "
             "the badge. Decision M.7."
         ),
     )
-    presence_streak_days: int = Field(default=0, description="Days at home in a row so far.")
+    presence_days_this_week: int = Field(
+        default=0, description="Days at home in the last `contact_unlock_window_days`."
+    )
     contact_unlock_days: int = 4
+    contact_unlock_window_days: int = 7
     presence_check_due: bool = Field(
         default=False,
         description="True when the app has not yet checked today whether the phone is at home.",

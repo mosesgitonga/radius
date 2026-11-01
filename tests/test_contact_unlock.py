@@ -3,7 +3,8 @@
 Decision M.7. A reading the phone marks as faked, or one too vague, is refused. The
 daily check records one bit a day and never moves home. Someone new may post,
 comment and react at once, but starts no conversation with a stranger — and
-invites no stranger anywhere — until at home on `CONTACT_UNLOCK_DAYS` days in a row.
+invites no stranger anywhere — until at home on `CONTACT_UNLOCK_DAYS` of the last
+`CONTACT_UNLOCK_WINDOW_DAYS` days.
 """
 
 from __future__ import annotations
@@ -102,7 +103,7 @@ async def test_the_daily_check_records_home_and_away_and_never_moves_home(
         )
     ).json()
     assert there["at_home"] is True
-    assert there["streak_days"] == 1
+    assert there["days_this_week"] == 1
     me = (await (await authenticate(user)).get("/v1/me")).json()
     assert me["presence_check_due"] is False
     assert me["can_contact_strangers"] is False
@@ -115,21 +116,38 @@ async def test_four_days_in_a_row_unlock_contact(
     await present_on_previous_days(db_session, user, 3)
 
     outcome = (await (await authenticate(user)).post("/v1/me/presence", json=reading())).json()
-    assert outcome["streak_days"] == 4
+    assert outcome["days_this_week"] == 4
+    assert outcome["contact_unlock_window_days"] == 7
     assert outcome["can_contact_strangers"] is True
     assert (await (await authenticate(user)).get("/v1/me")).json()["can_contact_strangers"] is True
 
 
-async def test_a_broken_run_does_not_unlock(
+async def test_four_days_in_a_week_unlock_even_with_gaps(
     db_session: AsyncSession, authenticate: Authenticate
 ) -> None:
     user = await newcomer(db_session)
-    # Bit 0 is yesterday, when they were away; the three days before, at home.
-    user.home_presence_mask = 0b1110
+    # Bit 0 is yesterday, when they were away; three of the five days before, at home.
+    user.home_presence_mask = 0b101010
     user.home_presence_updated_on = datetime.now(UTC).date() - timedelta(days=1)
     await db_session.flush()
 
     outcome = (await (await authenticate(user)).post("/v1/me/presence", json=reading())).json()
+    assert outcome["days_this_week"] == 4
+    assert outcome["can_contact_strangers"] is True
+
+
+async def test_days_older_than_a_week_do_not_count(
+    db_session: AsyncSession, authenticate: Authenticate
+) -> None:
+    user = await newcomer(db_session)
+    # Yesterday is bit 0. Bits 6 and up are more than six days before today, so
+    # only bits 0-5 still fall in the week: two days at home, plus today.
+    user.home_presence_mask = 0b1111000011
+    user.home_presence_updated_on = datetime.now(UTC).date() - timedelta(days=1)
+    await db_session.flush()
+
+    outcome = (await (await authenticate(user)).post("/v1/me/presence", json=reading())).json()
+    assert outcome["days_this_week"] == 3
     assert outcome["can_contact_strangers"] is False
 
 
@@ -172,7 +190,12 @@ async def test_a_newcomer_cannot_message_a_stranger_until_unlocked(
     )
     assert refused.status_code == 403
     details = refused.json()["error"]["details"]
-    assert details == {"reason": "contact_locked", "days_needed": 4, "days_so_far": 0}
+    assert details == {
+        "reason": "contact_locked",
+        "days_needed": 4,
+        "window_days": 7,
+        "days_so_far": 0,
+    }
 
     await present_on_previous_days(db_session, user, 3)
     await (await authenticate(user)).post("/v1/me/presence", json=reading())

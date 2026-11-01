@@ -62,9 +62,10 @@ class PresenceOut(BaseModel):
     """The result of the daily check."""
 
     at_home: bool = Field(description="Whether the phone was in the home area today.")
-    streak_days: int = Field(description="Days at home in a row, today included if at home.")
+    days_this_week: int = Field(description="Days at home in the last week, today included.")
     can_contact_strangers: bool
     contact_unlock_days: int
+    contact_unlock_window_days: int
 
 
 class HomeLocationOut(BaseModel):

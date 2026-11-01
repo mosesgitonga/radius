@@ -241,7 +241,7 @@ def require_trustworthy_reading(
 @dataclass(frozen=True, slots=True)
 class PresenceOutcome:
     at_home: bool
-    streak_days: int
+    days_this_week: int
     can_contact_strangers: bool
 
 
@@ -256,8 +256,8 @@ async def check_presence(
     """The daily check: was the phone in the home area today?
 
     Records one bit for today and never moves home. Run by the app once a day
-    while it is open. A run of `CONTACT_UNLOCK_DAYS` unlocks starting
-    conversations with strangers; ten days in fourteen feed the badge.
+    while it is open. `CONTACT_UNLOCK_DAYS` of the last week unlock contacting
+    strangers; ten days in fourteen feed the badge.
     """
     if user.home_cell_res9 is None:
         raise ConflictError("Set your home area first", details={"action": "PUT /v1/me/location"})
@@ -270,7 +270,7 @@ async def check_presence(
     contact.note_presence(user, settings=settings, now=now)
     return PresenceOutcome(
         at_home=bool(user.home_presence_mask & 1),
-        streak_days=contact.presence_streak(user, now.date()),
+        days_this_week=contact.days_this_week(user, settings=settings, today=now.date()),
         can_contact_strangers=contact.can_contact_strangers(user),
     )
 

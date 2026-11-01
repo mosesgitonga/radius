@@ -64,8 +64,9 @@ class Me {
     this.avatar = const {},
     this.cover = const {},
     this.canContactStrangers = true,
-    this.presenceStreakDays = 0,
+    this.presenceDaysThisWeek = 0,
     this.contactUnlockDays = 4,
+    this.contactUnlockWindowDays = 7,
     this.presenceCheckDue = false,
   });
 
@@ -88,8 +89,9 @@ class Me {
         avatar: _sizes(json['avatar']),
         cover: _sizes(json['cover']),
         canContactStrangers: json['can_contact_strangers'] as bool? ?? true,
-        presenceStreakDays: json['presence_streak_days'] as int? ?? 0,
+        presenceDaysThisWeek: json['presence_days_this_week'] as int? ?? 0,
         contactUnlockDays: json['contact_unlock_days'] as int? ?? 4,
+        contactUnlockWindowDays: json['contact_unlock_window_days'] as int? ?? 7,
         presenceCheckDue: json['presence_check_due'] as bool? ?? false,
       );
 
@@ -123,10 +125,12 @@ class Me {
   final Map<int, String> cover;
 
   /// Whether I may start conversations with people I haven't talked to: after
-  /// [contactUnlockDays] days in a row at home, or with the badge (decision M.7).
+  /// [contactUnlockDays] of the last [contactUnlockWindowDays] days at home, or
+  /// with the badge (decision M.7).
   final bool canContactStrangers;
-  final int presenceStreakDays;
+  final int presenceDaysThisWeek;
   final int contactUnlockDays;
+  final int contactUnlockWindowDays;
 
   /// True when the app hasn't yet checked today whether the phone is at home.
   final bool presenceCheckDue;

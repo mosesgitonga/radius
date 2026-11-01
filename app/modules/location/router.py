@@ -96,9 +96,10 @@ async def set_home_location(
         "Sent by the app once a day while it is open, with a GPS reading of where the "
         "phone is. Records one bit for today — at home or not — and never moves home. "
         "The coordinates are discarded, as everywhere.\n\n"
-        "Days at home build the verified-neighbour badge, and a run of "
-        "`CONTACT_UNLOCK_DAYS` lets someone new start conversations with strangers "
-        "(decision M.7). The same accuracy and fake-location rules as setting home."
+        "Days at home build the verified-neighbour badge, and `CONTACT_UNLOCK_DAYS` "
+        "of the last `CONTACT_UNLOCK_WINDOW_DAYS` let someone new contact people they "
+        "don't know (decision M.7). The same accuracy and fake-location rules as "
+        "setting home."
     ),
     responses={409: {"description": "No home area set yet"}},
     dependencies=[
@@ -123,9 +124,10 @@ async def check_presence(
     )
     return PresenceOut(
         at_home=outcome.at_home,
-        streak_days=outcome.streak_days,
+        days_this_week=outcome.days_this_week,
         can_contact_strangers=outcome.can_contact_strangers,
         contact_unlock_days=settings.contact_unlock_days,
+        contact_unlock_window_days=settings.contact_unlock_window_days,
     )
 
 
