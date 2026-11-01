@@ -1,4 +1,5 @@
 import '../../core/api/api_client.dart';
+import '../../core/location.dart';
 import 'auth_models.dart';
 
 /// The account endpoints: codes, sign-up, the home area, sign-out.
@@ -55,20 +56,16 @@ class AuthRepository {
   Future<Me> me() async =>
       Me.fromJson(Map<String, dynamic>.from(await _api.get('/me') as Map));
 
-  /// Sends a position once; the server keeps only its area's cell and answers
+  /// Sends a GPS reading once; the server keeps only its area's cell and answers
   /// with the area's name. Nothing is stored on the phone.
-  Future<AreaLabel> setHome({
-    required double latitude,
-    required double longitude,
-    double? accuracyMetres,
-  }) async {
-    final data = Map<String, dynamic>.from(await _api.put('/me/location', body: {
-      'latitude': latitude,
-      'longitude': longitude,
-      'accuracy_metres': ?accuracyMetres,
-    }) as Map);
+  Future<AreaLabel> setHome(Reading reading) async {
+    final data = Map<String, dynamic>.from(await _api.put('/me/location', body: reading.toJson()) as Map);
     return AreaLabel.fromJson(Map<String, dynamic>.from(data['area_label'] as Map));
   }
+
+  /// The daily check: tells the server whether the phone is at home today. Never
+  /// moves home.
+  Future<void> checkPresence(Reading reading) => _api.post('/me/presence', body: reading.toJson());
 
   Future<bool> resume() => _api.resume();
 

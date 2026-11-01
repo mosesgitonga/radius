@@ -221,6 +221,31 @@ class _StandingCard extends StatelessWidget {
               style: text.bodyMedium?.copyWith(color: Palette.inkSoft),
             ),
           ],
+          if (!me.canContactStrangers) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Palette.trustTint, borderRadius: BorderRadius.circular(10)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Starting conversations: day ${me.presenceStreakDays.clamp(0, me.contactUnlockDays)} '
+                    'of ${me.contactUnlockDays}',
+                    style: text.titleSmall?.copyWith(fontSize: 14),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    "You can message people you haven't talked to after ${me.contactUnlockDays} days in a row "
+                    'at home. MyRadius checks once a day while the app is open. You can already post, comment, '
+                    'and reply to anyone who writes to you.',
+                    style: text.bodySmall?.copyWith(color: Palette.ink),
+                  ),
+                ],
+              ),
+            ),
+          ],
           for (final line in lines) ...[const SizedBox(height: 12), line],
         ],
       ),

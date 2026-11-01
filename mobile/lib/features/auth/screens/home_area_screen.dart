@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geolocator/geolocator.dart';
 
 import '../../../core/api/api_exception.dart';
+import '../../../core/location.dart';
 import '../../../core/providers.dart';
 import '../../../core/theme.dart';
 import '../../../core/widgets.dart';
@@ -10,7 +10,7 @@ import '../auth_controller.dart';
 
 /// Setting the home area. The phone's position is read once and sent once; the
 /// server keeps only the area's cell and answers with its name. The app keeps
-/// nothing. (A map to pick the spot by hand comes with the maps slice.)
+/// nothing. Home is found only by GPS, never chosen (decision M.7).
 class HomeAreaScreen extends ConsumerStatefulWidget {
   const HomeAreaScreen({super.key});
 
@@ -29,46 +29,16 @@ class _HomeAreaScreenState extends ConsumerState<HomeAreaScreen> {
       _error = null;
     });
     try {
-      final position = await _currentPosition();
-      if (position == null) return;
-      final area = await ref.read(authRepositoryProvider).setHome(
-            latitude: position.latitude,
-            longitude: position.longitude,
-            accuracyMetres: position.accuracy,
-          );
+      final reading = await const LocationReader().readHere();
+      final area = await ref.read(authRepositoryProvider).setHome(reading);
       setState(() => _areaName = area.label);
+    } on LocationProblem catch (problem) {
+      setState(() => _error = problem.message);
     } on ApiException catch (error) {
       setState(() => _error = error.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  /// The current position, after asking for permission; null, with an
-  /// explanation shown, when it can't be had.
-  Future<Position?> _currentPosition() async {
-    if (!await Geolocator.isLocationServiceEnabled()) {
-      setState(() => _error = 'Location is turned off. Turn it on in your phone settings and try again.');
-      return null;
-    }
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.denied) {
-      setState(() => _error = 'MyRadius needs your location once, to find your area.');
-      return null;
-    }
-    if (permission == LocationPermission.deniedForever) {
-      setState(() => _error = 'Location permission is off for MyRadius. Allow it in Settings › Apps › MyRadius.');
-      return null;
-    }
-    return Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 20),
-      ),
-    );
   }
 
   Future<void> _continue() => ref.read(authControllerProvider.notifier).refreshMe();

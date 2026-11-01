@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/location.dart';
 import '../../core/providers.dart';
 import '../../core/realtime.dart';
 import '../../core/router.dart';
@@ -27,12 +28,32 @@ class ShellScreen extends ConsumerStatefulWidget {
 
 class _ShellScreenState extends ConsumerState<ShellScreen> with WidgetsBindingObserver {
   late final RealtimeClient _realtime;
+  bool _checking = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _realtime = ref.read(realtimeProvider)..start();
+    Future.microtask(_dailyCheck);
+  }
+
+  /// Once a day, while the app is open: is the phone at home? Only when location
+  /// is already allowed — it never asks — and silent on any failure, trying again
+  /// the next time the app opens. Decision M.7.
+  Future<void> _dailyCheck() async {
+    final auth = ref.read(authControllerProvider);
+    if (_checking || auth is! AuthSignedIn || !auth.me.presenceCheckDue) return;
+    _checking = true;
+    try {
+      final reading = await const LocationReader().readHere(mayAsk: false);
+      await ref.read(authRepositoryProvider).checkPresence(reading);
+      await ref.read(authControllerProvider.notifier).refreshMe();
+    } catch (_) {
+      // No location, no connection, or not at home's standard of accuracy today.
+    } finally {
+      _checking = false;
+    }
   }
 
   @override
@@ -45,7 +66,10 @@ class _ShellScreenState extends ConsumerState<ShellScreen> with WidgetsBindingOb
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _realtime.resume();
+    if (state == AppLifecycleState.resumed) {
+      _realtime.resume();
+      _dailyCheck();
+    }
   }
 
   @override

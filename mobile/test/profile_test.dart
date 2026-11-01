@@ -14,7 +14,7 @@ import 'package:myradius/main.dart';
 import 'support/fake_adapter.dart';
 import 'support/fake_socket.dart';
 
-const meJson = {
+Map<String, dynamic> meJson = {
   'id': 'u1',
   'display_name': 'Amina K.',
   'status': 'active',
@@ -64,11 +64,12 @@ void main() {
   group('screens', () {
     late FakeAdapter adapter;
     late Map<String, dynamic> profile;
+    late Map<String, dynamic> me;
 
     FakeReply handle(RequestOptions request) {
       final path = request.path;
       if (path == '/auth/refresh') return FakeReply(200, tokens('a1', 'r2'));
-      if (path == '/me') return const FakeReply(200, meJson);
+      if (path == '/me') return FakeReply(200, me);
       if (path == '/feed') return const FakeReply(200, {'items': [], 'next_cursor': null, 'radius_km': 15});
       if (path == '/conversations') return const FakeReply(200, {'items': [], 'next_cursor': null});
       if (path == '/users/u2') return FakeReply(200, profile);
@@ -143,6 +144,8 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    setUp(() => me = Map.of(meJson));
+
     testWidgets("someone else's profile: details, what they sell, and Message", (tester) async {
       profile = kamau();
       await openKamau(tester);
@@ -167,6 +170,23 @@ void main() {
       await openKamau(tester);
       expect(find.text("Kamau's posts are shown to neighbours nearby. You live further away."), findsOneWidget);
       expect(adapter.requests.where((r) => r.path == '/users/u2/posts'), isNotEmpty);
+    });
+
+    testWidgets('a newcomer is told why before a first message, and no chat opens', (tester) async {
+      profile = kamau();
+      me = {...meJson, 'can_contact_strangers': false, 'presence_streak_days': 2, 'contact_unlock_days': 4};
+      await openKamau(tester);
+
+      await tester.tap(find.text('Message Kamau'));
+      await tester.pumpAndSettle();
+      expect(find.text('Settle in first'), findsOneWidget);
+      expect(find.textContaining('You are on day 2 of 4.'), findsOneWidget);
+
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      // Still on the profile, no message sent.
+      expect(find.text('Message Kamau'), findsOneWidget);
+      expect(adapter.requests.where((r) => r.path.endsWith('/messages') && r.method == 'POST'), isEmpty);
     });
   });
 }

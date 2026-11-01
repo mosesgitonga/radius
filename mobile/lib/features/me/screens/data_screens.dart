@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/api/api_exception.dart';
+import '../../../core/location.dart';
 import '../../../core/providers.dart';
 import '../../../core/theme.dart';
 import '../../../core/widgets.dart';
@@ -219,30 +219,14 @@ class _MoveHomeScreenState extends ConsumerState<MoveHomeScreen> {
       _error = null;
     });
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) {
-        setState(() => _error = 'Location is turned off. Turn it on in your phone settings and try again.');
-        return;
-      }
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-        setState(() => _error = 'MyRadius needs your location once, to find your new area.');
-        return;
-      }
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 20)),
-      );
-      final area = await ref.read(authRepositoryProvider).setHome(
-            latitude: position.latitude,
-            longitude: position.longitude,
-            accuracyMetres: position.accuracy,
-          );
+      final reading = await const LocationReader().readHere();
+      final area = await ref.read(authRepositoryProvider).setHome(reading);
       await ref.read(authControllerProvider.notifier).refreshMe();
       setState(() => _moved = area.label);
+    } on LocationProblem catch (problem) {
+      setState(() => _error = problem.message);
     } on ApiException catch (error) {
       setState(() => _error = error.message);
-    } catch (_) {
-      setState(() => _error = "Couldn't read your location. Try again outside or near a window.");
     } finally {
       if (mounted) setState(() => _busy = false);
     }
