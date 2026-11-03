@@ -42,8 +42,10 @@ void main() {
     });
 
     test('signed out may only be in the sign-in flow', () {
-      expect(redirectFor(const AuthSignedOut(), Routes.feed), Routes.signIn);
-      expect(redirectFor(const AuthSignedOut(), Routes.me), Routes.signIn);
+      expect(redirectFor(const AuthSignedOut(), Routes.feed), Routes.guest);
+      expect(redirectFor(const AuthSignedOut(), Routes.me), Routes.guest);
+      expect(redirectFor(const AuthSignedOut(), Routes.guest), isNull);
+      expect(redirectFor(const AuthSignedOut(), Routes.signIn), isNull);
       expect(redirectFor(const AuthSignedOut(), Routes.code), isNull);
       expect(redirectFor(const AuthSignedOut(), Routes.signUp), isNull);
     });

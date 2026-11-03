@@ -11,6 +11,7 @@ import 'package:myradius/features/me/me_screen.dart';
 import 'package:myradius/main.dart';
 
 import 'support/fake_adapter.dart';
+import 'support/fake_location.dart';
 import 'support/fake_socket.dart';
 
 Map<String, dynamic> meJson({String? deletionRequestedAt, bool verified = false}) => {
@@ -177,6 +178,7 @@ void main() {
         overrides: [
           tokenStoreProvider.overrideWithValue(store),
           apiClientProvider.overrideWithValue(api),
+          locationReaderProvider.overrideWithValue(const FakeReader.none()),
           realtimeProvider.overrideWith((ref) {
             final client = RealtimeClient(api, connect: FakeSockets().connect, uri: Uri.parse('ws://api.test/v1/ws'));
             ref.onDispose(client.dispose);
@@ -253,7 +255,7 @@ void main() {
       await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();
       expect(store.refreshToken, isNull);
-      expect(find.text("What's happening around you"), findsOneWidget);
+      expect(find.text('Sign up instead'), findsOneWidget);
     });
 
     testWidgets('signing in during the grace period offers to cancel', (tester) async {

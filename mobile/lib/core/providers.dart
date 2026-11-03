@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/auth/auth_repository.dart';
 import '../features/chats/chat_repository.dart';
 import '../features/feed/feed_repository.dart';
+import '../features/guest/guest_repository.dart';
 import '../features/market/listing_repository.dart';
 import '../features/me/account_repository.dart';
 import '../features/profile/profile_repository.dart';
@@ -11,6 +12,7 @@ import '../features/services/service_repository.dart';
 import 'api/api_client.dart';
 import 'api/media_uploader.dart';
 import 'api/token_store.dart';
+import 'location.dart';
 import 'realtime.dart';
 
 /// The app's shared services. Tests override [tokenStoreProvider],
@@ -52,6 +54,13 @@ final profileRepositoryProvider = Provider<ProfileRepository>(
 final reviewRepositoryProvider = Provider<ReviewRepository>(
   (ref) => ReviewRepository(ref.watch(apiClientProvider)),
 );
+
+final guestRepositoryProvider = Provider<GuestRepository>(
+  (ref) => GuestRepository(ref.watch(apiClientProvider)),
+);
+
+/// Where the phone is. A provider so tests can stand somewhere without GPS.
+final locationReaderProvider = Provider<LocationReader>((ref) => const LocationReader());
 
 final mediaUploaderProvider = Provider<MediaUploader>(
   (ref) => MediaUploader(ref.watch(apiClientProvider)),

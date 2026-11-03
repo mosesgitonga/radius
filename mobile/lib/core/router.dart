@@ -13,6 +13,7 @@ import '../features/chats/screens/conversation_screen.dart';
 import '../features/feed/screens/compose_screen.dart';
 import '../features/feed/screens/feed_screen.dart';
 import '../features/feed/screens/post_screen.dart';
+import '../features/guest/guest_screen.dart';
 import '../features/market/listing_models.dart';
 import '../features/market/screens/listing_list_screen.dart';
 import '../features/market/screens/listing_screen.dart';
@@ -36,6 +37,7 @@ class Routes {
 
   static const restoring = '/';
   static const offline = '/offline';
+  static const guest = '/welcome';
   static const signIn = '/sign-in';
   static const code = '/sign-in/code';
   static const signUp = '/sign-up';
@@ -69,8 +71,8 @@ class Routes {
   static String newService(ServiceKind kind) => '/services/new?kind=${kind.key}';
   static String editService(String id) => '/services/$id/edit';
 
-  static const _signedOut = {signIn, code, signUp};
-  static const _gates = {restoring, offline, signIn, code, signUp, homeArea};
+  static const _signedOut = {guest, signIn, code, signUp};
+  static const _gates = {restoring, offline, guest, signIn, code, signUp, homeArea};
 }
 
 /// Decides where someone may be, from their [AuthState] alone. Pure, so it is
@@ -79,7 +81,8 @@ String? redirectFor(AuthState auth, String location) {
   return switch (auth) {
     AuthRestoring() => location == Routes.restoring ? null : Routes.restoring,
     AuthOffline() => location == Routes.offline ? null : Routes.offline,
-    AuthSignedOut() => Routes._signedOut.contains(location) ? null : Routes.signIn,
+    // Someone without an account looks around first (decision M.9).
+    AuthSignedOut() => Routes._signedOut.contains(location) ? null : Routes.guest,
     AuthNeedsHome() => location == Routes.homeArea ? null : Routes.homeArea,
     AuthSignedIn() => Routes._gates.contains(location) ? Routes.feed : null,
   };
@@ -98,6 +101,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: Routes.restoring, builder: (_, _) => const RestoringScreen()),
       GoRoute(path: Routes.offline, builder: (_, _) => const OfflineScreen()),
+      GoRoute(path: Routes.guest, builder: (_, _) => const GuestScreen()),
       GoRoute(path: Routes.signIn, builder: (_, _) => const PhoneScreen()),
       GoRoute(path: Routes.code, builder: (_, _) => const CodeScreen()),
       GoRoute(path: Routes.signUp, builder: (_, _) => const SignupScreen()),

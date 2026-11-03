@@ -7,6 +7,7 @@ import 'package:myradius/core/providers.dart';
 import 'package:myradius/main.dart';
 
 import 'support/fake_adapter.dart';
+import 'support/fake_location.dart';
 
 /// A mid-range Android phone: 1080 × 2400 pixels at 2.75×, about 393 × 873.
 void usePhoneScreen(WidgetTester tester) {
@@ -27,6 +28,7 @@ void main() {
       overrides: [
         tokenStoreProvider.overrideWithValue(store),
         apiClientProvider.overrideWithValue(api),
+        locationReaderProvider.overrideWithValue(const FakeReader.none()),
       ],
       child: const MyRadiusApp(),
     );
@@ -68,7 +70,11 @@ void main() {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    // No stored session: straight to the phone screen.
+    // No stored session: the guest Home first (decision M.9). There is no GPS in a
+    // test, so it offers to sign up instead.
+    expect(find.text('Sign up instead'), findsOneWidget);
+    await tester.tap(find.text('Sign up instead'));
+    await tester.pumpAndSettle();
     expect(find.text("What's happening around you"), findsOneWidget);
 
     // A bad number is caught before any request.
@@ -120,13 +126,13 @@ void main() {
     expect(find.text("Where's home?"), findsOneWidget);
   });
 
-  testWidgets('a stored session that is no longer valid lands on sign-in', (tester) async {
+  testWidgets('a stored session that is no longer valid lands on the guest Home', (tester) async {
     store.refreshToken = 'revoked';
     adapter = FakeAdapter((request) =>
         FakeReply(401, errorBody('unauthenticated', 'That session is no longer valid')));
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
-    expect(find.text("What's happening around you"), findsOneWidget);
+    expect(find.text('Sign up instead'), findsOneWidget);
     expect(store.refreshToken, isNull);
   });
 
