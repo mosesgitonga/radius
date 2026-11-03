@@ -12,6 +12,7 @@ import '../../chats/start_chat.dart';
 import '../../profile/profile_screen.dart';
 import '../feed_controller.dart';
 import '../feed_models.dart';
+import '../widgets/home_menu.dart';
 import '../widgets/post_card.dart';
 import '../widgets/report_sheet.dart';
 
@@ -108,6 +109,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     final radius = feed.radiusKm;
 
     return Scaffold(
+      drawer: HomeMenu(area: area, radiusKm: radius),
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.push(Routes.compose),
         tooltip: 'New post',
@@ -129,23 +131,30 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(area, style: text.headlineSmall),
-                      const SizedBox(height: 2),
-                      Text(
-                        radius == null ? 'Around you' : 'Within ${_km(radius)} km of home',
-                        style: text.bodySmall,
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
+                      Row(
                         children: [
-                          ActionChip(
-                            avatar: const Icon(Icons.handyman_outlined, size: 18, color: Palette.ink),
-                            label: const Text('Services & jobs'),
-                            backgroundColor: Palette.white,
-                            side: const BorderSide(color: Palette.line),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                            onPressed: () => context.go(Routes.services),
+                          Builder(
+                            builder: (context) => IconButton(
+                              icon: const Icon(Icons.menu_rounded),
+                              tooltip: 'Menu',
+                              color: Palette.ink,
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => Scaffold.of(context).openDrawer(),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(area, style: text.headlineSmall),
+                                const SizedBox(height: 2),
+                                Text(
+                                  radius == null ? 'Around you' : 'Within ${_km(radius)} km of home',
+                                  style: text.bodySmall,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),

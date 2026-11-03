@@ -195,6 +195,8 @@ void main() {
         child: const MyRadiusApp(),
       ));
       await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Menu'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Services & jobs'));
       await tester.pumpAndSettle();
     }

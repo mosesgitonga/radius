@@ -68,6 +68,7 @@ class Me {
     this.contactUnlockDays = 4,
     this.contactUnlockWindowDays = 7,
     this.presenceCheckDue = false,
+    this.showInNearby = false,
   });
 
   factory Me.fromJson(Map<String, dynamic> json) => Me(
@@ -93,6 +94,7 @@ class Me {
         contactUnlockDays: json['contact_unlock_days'] as int? ?? 4,
         contactUnlockWindowDays: json['contact_unlock_window_days'] as int? ?? 7,
         presenceCheckDue: json['presence_check_due'] as bool? ?? false,
+        showInNearby: json['show_in_nearby'] as bool? ?? false,
       );
 
   static DateTime? _date(Object? value) => value == null ? null : DateTime.parse(value as String);
@@ -134,6 +136,9 @@ class Me {
 
   /// True when the app hasn't yet checked today whether the phone is at home.
   final bool presenceCheckDue;
+
+  /// Whether I chose to be listed in People nearby (decision M.8).
+  final bool showInNearby;
 
   bool get deletionPending => deletionRequestedAt != null;
 }

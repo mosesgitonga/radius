@@ -5,6 +5,7 @@ import '../../../core/api/api_exception.dart';
 import '../../../core/providers.dart';
 import '../../../core/theme.dart';
 import '../../../core/widgets.dart';
+import '../../auth/auth_controller.dart';
 import '../account_models.dart';
 import '../me_screen.dart';
 
@@ -168,6 +169,20 @@ class _PrivacyScreenState extends ConsumerState<PrivacyScreen> {
     );
   }
 
+  bool get _showInNearby {
+    final auth = ref.watch(authControllerProvider);
+    return auth is AuthSignedIn && auth.me.showInNearby;
+  }
+
+  Future<void> _setShowInNearby(bool show) async {
+    try {
+      final me = await ref.read(accountRepositoryProvider).setShowInNearby(show);
+      ref.read(authControllerProvider.notifier).replaceMe(me);
+    } on ApiException catch (error) {
+      if (mounted) _toast(context, error.message);
+    }
+  }
+
   Future<void> _setMarketing(bool granted) async {
     try {
       final updated = await ref.read(accountRepositoryProvider).setMarketing(granted);
@@ -217,6 +232,19 @@ class _PrivacyScreenState extends ConsumerState<PrivacyScreen> {
                 subtitle: const Text('Optional. You can change this at any time.'),
                 value: marketing?.granted ?? false,
                 onChanged: _setMarketing,
+              ),
+              const SizedBox(height: 20),
+              Text('Being found', style: text.titleMedium),
+              const SizedBox(height: 4),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Show me in People nearby'),
+                subtitle: const Text(
+                  'Neighbours whose feed reaches your home see your name, photo, bio and area, '
+                  'never where you live. Only once your home is proven.',
+                ),
+                value: _showInNearby,
+                onChanged: _setShowInNearby,
               ),
             ],
           );

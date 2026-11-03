@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../core/api/api_client.dart';
 import '../auth/auth_models.dart';
+import '../profile/profile_models.dart';
 import 'account_models.dart';
 
 /// The account's own settings and rights: profile, standing, consents, blocks,
@@ -13,6 +14,22 @@ class AccountRepository {
 
   Future<Me> rename(String displayName) async => Me.fromJson(
       Map<String, dynamic>.from(await _api.patch('/me', body: {'display_name': displayName.trim()}) as Map));
+
+  /// Whether I am listed in People nearby.
+  Future<Me> setShowInNearby(bool show) async =>
+      Me.fromJson(Map<String, dynamic>.from(await _api.patch('/me', body: {'show_in_nearby': show}) as Map));
+
+  /// Neighbours who chose to be listed, newest members first. Only proven
+  /// neighbours may look: anyone else gets `contact_locked`.
+  Future<(List<Profile>, String?)> peopleNearby({String? cursor}) async {
+    final page = Map<String, dynamic>.from(
+      await _api.get('/people/nearby', query: {'cursor': ?cursor}) as Map,
+    );
+    return (
+      [for (final item in page['items'] as List) Profile.fromJson(Map<String, dynamic>.from(item as Map))],
+      page['next_cursor'] as String?,
+    );
+  }
 
   Future<Standing> standing() async =>
       Standing.fromJson(Map<String, dynamic>.from(await _api.get('/me/standing') as Map));

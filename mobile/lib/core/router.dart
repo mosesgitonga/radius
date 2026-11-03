@@ -21,6 +21,7 @@ import '../features/market/screens/sell_screen.dart';
 import '../features/me/me_screen.dart';
 import '../features/me/screens/data_screens.dart';
 import '../features/me/screens/settings_screens.dart';
+import '../features/people/people_nearby_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/services/screens/my_services_screen.dart';
@@ -62,6 +63,7 @@ class Routes {
   static const myData = '/me/data';
   static const deleteAccount = '/me/delete';
   static const services = '/feed/services';
+  static const peopleNearby = '/feed/people';
   static const myServices = '/feed/services/mine';
   static String service(String id) => '/feed/services/p/$id';
   static String newService(ServiceKind kind) => '/services/new?kind=${kind.key}';
@@ -140,6 +142,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   path: 'post/:id',
                   builder: (_, state) => PostScreen(postId: state.pathParameters['id']!),
                 ),
+                GoRoute(path: 'people', builder: (_, _) => const PeopleNearbyScreen()),
                 GoRoute(
                   path: 'services',
                   builder: (_, _) => const ServicesScreen(),
