@@ -246,6 +246,12 @@ class _PrivacyScreenState extends ConsumerState<PrivacyScreen> {
                 value: _showInNearby,
                 onChanged: _setShowInNearby,
               ),
+              const SizedBox(height: 24),
+              Text(
+                'Area names and boundaries: map data © OpenStreetMap contributors, '
+                'available under the Open Database Licence.',
+                style: text.bodySmall,
+              ),
             ],
           );
         },

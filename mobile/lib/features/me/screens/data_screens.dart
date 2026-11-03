@@ -219,7 +219,7 @@ class _MoveHomeScreenState extends ConsumerState<MoveHomeScreen> {
       _error = null;
     });
     try {
-      final reading = await const LocationReader().readHere();
+      final reading = await ref.read(locationReaderProvider).readHere();
       final area = await ref.read(authRepositoryProvider).setHome(reading);
       await ref.read(authControllerProvider.notifier).refreshMe();
       setState(() => _moved = area.label);
@@ -237,8 +237,9 @@ class _MoveHomeScreenState extends ConsumerState<MoveHomeScreen> {
     final text = Theme.of(context).textTheme;
     final auth = ref.watch(authControllerProvider);
     final me = auth is AuthSignedIn ? auth.me : null;
+    final provisional = me?.homeProvisional ?? false;
     final next = me?.nextHomeChangeAllowedAt;
-    final waiting = next != null && next.isAfter(DateTime.now());
+    final waiting = !provisional && next != null && next.isAfter(DateTime.now());
     return Scaffold(
       appBar: AppBar(title: const Text('Home area')),
       body: ListView(
@@ -249,7 +250,10 @@ class _MoveHomeScreenState extends ConsumerState<MoveHomeScreen> {
           Text(
             _moved != null
                 ? 'Home is now $_moved. Your feed, the marketplace and services follow it.'
-                : 'Your feed, the marketplace and services are built around your home area.',
+                : provisional
+                    ? "You're using MyRadius from here for now. When you're at home, set it here"
+                        "${me?.homeConfirmBy == null ? '' : ' by ${shortDate(me!.homeConfirmBy!)}'}."
+                    : 'Your feed, the marketplace and services are built around your home area.',
             style: text.bodyLarge?.copyWith(color: Palette.muted),
           ),
           const SizedBox(height: 16),
@@ -266,7 +270,7 @@ class _MoveHomeScreenState extends ConsumerState<MoveHomeScreen> {
           const SizedBox(height: 20),
           if (_moved == null)
             BusyButton(
-              label: "I've moved: use my location",
+              label: provisional ? "I'm at home now: use my location" : "I've moved: use my location",
               busy: _busy,
               onPressed: waiting ? null : _move,
             ),

@@ -123,7 +123,7 @@ void main() {
     expect(store.refreshToken, 'r1');
 
     // Signed in without a home: the home-area screen.
-    expect(find.text("Where's home?"), findsOneWidget);
+    expect(find.text('Are you at home right now?'), findsOneWidget);
   });
 
   testWidgets('a stored session that is no longer valid lands on the guest Home', (tester) async {

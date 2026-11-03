@@ -58,8 +58,13 @@ class AuthRepository {
 
   /// Sends a GPS reading once; the server keeps only its area's cell and answers
   /// with the area's name. Nothing is stored on the phone.
-  Future<AreaLabel> setHome(Reading reading) async {
-    final data = Map<String, dynamic>.from(await _api.put('/me/location', body: reading.toJson()) as Map);
+  ///
+  /// With [atHome] false the person is signing up away from home: the home is
+  /// provisional until they set the real one (decision M.10).
+  Future<AreaLabel> setHome(Reading reading, {bool atHome = true}) async {
+    final data = Map<String, dynamic>.from(
+      await _api.put('/me/location', body: {...reading.toJson(), 'at_home': atHome}) as Map,
+    );
     return AreaLabel.fromJson(Map<String, dynamic>.from(data['area_label'] as Map));
   }
 
