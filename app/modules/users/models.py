@@ -160,6 +160,12 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
         server_default=CircleRequestPolicy.everyone.value,
     )
 
+    show_in_nearby: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    """Whether the person chose to be listed in People nearby. Off until they turn
+    it on: nobody becomes findable without deciding to (decision M.8)."""
+
     # -- Home location -------------------------------------------------------
     # Four resolutions of the same cell, denormalised on purpose. Deriving the
     # parents in SQL is not possible (H3 is computed in Python), and recomputing

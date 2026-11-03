@@ -231,6 +231,8 @@ CIRCLE_AND_FOLLOW_SCHEMAS: frozenset[str] = frozenset(
         "FollowPageOut",
         "FollowedServiceOut",
         "PublicProfileOut",
+        "NearbyPersonOut",
+        "NearbyPageOut",
     }
 )
 

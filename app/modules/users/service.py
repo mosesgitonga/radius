@@ -161,6 +161,7 @@ async def update_profile(
     display_name: str | None,
     bio: str | None = None,
     circle_request_policy: CircleRequestPolicy | None = None,
+    show_in_nearby: bool | None = None,
 ) -> User:
     changed: dict[str, Any] = {}
     if display_name is not None:
@@ -180,6 +181,9 @@ async def update_profile(
     if circle_request_policy is not None and circle_request_policy != user.circle_request_policy:
         changed["circle_request_policy"] = True
         user.circle_request_policy = circle_request_policy
+    if show_in_nearby is not None and show_in_nearby != user.show_in_nearby:
+        changed["show_in_nearby"] = True
+        user.show_in_nearby = show_in_nearby
 
     if changed:
         await record_audit_event(
@@ -480,6 +484,7 @@ async def export_user_data(
             "restriction_reason": user.restriction_reason,
             "member_since": user.created_at.isoformat() if user.created_at else None,
             "bio": user.bio,
+            "show_in_nearby": user.show_in_nearby,
             "contact_unlocked_at": (
                 user.contact_unlocked_at.isoformat() if user.contact_unlocked_at else None
             ),
@@ -564,6 +569,7 @@ async def purge_user(session: AsyncSession, *, user: User) -> None:
     user.cover_media_id = None
     user.bio = None
     user.circle_request_policy = CircleRequestPolicy.everyone
+    user.show_in_nearby = False
     user.contact_unlocked_at = None
     user.presence_checked_on = None
     user.home_cell_res9 = None

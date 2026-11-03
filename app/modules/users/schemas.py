@@ -106,6 +106,31 @@ class MeOut(BaseModel):
         default=CircleRequestPolicy.everyone,
         description="Who may ask to join my circle. Changed with `PATCH /me`.",
     )
+    show_in_nearby: bool = Field(
+        default=False,
+        description=(
+            "Whether I am listed in People nearby. Off until turned on. Even when on, "
+            "I am listed only once my home is proven (decision M.8)."
+        ),
+    )
+
+
+class NearbyPersonOut(BaseModel):
+    """Someone in People nearby. No last-seen time and no online status."""
+
+    id: uuid.UUID
+    display_name: str
+    avatar: dict[str, ImageVariantOut] | None = None
+    is_verified_neighbour: bool
+    area_label: AreaLabelOut | None = None
+    distance_bucket: DistanceBucket | None = None
+    bio: str | None = None
+    member_since: datetime
+
+
+class NearbyPageOut(BaseModel):
+    items: list[NearbyPersonOut]
+    next_cursor: str | None = None
 
 
 class PublicProfileOut(BaseModel):
@@ -160,6 +185,10 @@ class ProfileUpdateIn(BaseModel):
         default=None,
         max_length=160,
         description="A line or two about yourself. An empty string removes it.",
+    )
+    show_in_nearby: bool | None = Field(
+        default=None,
+        description="List me in People nearby, for neighbours whose feed reaches my home.",
     )
     circle_request_policy: CircleRequestPolicy | None = Field(
         default=None,

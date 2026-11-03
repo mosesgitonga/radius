@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.core.db import SessionDep
 from app.core.errors import ForbiddenError, NotFoundError
+from app.core.pagination import PageParams, page_params
 from app.core.providers.storage import StorageProvider, get_storage_provider
 from app.core.redis import get_redis
 from app.modules.auth import service as auth_service
@@ -35,7 +36,7 @@ from app.modules.moderation.models import ModerationWarning
 from app.modules.notifications import service as notifications_service
 from app.modules.services import reviews as reviews_service
 from app.modules.services import service as services_service
-from app.modules.users import badge, contact
+from app.modules.users import badge, contact, nearby
 from app.modules.users import service as users_service
 from app.modules.users.models import Block, User
 from app.modules.users.schemas import (
@@ -46,6 +47,8 @@ from app.modules.users.schemas import (
     ConsentUpdateIn,
     DeletionStatusOut,
     MeOut,
+    NearbyPageOut,
+    NearbyPersonOut,
     ProfileUpdateIn,
     PublicProfileOut,
     StandingOut,
@@ -153,6 +156,7 @@ async def get_me(
         cover_media_id=user.cover_media_id,
         cover=await _cover(session, storage, user),
         circle_request_policy=user.circle_request_policy,
+        show_in_nearby=user.show_in_nearby,
     )
 
 
@@ -182,8 +186,55 @@ async def update_me(
         display_name=payload.display_name,
         bio=payload.bio,
         circle_request_policy=payload.circle_request_policy,
+        show_in_nearby=payload.show_in_nearby,
     )
     return await get_me(user, session, redis, settings, storage)
+
+
+@router.get(
+    "/people/nearby",
+    response_model=NearbyPageOut,
+    summary="People nearby",
+    description=(
+        "Neighbours who chose to be listed (`show_in_nearby`) and whose home is within "
+        "the caller's feed radius of home, newest members first. Each shows an area "
+        "label and a distance band, never a position, a last-seen time or an online "
+        "status.\n\n"
+        "Only proven neighbours may look, and only proven neighbours are listed "
+        "(decision M.8): until then 403 `contact_locked`, with the days so far. "
+        "Anyone blocked either way is left out. At most 60 requests an hour."
+    ),
+    dependencies=[Depends(user_rate_limit(bucket="people_nearby", limit=60, window_seconds=3600))],
+)
+async def get_people_nearby(
+    viewer: CurrentUser,
+    session: SessionDep,
+    redis: RedisDep,
+    settings: SettingsDep,
+    storage: StorageDep,
+    params: Annotated[PageParams, Depends(page_params)],
+) -> NearbyPageOut:
+    people, next_cursor = await nearby.people_nearby(
+        session, redis, viewer=viewer, params=params, settings=settings
+    )
+    items: list[NearbyPersonOut] = []
+    for person in people:
+        bucket = None
+        if viewer.home_cell_res8 is not None and person.home_cell_res8 is not None:
+            bucket = cells.bucket_between_cells(viewer.home_cell_res8, person.home_cell_res8)
+        items.append(
+            NearbyPersonOut(
+                id=person.id,
+                display_name=person.display_name,
+                avatar=await _avatar(session, storage, person),
+                is_verified_neighbour=person.is_verified_neighbour,
+                area_label=await _area_label(session, redis, person, settings),
+                distance_bucket=bucket,
+                bio=person.bio,
+                member_since=person.created_at,
+            )
+        )
+    return NearbyPageOut(items=items, next_cursor=next_cursor)
 
 
 @router.get(
