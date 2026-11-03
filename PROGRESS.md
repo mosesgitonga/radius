@@ -3045,3 +3045,61 @@ cleared:
   neighbour";
 - "1 helpful" brought up "Join MyRadius to mark posts helpful";
 - Sign up opened the phone screen.
+
+## Slice 12 — real area names, and signing up away from home
+
+### Plan
+
+Found on 2026-11-03 when the product owner signed up on their phone:
+- **The wrong estate.** The app said "Witemere" for a home in King'ong'o.
+- **Signing up away from home.** The app assumes the phone is at home at
+  sign-up, which may not be true.
+
+**Areas from OpenStreetMap (decided with the product owner):**
+- **Why the names were wrong:** the seeded estates were placeholder boxes. The
+  reading fell inside the box called Witemere.
+- **What OpenStreetMap has for Nyeri:** real boundaries for the county, the
+  sub-counties, the wards (Rware, Ruring'u/Karia, Kamakwa/Mukaro,
+  Kiganjo/Mathari and others) and the built-up area of Nyeri and Mweiga. It has
+  no estate names or boundaries at all.
+- **New seed file:** `scripts/build_osm_areas.py` fetches those once and writes
+  `seeds/areas/nyeri.geojson`. It assembles each polygon in PostGIS and
+  simplifies it to about 20 m. The placeholder estates are removed, so labels
+  say "Rware", correctly, rather than a wrong estate.
+- **Credit:** the data is © OpenStreetMap contributors under the ODbL. The seed
+  file carries the credit, and the app's Privacy screen says "Map data ©
+  OpenStreetMap contributors".
+- **Retiring areas:** `scripts/seed_areas.py --retire-missing` deactivates seeded
+  areas no longer in the file.
+- **The labelling rule:** an area is named only if it contains both the
+  k-anonymous cell's centre and the person's own home cell. Before, it was any
+  area containing the cell's centre, which near a boundary could be the
+  neighbouring area. If no area contains both, the label moves up to the next
+  coarser cell, and in the end to the town. A town-kind area is always labelled
+  at "town" precision.
+- **Estate names** can be added later from points the product owner gives.
+  The loader needs no change.
+
+**Signing up away from home (decided with the product owner: full use, home
+set later):**
+- **The question:** the home step asks "Are you at home right now?".
+  - **Yes:** as now.
+  - **No:** the account gets a *provisional* home where the phone is now, and
+    can use everything straight away. Posts and listings are placed there.
+- **`users.home_provisional`** marks it. `GET /v1/me` reports `home_provisional`
+  and `home_confirm_by`, which is `PROVISIONAL_HOME_DAYS` (7) after it was set.
+- **Setting the real home:** `PUT /v1/me/location` with `at_home: true` replaces
+  a provisional home at any time, without the 14-day cooldown.
+  `at_home: false` is accepted only while the account has no confirmed home.
+- **After the deadline:** nothing new can be placed (posts, stories, listings,
+  services, public groups, events) until the real home is set. This is checked
+  in `home_location_columns`, the one place all of them get their location.
+  Commenting, reacting and messaging carry on.
+- **The contact rule and the badge:** a provisional home does not count towards
+  either. The daily check records nothing until home is confirmed.
+- **App:**
+  - the home step asks "Are you at home right now?";
+  - while home is provisional, Home shows a card: "You're using MyRadius from
+    {area}. Set your home when you're there, by {date}", with a button;
+  - Me › Home area offers "I'm at home now".
+- **Records:** decision M.10, DATA_MAP, and tests for every part.
