@@ -688,6 +688,19 @@ reading is taken in the background, and the app never asks for permission for it
 
 ---
 
+## People nearby (2026-11-03)
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `users.show_in_nearby` | Whether the person chose to be listed in People nearby (DECISIONS M.8). Off by default | Until changed; reset on purge. Exported |
+
+The list shows only what a profile already shows to the same viewer: name, photo,
+badge, area label, distance band, bio and join month. Only proven neighbours see it,
+and only proven neighbours who opted in appear. Nothing about who looked is
+recorded.
+
+---
+
 ## Circle and follows (2026-11-01)
 
 ### `circle_requests`

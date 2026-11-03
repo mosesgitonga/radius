@@ -2094,6 +2094,35 @@ home, and started again from nothing. Counting days in the last seven keeps the
 same bar for someone faking a location, who must still fake it on four separate
 days, and stops punishing a genuine newcomer for one day away.
 
+### M.8 People nearby: opt-in, and proven on both sides
+
+**Choice (decided with the product owner, 2026-11-01; built 2026-11-03).**
+- **Opt-in:** People nearby lists only people who turned on `show_in_nearby`.
+  It is off for everyone until they do.
+- **Proven on both sides:** only someone who may contact strangers (M.7) can see
+  the list, and only such people appear in it.
+- **Reach:** listed people live within the viewer's feed radius of home, never of
+  an explore location. The list is ordered newest member first, not by
+  distance.
+- **What each entry shows:** an area label, a distance band, the bio and the
+  join month. It never shows a last-seen time or an online status.
+- **Limits:** at most 60 requests an hour.
+
+**Reasoning.**
+- **Opt-in:** a list of who lives near you is the most direct way to find a
+  person at home, so nobody is on it by default.
+- **Proven on both sides:** proving a home is what makes "nearby" true. Without
+  it, anyone could fake a location to browse a richer neighbourhood's
+  residents, or to be listed among them.
+- **No distance order:** ordering by distance would rank people within a band,
+  which narrows where they live.
+
+**Alternatives.**
+- **Visible to everyone with a home area:** simpler, but it leaves exactly the
+  gap that M.7 closes.
+- **Listing only people who are listed themselves:** fairer, but more friction,
+  and the opt-in already protects those who list themselves.
+
 ## Circle and follows
 
 From the "Circle (mutual connections) and Follows" brief of 2026-11-01. The

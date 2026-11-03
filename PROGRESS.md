@@ -2914,3 +2914,49 @@ answers given on 2026-11-01: listing is opt-in, and only proven neighbours see i
 - **Settings:** Privacy gains the "Show me in People nearby" switch.
 - **Tests:** widget tests for the drawer, the screen's three states, and the
   switch. A live check on the emulator.
+
+### Built and verified (2026-11-03)
+
+**Backend:**
+- **Migration 0017** adds `users.show_in_nearby`. It applies, reverses and
+  re-applies, and `alembic check` finds no drift.
+- **`GET /v1/people/nearby`** and `PATCH /v1/me` with `show_in_nearby`.
+- **Data rights:** the export and the purge cover the setting.
+- **Results:** 1,227 backend tests pass, with ruff and mypy clean.
+- **Records:** decision M.8, DATA_MAP, and the privacy schema test, which now
+  covers the new schemas.
+- **Tests:** `tests/test_people_nearby.py` checks that:
+  - only people who opted in are listed, and only within the feed radius;
+  - an unproven viewer is refused, and an unproven person is never listed;
+  - blocked, suspended and leaving accounts are left out;
+  - exploring does not move the list;
+  - signing in is required;
+  - the setting is exported and reset on purge.
+
+**App:**
+- **The menu:** a hamburger beside the town name opens a drawer with the town,
+  how far the feed reaches, Services & jobs, and People nearby. There is no
+  friends entry, and the Services chip moved into the menu.
+- **The People nearby screen:**
+  - people show their area, distance band and the first line of their bio;
+  - tapping one opens their profile;
+  - "Show me here" lists you;
+  - an unproven account sees "Settle in first" with its days so far, and the
+    app asks the server nothing.
+- **Privacy:** the "Show me in People nearby" switch.
+- **Tests:** `test/home_menu_test.dart` covers the menu, the list, opting in, the
+  unproven state and the empty state. The services tests now reach Services
+  through the menu.
+- **Results:** `flutter analyze` is clean; `flutter test` gives 74 passed.
+
+**Live**, on the emulator against the development backend, as Amina:
+- the menu showed "Nyeri Town · Your feed reaches 15 km from home", Services &
+  jobs, and People nearby;
+- People nearby listed the three proven, opted-in neighbours with their areas
+  and bands. Two are "Wanjiku M.": the development database has two such
+  accounts;
+- "Show me here" set `show_in_nearby` on the server and the card went away.
+
+**Build note:** a debug APK for every ABI tried to download ARM engine files
+that are not cached, so the emulator build used
+`flutter build apk --debug --target-platform android-x64`.
