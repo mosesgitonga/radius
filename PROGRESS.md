@@ -3007,3 +3007,41 @@ a profile, message, post). Decided with the product owner the same day:
   by GPS, which ends on Home.
 - **Tests:** widget tests for the guest feed, every prompt, and refused location.
   A live check on the emulator.
+
+### Built and verified (2026-11-03)
+
+**Backend:**
+- **`POST /v1/guest/feed`** (`app/modules/feed/guest.py`), as planned.
+- **Results:** 1,234 backend tests pass, with ruff and mypy clean.
+- **Records:** decision M.9 and DATA_MAP ("Visitors without an account"). The
+  privacy schema test now checks that a guest post names no one.
+- **Tests:** `tests/test_guest_feed.py` checks that:
+  - nearby posts appear with no author, and far ones do not;
+  - hidden, removed and deleted posts stay out;
+  - faked and vague readings are refused, and a missing accuracy is a 422;
+  - paging works;
+  - nothing is stored;
+  - the per-minute limit applies.
+
+**App:**
+- **Opening signed out** lands on the guest Home (`/welcome`, `GuestScreen`).
+  It asks for location once and shows the feed around the phone, by "A
+  neighbour", with a Sign up button.
+- **Prompts:** Helpful, opening a post, the author, the ⋮ menu, the post button,
+  and the Market, Chats and Me tabs each show "Join MyRadius to …", with Sign
+  up and Not now.
+- **Refusals:** refusing location, a bad fix, or any other failure explains
+  itself and offers "Sign up instead".
+- **Signing out, or a revoked session,** also lands on the guest Home.
+- **Testing:** the location reader is now a provider (`locationReaderProvider`),
+  so tests stand at a fixed spot (`test/support/fake_location.dart`).
+- **Tests:** `test/guest_test.dart` is new, and the sign-in and Me tests are
+  updated. `flutter test` gives 82 passed; `flutter analyze` is clean.
+
+**Live**, on the emulator against the development backend, with the app's data
+cleared:
+- the app opened on "Finding your neighbourhood…" and asked for location;
+- after "While using the app" it showed Nyeri Town's posts, each by "A
+  neighbour";
+- "1 helpful" brought up "Join MyRadius to mark posts helpful";
+- Sign up opened the phone screen.

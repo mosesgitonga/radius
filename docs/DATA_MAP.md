@@ -688,6 +688,16 @@ reading is taken in the background, and the app never asks for permission for it
 
 ---
 
+## Visitors without an account (2026-11-03)
+
+Nothing is stored. `POST /v1/guest/feed` takes a GPS reading in its body, turns it
+into a cell to find the feed, and discards it, as for every location. It writes no
+row, keeps no session, and logs neither the coordinates nor the body. The only
+trace is the rate-limit counter for the caller's IP address in Redis, which
+expires within the hour. Posts are shown with no author (DECISIONS M.9).
+
+---
+
 ## People nearby (2026-11-03)
 
 | Field | Why | Retention |

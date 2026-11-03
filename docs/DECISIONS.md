@@ -2123,6 +2123,39 @@ days, and stops punishing a genuine newcomer for one day away.
 - **Listing only people who are listed themselves:** fairer, but more friction,
   and the opt-in already protects those who list themselves.
 
+### M.9 Looking around before signing up: by GPS, the feed only, no names
+
+**Choice (decided with the product owner, 2026-11-03).**
+- **The feed:** someone who opens the app without an account sees the Home
+  feed around where their phone is. They sign up when they want to take part.
+- **The location** is a GPS reading under the home rules (M.7): accurate to
+  150 m, never a faked location. It travels in the body of
+  `POST /v1/guest/feed`, becomes a cell, and is discarded. Nothing about a
+  visitor is stored.
+- **What is shown:** only the Home feed. Each post shows no author: no name,
+  no photo, and no account ID. Every other tab and every action asks the
+  visitor to sign up.
+- **Limits:** per IP, 30 requests a minute and 300 an hour.
+
+**Reasoning.**
+- **Why open it at all:** a first look at real neighbourhood posts is the best
+  argument for joining, and asking for a phone number first loses most people.
+- **Why GPS:** it keeps "you see the neighbourhood you are in" true, as it is
+  for members, so nobody reads a far-off estate's feed from their sofa.
+- **Why no names:** a scraper needs no account to call this endpoint, so it
+  must not be able to collect who lives where. Posts are already visible to
+  any member nearby, so showing their text adds little.
+- **Why the IP limits are generous:** a carrier's shared address is common in
+  Kenya, so they stay loose enough not to punish a whole area.
+
+**Alternatives.**
+- **Choosing a town:** an easier first screen, but anyone could read any
+  town's feed.
+- **Every tab, read-only:** more to look at, but more data open without an
+  account.
+- **Names as for members:** more lively, but it maps names to neighbourhoods
+  for anyone.
+
 ## Circle and follows
 
 From the "Circle (mutual connections) and Follows" brief of 2026-11-01. The
