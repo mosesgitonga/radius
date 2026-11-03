@@ -2875,3 +2875,42 @@ Backend only: the app's screens for it are a later slice.
 4. **Decline:** B declines a request from C. C still sees the request as
    pending, and gets 403 `circle_request_not_allowed` if they ask again
    within 30 days.
+
+## Mobile app — slice 10: the Home menu and People nearby
+
+### Plan
+
+Asked for on 2026-11-03: a menu behind a hamburger on Home showing the town, Services
+and jobs, and People nearby, with no friends feature. People nearby follows the
+answers given on 2026-11-01: listing is opt-in, and only proven neighbours see it.
+
+**Backend (migration 0017):**
+- **`users.show_in_nearby`:** off by default; set with `PATCH /v1/me`; shown on
+  `GET /v1/me`; exported, and reset on purge.
+- **`GET /v1/people/nearby`:**
+  - lists people who opted in and whose home is within the viewer's feed radius,
+    from home;
+  - shows each person's name, photo, badge, area label, distance band, bio and
+    join month. No last-seen time and no online status;
+  - newest members first;
+  - excludes anyone blocked either way, and accounts that are suspended,
+    banned or being deleted.
+- **Who can see it:** only someone who can contact strangers (decision M.7)
+  sees the list. Anyone else gets 403 `contact_locked`, with their days so far.
+- **Who is listed:** only proven neighbours. Someone who has not proven their
+  home is not listed even if they opt in, so People nearby cannot be used to
+  appear in a neighbourhood you do not live in.
+- **Limits:** 60 requests an hour, so the list cannot be scraped.
+- **Records:** DATA_MAP, decision M.8, and the privacy schema test.
+
+**App:**
+- **The menu:** a hamburger beside the town name opens a drawer. It shows the
+  town and radius, then Services and jobs, then People nearby. The Services
+  and jobs chip on Home moves into the drawer.
+- **The People nearby screen:**
+  - if you are not yet proven, it explains why and shows your days so far;
+  - if you are not listed yourself, a card offers "Show me here";
+  - each person opens their profile.
+- **Settings:** Privacy gains the "Show me in People nearby" switch.
+- **Tests:** widget tests for the drawer, the screen's three states, and the
+  switch. A live check on the emulator.
