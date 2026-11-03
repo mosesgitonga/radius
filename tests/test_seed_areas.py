@@ -35,6 +35,7 @@ def feature(
     kind: str = "estate",
     parent: str | None = None,
     town: str | None = "Nyeri",
+    county: str = "Nyeri",
     geometry: dict[str, object] | None = None,
 ) -> dict[str, object]:
     return {
@@ -43,7 +44,7 @@ def feature(
             "name": name,
             "kind": kind,
             "town": town,
-            "county": "Nyeri",
+            "county": county,
             "parent": parent,
         },
         "geometry": geometry
@@ -68,15 +69,31 @@ def feature(
 def test_the_nyeri_seed_file_parses() -> None:
     features = load_features(SEEDS / "nyeri.geojson")
 
-    assert len(features) >= 10
-    assert {f.name for f in features} >= {"Nyeri Town", "Kamakwa", "Karatina"}
+    assert len(features) >= 30
+    assert {f.name for f in features} >= {
+        "Nyeri County",
+        "Nyeri Town",
+        "Rware",
+        "Ruring'u/Karia",
+        "Kamakwa/Mukaro",
+        "Karatina Town",
+    }
+
+
+def test_the_nyeri_seed_is_from_openstreetmap_and_says_so() -> None:
+    """The boundaries are OpenStreetMap's, whose licence requires the credit
+    (DECISIONS M.10)."""
+    document = json.loads((SEEDS / "nyeri.geojson").read_text(encoding="utf-8"))
+
+    assert "OpenStreetMap contributors" in document["metadata"]["attribution"]
+    assert document["metadata"]["licence"] == "ODbL-1.0"
 
 
 def test_the_nyeri_seed_includes_the_launch_anchor() -> None:
     """DeKUT students are the launch community, so the campus has to be nameable."""
     names = {f.name for f in load_features(SEEDS / "nyeri.geojson")}
 
-    assert "Dedan Kimathi University" in names
+    assert "Dedan Kimathi University of Technology" in names
 
 
 def test_every_seeded_area_declares_a_known_kind() -> None:
@@ -84,12 +101,14 @@ def test_every_seeded_area_declares_a_known_kind() -> None:
         assert parsed.kind
 
 
-def test_the_seed_nests_estates_inside_a_town() -> None:
+def test_the_seed_nests_wards_and_towns_in_the_county() -> None:
     """The hierarchy is what the labeller falls back up when a cell is too sparse
-    to name precisely."""
+    to name precisely, and each ward knows its town for "town only" labels."""
     features = {f.name: f for f in load_features(SEEDS / "nyeri.geojson")}
 
-    assert features["Kamakwa"].parent_name == "Nyeri Town"
+    assert features["Rware"].parent_name == "Nyeri County"
+    assert features["Rware"].town == "Nyeri"
+    assert features["Karatina Town"].town == "Karatina"
     assert features["Nyeri Town"].parent_name == "Nyeri County"
 
 
@@ -230,3 +249,39 @@ def test_a_point_geometry_is_rejected(tmp_path: pathlib.Path) -> None:
 
     with pytest.raises(SeedError, match="Polygon"):
         load_features(path)
+
+
+async def test_retiring_areas_the_file_no_longer_lists(
+    db_session: AsyncSession, tmp_path: pathlib.Path
+) -> None:
+    path = tmp_path / "test.geojson"
+    # A county of its own: other tests here leave committed Nyeri areas behind.
+    old = feature("Old Estate", county="Retireshire")
+    kept = feature("Kept Ward", kind="ward", county="Retireshire")
+    write_collection(path, [old, kept])
+    await seed_file(path, dry_run=False)
+
+    write_collection(path, [kept])
+    counts = await seed_file(path, dry_run=False, retire_missing=True)
+
+    assert counts["areas_retired"] == 1
+    rows = await db_session.execute(
+        select(Area.name, Area.is_active).where(Area.county == "Retireshire")
+    )
+    states = dict(rows.tuples().all())
+    assert states == {"Old Estate": False, "Kept Ward": True}
+
+
+async def test_without_the_flag_nothing_is_retired(
+    db_session: AsyncSession, tmp_path: pathlib.Path
+) -> None:
+    path = tmp_path / "test.geojson"
+    write_collection(path, [feature("Old Estate")])
+    await seed_file(path, dry_run=False)
+    write_collection(path, [feature("Other Estate")])
+
+    counts = await seed_file(path, dry_run=False)
+
+    assert counts["areas_retired"] == 0
+    old = (await db_session.execute(select(Area).where(Area.name == "Old Estate"))).scalar_one()
+    assert old.is_active is True

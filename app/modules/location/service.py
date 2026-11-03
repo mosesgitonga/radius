@@ -35,7 +35,7 @@ from redis.asyncio import Redis
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.errors import BadRequestError, ConflictError
 from app.core.redis import CACHE_ERRORS
 from app.modules.location import cells
@@ -135,8 +135,14 @@ async def set_home_location(
     latitude: float,
     longitude: float,
     settings: Settings,
+    at_home: bool = True,
 ) -> HomeLocationOutcome:
     """Set or move the user's home area.
+
+    With `at_home` false the home is provisional (decision M.10): where the person
+    is now, because they are signing up away from home. Only an account with no
+    confirmed home may set one. A provisional home records no presence, and the
+    real home replaces it without the cooldown.
 
     Raises `ConflictError` if the cooldown has not elapsed. An implausible jump is
     recorded for review but **not** rejected: the brief asks for it to be flagged,
@@ -145,10 +151,17 @@ async def set_home_location(
     """
     location = _to_cell_location(latitude, longitude, settings)
     is_first_time = user.home_cell_res9 is None
+    was_provisional = user.home_provisional
     now = datetime.now(UTC)
 
-    unchanged = user.home_cell_res9 == location.cell_res9
-    if not is_first_time and not unchanged:
+    if not at_home and not (is_first_time or was_provisional):
+        raise ConflictError(
+            "Your home is already set. Move it from your settings when you're there.",
+            details={"reason": "home_confirmed"},
+        )
+
+    unchanged = user.home_cell_res9 == location.cell_res9 and was_provisional == (not at_home)
+    if not is_first_time and not unchanged and not was_provisional:
         _enforce_change_cooldown(user, settings, now)
 
     speed_kmh = await _implied_speed_kmh(session, user, location)
@@ -177,7 +190,14 @@ async def set_home_location(
         session, location.centroid_latitude, location.centroid_longitude
     )
     user.home_set_at = now
-    if not is_first_time and not unchanged:
+    user.home_provisional = not at_home
+    if was_provisional:
+        # The real home replaces a provisional one as a first home would: no
+        # cooldown starts, and nothing was proven there to carry over.
+        user.home_presence_mask = 0
+        user.home_presence_updated_on = None
+        user.contact_unlocked_at = None
+    elif not is_first_time and not unchanged:
         user.home_changed_at = now
         # The badge measures consistency with a home area that has just changed,
         # so the window starts again. Vouching is the fast path back (Phase 8).
@@ -194,17 +214,18 @@ async def set_home_location(
         actor_id=user.id,
         target_type="user",
         target_id=user.id,
-        context={"first_time": is_first_time, "changed": not unchanged},
+        context={"first_time": is_first_time, "changed": not unchanged, "provisional": not at_home},
     )
 
-    record_home_presence(
-        user,
-        reported_cell_res9=location.cell_res9,
-        today=now.date(),
-        settings=settings,
-    )
     user.presence_checked_on = now.date()
-    contact.note_presence(user, settings=settings, now=now)
+    if at_home:
+        record_home_presence(
+            user,
+            reported_cell_res9=location.cell_res9,
+            today=now.date(),
+            settings=settings,
+        )
+        contact.note_presence(user, settings=settings, now=now)
 
     label = await area_label_for_cells(session, redis, user=user, settings=settings)
     return HomeLocationOutcome(
@@ -265,6 +286,14 @@ async def check_presence(
         raise ConflictError("Set your home area first", details={"action": "PUT /v1/me/location"})
     location = _to_cell_location(latitude, longitude, settings)
     now = datetime.now(UTC)
+    if user.home_provisional:
+        # Being where you signed up proves nothing about where you live.
+        user.presence_checked_on = now.date()
+        return PresenceOutcome(
+            at_home=False,
+            days_this_week=0,
+            can_contact_strangers=contact.can_contact_strangers(user),
+        )
     record_home_presence(
         user, reported_cell_res9=location.cell_res9, today=now.date(), settings=settings
     )
@@ -365,6 +394,7 @@ async def _compute_area_label(
     session: AsyncSession, *, cell_res9: int, settings: Settings
 ) -> AreaLabel:
     minimum = settings.k_anonymity_min_users
+    home = cells.cell_centroid(cell_res9)
 
     for offset, resolution in enumerate(settings.h3_coarse_resolutions):
         coarse_cell = cells.parent_cell(cell_res9, resolution)
@@ -373,11 +403,24 @@ async def _compute_area_label(
             continue
 
         latitude, longitude = cells.cell_centroid(coarse_cell)
-        area = await _area_covering(session, latitude, longitude)
+        # Named only if the area holds both the k-anonymous cell's centre and the
+        # person's own cell: near a boundary, the cell's centre alone can fall in
+        # the neighbouring area, which names a place the person is not in
+        # (decision M.10). Failing that, the next coarser cell is tried.
+        area = await _area_covering(session, latitude, longitude, also=home)
+        if area is not None and area.kind == AreaKind.COUNTY:
+            # A whole county says little; the person's town is as safe and more use.
+            town = await _town_label(session, cell_res9)
+            if town.precision == "town":
+                return town
         if area is not None:
             return AreaLabel(
                 label=area.name,
-                precision=_PRECISION_BY_OFFSET.get(offset, "town"),
+                precision=(
+                    "town"
+                    if area.kind in (AreaKind.TOWN, AreaKind.COUNTY)
+                    else _PRECISION_BY_OFFSET.get(offset, "town")
+                ),
                 area_id=area.id,
             )
         # The cell satisfies k-anonymity but falls outside every seeded polygon.
@@ -408,7 +451,13 @@ async def town_label_for_cell(
     cached = await _read_label_cache(redis, key)
     if cached is not None:
         return cached
+    label = await _town_label(session, cell_res9)
+    await _write_label_cache(redis, key, label)
+    return label
 
+
+async def _town_label(session: AsyncSession, cell_res9: int) -> AreaLabel:
+    coarse = cells.parent_cell(cell_res9, TOWN_LABEL_RESOLUTION)
     latitude, longitude = cells.cell_centroid(coarse)
     point = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
     covering = (
@@ -422,13 +471,10 @@ async def town_label_for_cell(
         (row.town for row in covering if row.town), None
     )
     if town:
-        label = AreaLabel(label=town, precision="town")
-    elif nearby := await _nearest_town_name(session, latitude, longitude):
-        label = AreaLabel(label=f"near {nearby}", precision="town")
-    else:
-        label = AreaLabel(label=GENERIC_LABEL, precision="generic")
-    await _write_label_cache(redis, key, label)
-    return label
+        return AreaLabel(label=town, precision="town")
+    if nearby := await _nearest_town_name(session, latitude, longitude):
+        return AreaLabel(label=f"near {nearby}", precision="town")
+    return AreaLabel(label=GENERIC_LABEL, precision="generic")
 
 
 async def _registered_in_cell(session: AsyncSession, resolution: int, cell: int) -> int:
@@ -445,14 +491,20 @@ async def _registered_in_cell(session: AsyncSession, resolution: int, cell: int)
     return (await session.execute(statement)).scalar_one_or_none() or 0
 
 
-async def _area_covering(session: AsyncSession, latitude: float, longitude: float) -> Area | None:
+async def _area_covering(
+    session: AsyncSession,
+    latitude: float,
+    longitude: float,
+    *,
+    also: tuple[float, float] | None = None,
+) -> Area | None:
+    """The smallest active area covering a point, and `also` a second point."""
     point = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
-    statement = (
-        select(Area)
-        .where(Area.is_active.is_(True), func.ST_Covers(Area.boundary, point))
-        .order_by(func.ST_Area(Area.boundary).asc())
-        .limit(1)
-    )
+    conditions = [Area.is_active.is_(True), func.ST_Covers(Area.boundary, point)]
+    if also is not None:
+        second = func.ST_SetSRID(func.ST_MakePoint(also[1], also[0]), 4326)
+        conditions.append(func.ST_Covers(Area.boundary, second))
+    statement = select(Area).where(*conditions).order_by(func.ST_Area(Area.boundary).asc()).limit(1)
     return (await session.execute(statement)).scalar_one_or_none()
 
 
@@ -704,6 +756,13 @@ async def is_exploring(redis: Redis, *, user_id: uuid.UUID) -> bool:
     return await get_explore(redis, user_id=user_id) is not None
 
 
+def provisional_deadline(user: User, settings: Settings) -> datetime | None:
+    """When a provisional home stops placing new content, or None if it is real."""
+    if not user.home_provisional or user.home_set_at is None:
+        return None
+    return user.home_set_at + timedelta(days=settings.provisional_home_days)
+
+
 def home_location_columns(user: User) -> dict[str, object] | None:
     """The location columns for content authored by this user.
 
@@ -711,7 +770,17 @@ def home_location_columns(user: User) -> dict[str, object] | None:
     what stops someone dropping posts into a neighbourhood they do not live in.
     Derived from the stored cells rather than copied from the user's centroid
     column, so it is identical whether or not the user row was just loaded.
+
+    A provisional home places content for `PROVISIONAL_HOME_DAYS`; after that,
+    nothing new until the real home is set (decision M.10).
     """
+    if user.home_provisional and user.home_set_at is not None:
+        deadline = provisional_deadline(user, get_settings())
+        if deadline is not None and datetime.now(UTC) > deadline:
+            raise ConflictError(
+                "Set your home from home before posting again",
+                details={"reason": "confirm_home", "action": "PUT /v1/me/location"},
+            )
     if (
         user.home_cell_res9 is None
         or user.home_cell_res8 is None

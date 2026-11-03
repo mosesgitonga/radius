@@ -2,6 +2,7 @@
 
     uv run python -m scripts.seed_areas seeds/areas/nyeri.geojson
     uv run python -m scripts.seed_areas seeds/areas/*.geojson --dry-run
+    uv run python -m scripts.seed_areas seeds/areas/nyeri.geojson --retire-missing
 
 Areas are the human-readable half of the privacy model: a location is only ever
 shown as the name of the area containing it. This script is how those names get
@@ -11,6 +12,11 @@ file, not changing software.
 
 Idempotent, keyed on `(name, town)`, so re-running after editing a boundary
 updates it in place rather than creating a second area with the same name.
+
+With `--retire-missing`, areas of the file's counties that the file no longer
+lists are deactivated, not deleted: old references stay resolvable, and nothing
+new is labelled with them. That is how a whole seed is replaced, as when the
+placeholder estates gave way to OpenStreetMap's wards (DECISIONS M.10).
 """
 
 from __future__ import annotations
@@ -137,13 +143,16 @@ async def _upsert(
     return existing, "areas_updated"
 
 
-async def seed_file(path: pathlib.Path, *, dry_run: bool) -> dict[str, int]:
+async def seed_file(
+    path: pathlib.Path, *, dry_run: bool, retire_missing: bool = False
+) -> dict[str, int]:
     features = load_features(path)
     counts = {
         "areas_created": 0,
         "areas_updated": 0,
         "areas_would_create": 0,
         "areas_would_update": 0,
+        "areas_retired": 0,
     }
 
     async with session_scope() as session:
@@ -177,10 +186,31 @@ async def seed_file(path: pathlib.Path, *, dry_run: bool) -> dict[str, int]:
                     continue
                 child.parent_id = parent.id
 
+        if retire_missing and not dry_run:
+            counts["areas_retired"] = await _retire_missing(session, features)
+
     return counts
 
 
-async def main_async(paths: list[pathlib.Path], *, dry_run: bool) -> int:
+async def _retire_missing(session: AsyncSession, features: list[SeedFeature]) -> int:
+    """Deactivate active areas of the file's counties that the file does not list."""
+    counties = {feature.county for feature in features if feature.county}
+    keep = {(feature.name, feature.town) for feature in features}
+    if not counties:
+        return 0
+    retired = 0
+    statement = select(Area).where(Area.is_active.is_(True), Area.county.in_(counties))
+    for area in (await session.execute(statement)).scalars():
+        if (area.name, area.town) not in keep:
+            area.is_active = False
+            retired += 1
+    await session.flush()
+    return retired
+
+
+async def main_async(
+    paths: list[pathlib.Path], *, dry_run: bool, retire_missing: bool = False
+) -> int:
     settings = get_settings()
     configure_logging(settings, service="seed_areas")
 
@@ -190,7 +220,7 @@ async def main_async(paths: list[pathlib.Path], *, dry_run: bool) -> int:
             if not path.exists():
                 logger.error("seed_file_missing", extra={"path": str(path)})
                 return 2
-            counts = await seed_file(path, dry_run=dry_run)
+            counts = await seed_file(path, dry_run=dry_run, retire_missing=retire_missing)
             logger.info(
                 "seed_file_loaded",
                 extra=safe_extra({"path": path.name, **{k: v for k, v in counts.items() if v}}),
@@ -215,8 +245,15 @@ def main() -> int:
         action="store_true",
         help="Report what would change without writing anything.",
     )
+    parser.add_argument(
+        "--retire-missing",
+        action="store_true",
+        help="Deactivate areas of the file's counties that the file no longer lists.",
+    )
     args = parser.parse_args()
-    return asyncio.run(main_async(args.paths, dry_run=args.dry_run))
+    return asyncio.run(
+        main_async(args.paths, dry_run=args.dry_run, retire_missing=args.retire_missing)
+    )
 
 
 if __name__ == "__main__":

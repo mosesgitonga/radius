@@ -7,6 +7,7 @@ quietly relaxed.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
@@ -28,6 +29,7 @@ from tests.factories import (
     KARATINA,
     NAIROBI,
     NYERI_TOWN,
+    Coordinates,
     make_area,
     make_user,
     offset_km,
@@ -385,6 +387,47 @@ async def test_the_label_snaps_up_to_a_coarser_cell(
 
     assert label.label == "Nyeri Town"
     assert label.precision == "area"
+
+
+async def test_a_label_never_names_an_area_the_home_is_not_in(
+    db_session: AsyncSession, redis_client: Redis, settings: Settings
+) -> None:
+    """Decision M.10. Near a boundary, the k-anonymous cell's centre can fall in the
+    next area along; naming that area would tell someone in King'ong'o they live
+    in Witemere. The label must hold the home too, or widen to a place that does."""
+    # A home whose res-9 cell lies well away from its res-8 cell's centre.
+    home = NYERI_TOWN
+    for step in range(40):
+        candidate = offset_km(NYERI_TOWN, north=0.05 * step, east=0.03 * step)
+        located = cells.locate(*candidate.as_tuple())
+        cell_lat, cell_lon = cells.cell_centroid(located.cell_res8)
+        home_lat, home_lon = cells.cell_centroid(located.cell_res9)
+        apart_km = math.dist((cell_lat, cell_lon), (home_lat, home_lon)) * 111
+        if apart_km > 0.3:
+            home = candidate
+            break
+    assert home is not NYERI_TOWN
+    user = await make_user(db_session, at=home)
+    located = cells.locate(*home.as_tuple())
+    cell_lat, cell_lon = cells.cell_centroid(located.cell_res8)
+    # An estate around the cell's centre that stops short of the home cell...
+    await make_area(
+        db_session,
+        name="Next Estate",
+        centre=Coordinates(cell_lat, cell_lon),
+        width_km=0.8 * apart_km,
+    )
+    # ...inside a town that holds both.
+    await make_area(db_session, name="Nyeri Town", centre=home, width_km=8.0, kind="town")
+    await set_registered_density(db_session, at=home, registered=settings.k_anonymity_min_users)
+    await redis_client.flushdb()
+
+    label = await location_service.area_label_for_cells(
+        db_session, redis_client, user=user, settings=settings
+    )
+
+    assert label.label == "Nyeri Town"
+    assert label.precision == "town"
 
 
 async def test_a_user_with_no_location_has_no_label(
