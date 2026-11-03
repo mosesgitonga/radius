@@ -2156,6 +2156,53 @@ days, and stops punishing a genuine newcomer for one day away.
 - **Names as for members:** more lively, but it maps names to neighbourhoods
   for anyone.
 
+### M.10 Real area names, and signing up away from home
+
+**Context.** On 2026-11-03 the product owner signed up on their phone in
+King'ong'o and was told they lived in Witemere. They also pointed out that
+someone may sign up far from home.
+
+**Areas (decided with the product owner: OpenStreetMap).**
+- **What was wrong:** the seeded Nyeri estates were placeholder boxes, and the
+  reading fell in the box called Witemere.
+- **The new seed:** `seeds/areas/nyeri.geojson` now comes from OpenStreetMap
+  through `scripts/build_osm_areas.py`. It holds the county, its 29 wards, the
+  built-up areas of Nyeri and Mweiga, and four campuses, DeKUT among them.
+- **No estates:** OpenStreetMap has no estate names or boundaries for Nyeri, so
+  the finest names are wards ("Rware", "Kamakwa/Mukaro"). Estates can be added
+  to the file by hand later.
+- **Retiring the boxes:** `seed_areas --retire-missing` retired them.
+- **Credit:** the ODbL requires it, so the file carries it and the app's Privacy
+  screen says "map data © OpenStreetMap contributors".
+
+**The naming rule (amends 6.4's labelling).**
+- **Both points:** an area is named only if it contains both the k-anonymous
+  cell's centre and the person's own home cell. Otherwise the next coarser cell
+  is tried. Before, any area holding the cell's centre was named, and near a
+  boundary that could be the next area along.
+- **Town, not county:** if the only answer would be the whole county, the
+  person's town is shown instead. It is just as safe and says more.
+- **Precision:** a town-kind area is labelled at "town" precision.
+- **Not yet:** in the development database, with few accounts, most labels are
+  a town. Ward names appear once 10 accounts share a fine cell.
+
+**Away from home (decided with the product owner: full use, home set later).**
+- **The question:** the home step asks "Are you at home right now?".
+  - **No:** the home is provisional (`users.home_provisional`), placed where the
+    phone is, with full use for `PROVISIONAL_HOME_DAYS` (7).
+  - After that, nothing new can be placed until the real home is set. This is
+    checked in `home_location_columns`, so it covers posts, stories, listings,
+    services and public groups. Commenting, reacting and messaging carry on.
+- **Proves nothing:** a provisional home records no presence, so it counts
+  towards neither the contact rule (M.7) nor the badge. Setting the real home
+  replaces it without the cooldown. Once a home is confirmed it cannot be made
+  provisional again.
+- **Reasoning:** a GPS reading taken away from home is still honest about where
+  the phone is. Calling it provisional, and letting it prove nothing, keeps the
+  M.7 guarantee while not turning away people who sign up on the road.
+- **Accepted trade-off:** posts made in that first week land in a neighbourhood
+  that may not be the person's own.
+
 ## Circle and follows
 
 From the "Circle (mutual connections) and Follows" brief of 2026-11-01. The

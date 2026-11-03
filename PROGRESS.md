@@ -3103,3 +3103,59 @@ set later):**
     {area}. Set your home when you're there, by {date}", with a button;
   - Me › Home area offers "I'm at home now".
 - **Records:** decision M.10, DATA_MAP, and tests for every part.
+
+### Built and verified (2026-11-03)
+
+**Areas:**
+- **The script:** `scripts/build_osm_areas.py` fetches the data once from
+  Overpass, with retries and a reusable `--raw` download. It assembles each
+  boundary in PostGIS and writes `seeds/areas/nyeri.geojson`.
+- **What it contains:** the county, 29 wards, Nyeri Town and Mweiga, and four
+  campuses (DeKUT among them), with the ODbL credit.
+- **`seed_areas --retire-missing`** retired the 11 placeholder areas in the
+  development database.
+- **Naming:**
+  - an area must hold both the k-anonymous cell's centre and the home cell;
+  - a county-only answer becomes the town;
+  - a town-kind area is labelled at town precision.
+- **The product owner's account** now reads "Nyeri" rather than "Witemere". It
+  will name its ward once 10 accounts share its fine cell.
+- **Tests:**
+  - the seed file, its credit and DeKUT;
+  - `--retire-missing` with and without the flag;
+  - the boundary case ("never names an area the home is not in").
+
+**Away from home:**
+- **Migration 0018** adds `users.home_provisional`. It applies, reverses and
+  re-applies, and `alembic check` finds no drift.
+- **Endpoints:** `PUT /v1/me/location` takes `at_home`; `GET /v1/me` reports
+  `home_provisional` and `home_confirm_by`.
+- **Rules:**
+  - nothing new is placed after the deadline;
+  - the daily check records nothing while provisional;
+  - the real home replaces it without the cooldown;
+  - a confirmed home cannot be made provisional.
+- **Data rights:** the export includes the flag, and the purge clears it.
+- **Tests:** `tests/test_provisional_home.py`.
+- **App:**
+  - the home step asks "Are you at home right now?";
+  - Home shows the reminder card with "I'm at home now";
+  - Home area says "I'm at home now: use my location" while provisional;
+  - Privacy carries the OpenStreetMap credit;
+  - `test/home_area_test.dart`. `flutter test` gives 84 passed.
+
+**Live**, on the emulator against the development backend:
+- the guest feed's posts now read "Rware" (the emulator stands in Nyeri town);
+- a new account signed up with "No, I'm away from home";
+- the app said "You're in Rware for now", then showed Home with "You're using
+  MyRadius from Rware for now · Set your home when you're there, by 10 Nov 2026
+  · I'm at home now";
+- the database showed `home_provisional = true`, an empty presence mask, and no
+  unlock.
+
+**Results:** 1,244 backend tests pass, with ruff and mypy clean (app, tests, scripts).
+
+**Found, not fixed:** some tests in `tests/test_seed_areas.py` commit their areas
+for real, so they persist in the test database until the next session's
+clean-up. The new tests use their own county to stay independent. Moving the
+seeder onto the test's own session would fix it.

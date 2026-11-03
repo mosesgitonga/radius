@@ -688,6 +688,17 @@ reading is taken in the background, and the app never asks for permission for it
 
 ---
 
+## Provisional homes and area data (2026-11-03)
+
+| Field | Why | Retention |
+| --- | --- | --- |
+| `users.home_provisional` | The home was set away from home at sign-up (DECISIONS M.10). It proves nothing, and is replaced by the real home | Cleared when the real home is set, and on purge. Shown on `GET /me` |
+
+`areas` now holds OpenStreetMap boundaries (© OpenStreetMap contributors, ODbL):
+public map data, nothing personal.
+
+---
+
 ## Visitors without an account (2026-11-03)
 
 Nothing is stored. `POST /v1/guest/feed` takes a GPS reading in its body, turns it
