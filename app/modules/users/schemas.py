@@ -106,6 +106,14 @@ class MeOut(BaseModel):
         default=CircleRequestPolicy.everyone,
         description="Who may ask to join my circle. Changed with `PATCH /me`.",
     )
+    home_provisional: bool = Field(
+        default=False,
+        description=(
+            "The home was set away from home at sign-up. Set the real one by "
+            "`home_confirm_by`; after that, nothing new can be posted until it is."
+        ),
+    )
+    home_confirm_by: datetime | None = None
     show_in_nearby: bool = Field(
         default=False,
         description=(

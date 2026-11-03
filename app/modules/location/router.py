@@ -21,6 +21,7 @@ from app.modules.location.schemas import (
     ExploreOut,
     HomeLocationOut,
     HomeReadingIn,
+    HomeSetIn,
     LocationIn,
     MyRadiusOut,
     PresenceOut,
@@ -43,7 +44,11 @@ RedisDep = Annotated[Redis, Depends(get_redis)]
         "centre. The coordinates are not kept, not logged, and never returned.\n\n"
         "Changing an established home area is limited to roughly once a fortnight, "
         "which stops someone hopping between neighbourhoods to spam each in turn "
-        "while leaving a student who moves between campus and home free to switch."
+        "while leaving a student who moves between campus and home free to switch.\n\n"
+        "`at_home: false` is for someone signing up away from home: the home is then "
+        "provisional, where the phone is now, with full use for "
+        "`PROVISIONAL_HOME_DAYS`. Setting the real home later (`at_home: true`) "
+        "replaces it without the cooldown (decision M.10)."
     ),
     dependencies=[
         Depends(
@@ -55,7 +60,7 @@ RedisDep = Annotated[Redis, Depends(get_redis)]
     ],
 )
 async def set_home_location(
-    payload: HomeReadingIn,
+    payload: HomeSetIn,
     user: ActiveUser,
     session: SessionDep,
     redis: RedisDep,
@@ -71,6 +76,7 @@ async def set_home_location(
         latitude=payload.latitude,
         longitude=payload.longitude,
         settings=settings,
+        at_home=payload.at_home,
     )
 
     next_change = None

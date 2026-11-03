@@ -157,6 +157,8 @@ async def get_me(
         cover=await _cover(session, storage, user),
         circle_request_policy=user.circle_request_policy,
         show_in_nearby=user.show_in_nearby,
+        home_provisional=user.home_provisional,
+        home_confirm_by=location_service.provisional_deadline(user, settings),
     )
 
 

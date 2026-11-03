@@ -58,6 +58,17 @@ class HomeReadingIn(LocationIn):
     )
 
 
+class HomeSetIn(HomeReadingIn):
+    at_home: bool = Field(
+        default=True,
+        description=(
+            "False when the person is signing up away from home: the home is then "
+            "provisional, placed where the phone is now, for `PROVISIONAL_HOME_DAYS`. "
+            "Accepted only while there is no confirmed home (decision M.10)."
+        ),
+    )
+
+
 class PresenceOut(BaseModel):
     """The result of the daily check."""
 

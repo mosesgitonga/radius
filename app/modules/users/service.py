@@ -513,6 +513,7 @@ async def export_user_data(
         "location": {
             "home_area_set": user.has_home_location,
             "home_set_at": user.home_set_at.isoformat() if user.home_set_at else None,
+            "home_provisional": user.home_provisional,
             "notes": (
                 "Your home area is stored only as an approximate H3 cell and its "
                 "centre point, never as the coordinates your phone sent. No "
@@ -570,6 +571,7 @@ async def purge_user(session: AsyncSession, *, user: User) -> None:
     user.bio = None
     user.circle_request_policy = CircleRequestPolicy.everyone
     user.show_in_nearby = False
+    user.home_provisional = False
     user.contact_unlocked_at = None
     user.presence_checked_on = None
     user.home_cell_res9 = None

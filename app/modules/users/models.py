@@ -160,6 +160,13 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
         server_default=CircleRequestPolicy.everyone.value,
     )
 
+    home_provisional: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
+    """The home was set where the person was when they signed up, away from home.
+    It counts for nothing towards the contact rule or the badge, and is replaced,
+    without a cooldown, when they set their real home. Decision M.10."""
+
     show_in_nearby: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("false")
     )

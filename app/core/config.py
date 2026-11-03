@@ -221,6 +221,11 @@ class Settings(BaseSettings):
     contact_unlock_window_days: int = Field(default=7, ge=1, le=14)
     """The window those days are counted in: 4 of the last 7 by default."""
 
+    provisional_home_days: int = Field(default=7, ge=1, le=60)
+    """Someone who signs up away from home gets a provisional home where they are,
+    and full use, for this long. After it they place nothing new until they set
+    their real home from there. Decision M.10."""
+
     # -- Circle and follows (decisions C.1-C.6) --------------------------------
     circle_requests_per_day: int = Field(default=20, ge=1)
     new_account_circle_requests_per_day: int = Field(default=5, ge=1)
