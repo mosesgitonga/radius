@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.modules.feed.models import Audience, PostApproval
 from app.modules.location.cells import DistanceBucket
+from app.modules.location.schemas import HomeReadingIn
 from app.modules.media.schemas import ImageVariantOut
 from app.modules.moderation.models import ContentStatus
 from app.modules.users.schemas import AreaLabelOut
@@ -177,6 +178,35 @@ class ReactionIn(BaseModel):
 class ReactionOut(BaseModel):
     kind: str | None = Field(description="The caller's reaction now, or null if removed.")
     reaction_count: int
+
+
+class GuestFeedIn(HomeReadingIn):
+    """Where the visitor's phone is, by GPS, and which page. In the body rather than
+    the URL, so the coordinates never reach an access log."""
+
+    cursor: str | None = Field(default=None, description="From a previous `next_cursor`.")
+
+
+class GuestPostOut(BaseModel):
+    """A post as someone without an account sees it: no author at all, so nothing
+    names who lives where (decision M.9)."""
+
+    id: uuid.UUID
+    body: str
+    category: str
+    images: list[PostImageOut]
+    area_label: AreaLabelOut
+    distance_bucket: DistanceBucket | None = None
+    comment_count: int
+    reaction_count: int
+    created_at: datetime
+
+
+class GuestFeedOut(BaseModel):
+    items: list[GuestPostOut]
+    next_cursor: str | None = None
+    area_label: AreaLabelOut = Field(description="Where the visitor is, as a member would see it.")
+    radius_km: float
 
 
 class StoryCreateIn(BaseModel):

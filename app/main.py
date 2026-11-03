@@ -99,6 +99,13 @@ TAGS_METADATA = [
         ),
     },
     {
+        "name": "guest",
+        "description": (
+            "What someone sees before signing up: the feed around the phone, with no "
+            "authors. Nothing about a visitor is stored."
+        ),
+    },
+    {
         "name": "circle",
         "description": (
             "Mutual connections that reach beyond the neighbourhood: requests, the "

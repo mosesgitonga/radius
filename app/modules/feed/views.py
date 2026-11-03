@@ -25,6 +25,7 @@ from app.modules.feed.models import Comment, Post, Story, StoryKind
 from app.modules.feed.schemas import (
     AuthorOut,
     CommentOut,
+    GuestPostOut,
     PostImageOut,
     PostOut,
     StoryOut,
@@ -158,6 +159,40 @@ async def post_views(
             )
         )
     return views
+
+
+async def guest_post_views(
+    session: AsyncSession,
+    redis: Redis,
+    storage: StorageProvider,
+    *,
+    posts: list[Post],
+    viewer_cell_res8: int,
+    settings: Settings,
+) -> list[GuestPostOut]:
+    """Posts for a visitor without an account: no author, no reactions of theirs."""
+    if not posts:
+        return []
+    assets = await load_assets(session, [image.media_id for post in posts for image in post.images])
+    labels = await _labels(session, redis, (post.cell_res9 for post in posts), settings)
+    return [
+        GuestPostOut(
+            id=post.id,
+            body=post.body,
+            category=post.category,
+            images=[
+                PostImageOut(media_id=image.media_id, variants=variants)
+                for image in post.images
+                if (variants := image_variants(assets.get(image.media_id), storage))
+            ],
+            area_label=labels[post.cell_res9],
+            distance_bucket=cells.bucket_between_cells(viewer_cell_res8, post.cell_res8),
+            comment_count=post.comment_count,
+            reaction_count=post.reaction_count,
+            created_at=post.created_at,
+        )
+        for post in posts
+    ]
 
 
 async def comment_views(

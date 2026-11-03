@@ -270,3 +270,13 @@ def test_circle_and_follow_schemas_show_no_presence_and_no_followers(app: FastAP
         if field.lower() in PRESENCE_FIELDS
     )
     assert not leaks, f"Presence or follower lists in a circle or follow response: {leaks}"
+
+
+def test_a_guest_post_names_no_one(app: FastAPI) -> None:
+    """Decision M.9: someone without an account sees posts with no author at all."""
+    scanned = response_schema_fields(app)
+    for schema in ("GuestPostOut", "GuestFeedOut"):
+        assert schema in scanned, f"{schema} is not reachable from any response"
+    assert (
+        not {"author", "author_id", "display_name", "avatar", "user_id"} & scanned["GuestPostOut"]
+    )

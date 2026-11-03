@@ -16,6 +16,7 @@ from app.core.errors import ErrorEnvelope
 from app.core.idempotency import IDEMPOTENCY_HEADER, execute_idempotently
 from app.core.pagination import PageParams, page_params
 from app.core.providers.storage import StorageProvider, get_storage_provider
+from app.core.ratelimit import rate_limit
 from app.core.redis import get_redis
 from app.modules.auth.dependencies import (
     ActiveUser,
@@ -23,14 +24,16 @@ from app.modules.auth.dependencies import (
     tiered_user_rate_limit,
     user_rate_limit,
 )
+from app.modules.feed import guest, views
 from app.modules.feed import service as feed_service
-from app.modules.feed import views
 from app.modules.feed.models import Post, Story, StoryKind
 from app.modules.feed.schemas import (
     CommentCreateIn,
     CommentOut,
     CommentPageOut,
     FeedOut,
+    GuestFeedIn,
+    GuestFeedOut,
     PostCreatedOut,
     PostCreateIn,
     PostOut,
@@ -45,6 +48,7 @@ from app.modules.feed.schemas import (
 )
 from app.modules.users import service as users_service
 from app.modules.users.models import User
+from app.modules.users.schemas import AreaLabelOut
 
 router = APIRouter(tags=["feed"])
 
@@ -207,6 +211,58 @@ async def get_feed(
             settings=settings,
         ),
         next_cursor=page.next_cursor,
+        radius_km=page.radius.display_km(settings.radius_display_rounding_km),
+    )
+
+
+@router.post(
+    "/guest/feed",
+    response_model=GuestFeedOut,
+    summary="The feed, before signing up",
+    description=(
+        "For someone who has not signed up: the posts a member standing at the "
+        "phone's GPS position would see in their feed, newest first, with **no "
+        "author**: no name, photo or account ID (decision M.9). The reading follows "
+        "the home rules (accurate to `LOCATION_MAX_ACCURACY_METRES`, never faked) and "
+        "is discarded once turned into a cell. Nothing about the visitor is stored. "
+        "Coordinates go in the body so they never reach an access log.\n\n"
+        "No account needed. Limited per IP to 30 requests a minute and 300 an hour."
+    ),
+    tags=["guest"],
+    dependencies=[
+        Depends(rate_limit(bucket="guest_feed_minute", limit=30, window_seconds=60, scope="ip")),
+        Depends(rate_limit(bucket="guest_feed_hour", limit=300, window_seconds=3600, scope="ip")),
+    ],
+)
+async def get_guest_feed(
+    payload: GuestFeedIn,
+    session: SessionDep,
+    redis: RedisDep,
+    storage: StorageDep,
+    settings: SettingsDep,
+) -> GuestFeedOut:
+    params = PageParams(limit=settings.pagination_default_limit, cursor=payload.cursor)
+    page = await guest.guest_feed_page(
+        session,
+        redis,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        accuracy_metres=payload.accuracy_metres,
+        is_mocked=payload.is_mocked,
+        params=params,
+        settings=settings,
+    )
+    return GuestFeedOut(
+        items=await views.guest_post_views(
+            session,
+            redis,
+            storage,
+            posts=page.posts,
+            viewer_cell_res8=page.anchor.cell_res8,
+            settings=settings,
+        ),
+        next_cursor=page.next_cursor,
+        area_label=AreaLabelOut(label=page.area.label, precision=page.area.precision),
         radius_km=page.radius.display_km(settings.radius_display_rounding_km),
     )
 
