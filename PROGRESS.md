@@ -2960,3 +2960,50 @@ answers given on 2026-11-01: listing is opt-in, and only proven neighbours see i
 **Build note:** a debug APK for every ABI tried to download ARM engine files
 that are not cached, so the emulator build used
 `flutter build apk --debug --target-platform android-x64`.
+
+## Mobile app — slice 11: look around before signing up
+
+### Plan
+
+Asked for on 2026-11-03: someone opening the app for the first time sees the Home
+feed, and signs up only when they want to take part (comment, mark Helpful, open
+a profile, message, post). Decided with the product owner the same day:
+- **Location:** a GPS reading of where the phone is, under the same rules as
+  setting home (accuracy at most 150 m, never a faked location). Refusing
+  location goes straight to sign-up.
+- **What guests see:** the Home feed only. Every other tab, and every action,
+  asks them to sign up.
+- **Names:** guests see posts by "a neighbour", with no name, photo or account
+  ID. Names appear after sign-up.
+
+**Backend:**
+- **`POST /v1/guest/feed`, with no account:**
+  - takes a reading (latitude, longitude, accuracy, mocked) and a cursor;
+  - the coordinates go in the body, never the URL, so they cannot reach access
+    logs;
+  - the server turns them into a cell and discards them, as everywhere.
+    Nothing about a guest is stored.
+- **What it returns:**
+  - the posts a member at that spot would see in their feed: visible, outside
+    groups, within the feed radius of that cell, newest first;
+  - for each post: text, category, photos, area label, distance band, counts
+    and time. No author;
+  - the visitor's own area label and radius, for the header.
+- **Limits:** per IP, 30 requests a minute and 300 an hour. That is generous
+  enough for a carrier's shared address, and stops a single scraper.
+- **Records:** decision M.9, the privacy schema test (no author on a guest
+  post), and DATA_MAP ("nothing is stored about guests").
+
+**App:**
+- **Opening the app signed out** goes to the guest Home instead of sign-in. It
+  asks for location once and shows the feed. Refusing, a bad fix or a fake
+  location leads to sign-up with the reason.
+- **Guest Home** looks like Home:
+  - posts by "A neighbour", with a "Sign up" button in the header;
+  - the tab bar is shown, but Market, Chats and Me ask to sign up;
+  - Helpful, comment, opening a post, the author, the menu and the post button
+    all show a "Join MyRadius to…" sheet with Sign up and Not now.
+- **Signing up** uses the existing flow: phone, then code, then name, then home
+  by GPS, which ends on Home.
+- **Tests:** widget tests for the guest feed, every prompt, and refused location.
+  A live check on the emulator.
