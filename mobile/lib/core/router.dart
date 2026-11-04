@@ -30,6 +30,7 @@ import '../features/services/screens/service_compose_screen.dart';
 import '../features/services/screens/service_post_screen.dart';
 import '../features/services/screens/services_screen.dart';
 import '../features/services/service_models.dart';
+import '../features/stories/story_compose_screen.dart';
 import '../features/shell/shell_screen.dart';
 
 class Routes {
@@ -47,6 +48,7 @@ class Routes {
   static const chats = '/chats';
   static const me = '/me';
   static const compose = '/compose';
+  static const newStory = '/stories/new';
   static String post(String id) => '/feed/post/$id';
   static String conversation(String id) => '/chats/c/$id';
   static String listing(String id) => '/market/l/$id';
@@ -107,6 +109,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.signUp, builder: (_, _) => const SignupScreen()),
       GoRoute(path: Routes.homeArea, builder: (_, _) => const HomeAreaScreen()),
       GoRoute(path: Routes.compose, builder: (_, _) => const ComposeScreen()),
+      GoRoute(path: Routes.newStory, builder: (_, _) => const StoryComposeScreen()),
       GoRoute(path: Routes.sell, builder: (_, _) => const SellScreen()),
       // A form: over the tabs, so the keyboard and its Save button have the room.
       GoRoute(path: Routes.editProfile, builder: (_, _) => const EditProfileScreen()),

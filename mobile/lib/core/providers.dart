@@ -9,6 +9,7 @@ import '../features/me/account_repository.dart';
 import '../features/profile/profile_repository.dart';
 import '../features/reviews/review_repository.dart';
 import '../features/services/service_repository.dart';
+import '../features/stories/story_repository.dart';
 import 'api/api_client.dart';
 import 'api/media_uploader.dart';
 import 'api/token_store.dart';
@@ -53,6 +54,10 @@ final profileRepositoryProvider = Provider<ProfileRepository>(
 
 final reviewRepositoryProvider = Provider<ReviewRepository>(
   (ref) => ReviewRepository(ref.watch(apiClientProvider)),
+);
+
+final storyRepositoryProvider = Provider<StoryRepository>(
+  (ref) => StoryRepository(ref.watch(apiClientProvider)),
 );
 
 final guestRepositoryProvider = Provider<GuestRepository>(

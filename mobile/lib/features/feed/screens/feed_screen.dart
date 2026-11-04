@@ -11,6 +11,8 @@ import '../../auth/auth_controller.dart';
 import '../../chats/start_chat.dart';
 import '../../me/me_screen.dart';
 import '../../profile/profile_screen.dart';
+import '../../stories/stories_controller.dart';
+import '../../stories/stories_strip.dart';
 import '../feed_controller.dart';
 import '../feed_models.dart';
 import '../widgets/home_menu.dart';
@@ -121,7 +123,10 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
       body: SafeArea(
         child: RefreshIndicator(
           color: Palette.primary,
-          onRefresh: () => ref.read(feedControllerProvider.notifier).refresh(),
+          onRefresh: () => Future.wait([
+            ref.read(feedControllerProvider.notifier).refresh(),
+            ref.read(storiesControllerProvider.notifier).refresh(),
+          ]),
           child: CustomScrollView(
             controller: _scroll,
             physics: const AlwaysScrollableScrollPhysics(),
@@ -159,6 +164,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 12),
+                      const StoriesStrip(),
                       if (me != null && me.homeProvisional) ...[
                         const SizedBox(height: 12),
                         _ProvisionalHomeCard(area: area, confirmBy: me.homeConfirmBy),
