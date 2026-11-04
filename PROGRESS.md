@@ -3159,3 +3159,35 @@ set later):**
 for real, so they persist in the test database until the next session's
 clean-up. The new tests use their own county to stay independent. Moving the
 seeder onto the test's own session would fix it.
+
+## Mobile app — slice 13: stories
+
+### Plan
+
+Asked for on 2026-11-04. The backend has had stories since Phase 2: posting an
+image or text story, the nearby list, marking one seen, its viewers, deletion and
+24-hour expiry. The app never showed them.
+
+**Backend:**
+- **`seen`** on `StoryOut`: whether the caller has already watched it, so the
+  app can ring the unwatched ones. It is computed in one batched query per page.
+
+**App:**
+- **A strip on Home**, under the header:
+  - "Your story" (+) first;
+  - then one circle per neighbour with live stories, ringed in colour while any
+    are unwatched;
+  - grouped by person, newest first.
+- **The viewer**, full screen:
+  - a progress bar per story, 5 seconds each;
+  - tap right or left to move, and it moves on to the next person;
+  - hold to pause; swipe down or ✕ to close;
+  - each story is marked seen as it opens.
+  - **Your own story** shows how many watched, a viewer list, and Delete.
+  - **Someone else's** has ⋮ with Report and a Message action.
+- **Posting:** a sheet offers Photo (picked, uploaded as a `story` image) or Text
+  (up to `STORY_MAX_TEXT_LENGTH`, on a coloured card). It is posted to your
+  home area, and the strip refreshes.
+- **Not for guests:** stories stay for members. The guest feed shows posts only.
+- **Tests:** widget tests for the strip, the viewer (moving, marking seen, your
+  own views and delete) and posting a text story. A live check on the emulator.
