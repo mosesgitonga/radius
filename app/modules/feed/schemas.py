@@ -231,6 +231,10 @@ class StoryOut(BaseModel):
     expires_at: datetime
     created_at: datetime
     view_count: int | None = Field(default=None, description="Shown to the author only.")
+    seen: bool = Field(
+        default=False,
+        description="Whether the caller has already watched it. Always true on their own.",
+    )
 
 
 class StoryPageOut(BaseModel):

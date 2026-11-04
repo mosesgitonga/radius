@@ -371,6 +371,25 @@ async def test_viewing_records_one_view_per_person(
     assert row.view_count == 1
 
 
+async def test_a_story_says_whether_the_caller_has_seen_it(
+    db_session: AsyncSession, authenticate: Authenticate
+) -> None:
+    author = await make_user(db_session, at=NYERI_TOWN)
+    viewer = await make_user(db_session, at=NYERI_TOWN)
+    story = (
+        await (await authenticate(author)).post("/v1/stories", json={"kind": "text", "text": "Hi"})
+    ).json()
+    assert story["seen"] is True  # one's own
+
+    def seen(page: dict[str, object]) -> bool:
+        items: list[dict[str, object]] = page["items"]  # type: ignore[assignment]
+        return bool(next(item["seen"] for item in items if item["id"] == story["id"]))
+
+    assert seen((await (await authenticate(viewer)).get("/v1/stories")).json()) is False
+    await (await authenticate(viewer)).post(f"/v1/stories/{story['id']}/view")
+    assert seen((await (await authenticate(viewer)).get("/v1/stories")).json()) is True
+
+
 async def test_the_author_does_not_count_as_a_viewer(
     db_session: AsyncSession, authenticate: Authenticate
 ) -> None:

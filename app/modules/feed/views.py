@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.providers.storage import StorageProvider
-from app.modules.feed.models import Comment, Post, Story, StoryKind
+from app.modules.feed.models import Comment, Post, Story, StoryKind, StoryView
 from app.modules.feed.schemas import (
     AuthorOut,
     CommentOut,
@@ -276,6 +276,14 @@ async def story_views(
     towns = await _town_labels(
         session, redis, (story.cell_res9 for story in stories if story.id in far), settings
     )
+    watched = set(
+        await session.scalars(
+            select(StoryView.story_id).where(
+                StoryView.viewer_id == viewer.id,
+                StoryView.story_id.in_([story.id for story in stories]),
+            )
+        )
+    )
 
     views: list[StoryOut] = []
     for story in stories:
@@ -306,6 +314,7 @@ async def story_views(
                 created_at=story.created_at,
                 # Only the author learns how many people looked.
                 view_count=story.view_count if own else None,
+                seen=own or story.id in watched,
             )
         )
     return views
