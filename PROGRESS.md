@@ -3191,3 +3191,38 @@ image or text story, the nearby list, marking one seen, its viewers, deletion an
 - **Not for guests:** stories stay for members. The guest feed shows posts only.
 - **Tests:** widget tests for the strip, the viewer (moving, marking seen, your
   own views and delete) and posting a text story. A live check on the emulator.
+
+### Built (2026-11-04)
+
+**Backend:**
+- **`seen`** on `StoryOut`, from one batched query per page. It is always true
+  on one's own stories.
+- **Results:** 1,245 backend tests pass, with ruff and mypy clean.
+
+**App** (`lib/features/stories/`):
+- **The strip on Home:** "Your story" (+) first, then neighbours, unwatched first,
+  ringed in colour until watched. The whole bubble is tappable.
+- **The viewer:**
+  - 5 seconds a story, tap to move, hold to pause, swipe down to close;
+  - each story is marked seen after the first frame;
+  - your own shows "N views", a viewer list and Delete;
+  - others' have Message and Report.
+- **Posting** (`/stories/new`): text on a coloured card (up to 280 characters),
+  or a photo uploaded as a `story` image.
+- **Refresh:** pull to refresh reloads stories as well as posts.
+- **Tests:** `test/stories_test.dart` covers grouping, watching and marking seen,
+  your own views and viewers, and posting text. `flutter test` gives 88 passed;
+  `flutter analyze` is clean.
+
+**Live**, on the emulator against the development backend:
+- the strip showed "Your story", Amina and Wanjiku, both ringed as unwatched;
+- opening a story could not be checked live. The emulator had just been
+  cold-booted with 2.5 GB of memory; Play services, Photos and the Play Store
+  left it swapping, Android reported "System UI isn't responding" and then
+  "MyRadius isn't responding", and its storage stopped answering. MyRadius was
+  not among the busy processes. The viewer is covered by the widget tests, and
+  should be checked on the phone.
+
+**Fixed along the way:** the viewer marked the first story seen while it was
+still being built, which Riverpod forbids. It now waits one frame. Found by the
+widget test.
