@@ -3283,7 +3283,17 @@ own nginx; nothing of theirs was changed (docs/DEPLOYMENT.md §9).
 - **A CI deploy key** (`~/.ssh/myradius_ci_deploy` on the development PC). Its
   public half is to be authorized only for the deploy gate.
 
-**Waiting on the product owner:**
+**Then, the same day:**
+- **Done by the product owner:** the DNS record, the CI key's line in
+  `authorized_keys`, and the two GitHub secrets.
+- **The first automatic deploy** (`d53266a`) went through the gate. Its final
+  check failed only because the site had no certificate yet.
+- **Certificate:** `certbot --nginx -d myradius.chatara.co --redirect` issued
+  one valid to 4 Feb 2027, renewed by the server's certbot timer.
+  `https://myradius.chatara.co/ready` answers; HTTP redirects to HTTPS;
+  `/metrics` is a 404 from outside.
+
+**Was waiting on the product owner (now done):**
 - the DNS `A` record `myradius` → 77.237.238.14 at chatara.co's DNS provider;
   then `certbot --nginx -d myradius.chatara.co`;
 - the CI key's line in root's `authorized_keys`, which an automated safety check
