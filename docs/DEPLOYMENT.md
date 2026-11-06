@@ -183,3 +183,54 @@ one machine, change these first, in this order:
    race on the same upgrade.
 3. **Managed Redis.** The realtime hub already fans out across processes through
    Redis, so more API hosts need no code change.
+
+## 9. The shared VPS (staging, from 2026-11-06)
+
+MyRadius staging runs on 77.237.238.14 at **https://myradius.chatara.co**. The
+server is shared: it also runs other projects behind their own nginx, which owns
+ports 80 and 443, plus its own PostgreSQL and Redis on loopback. So the setup
+differs from the sections above. Nothing here touches the other projects.
+
+- **No Caddy.** `docker-compose.vps.yml` layers over the production file:
+  - it switches Caddy off;
+  - it publishes the API on `127.0.0.1:8031` and object storage on
+    `127.0.0.1:8032`.
+  nginx proxies both, using `deploy/vps/nginx-myradius.conf`, installed as
+  `/etc/nginx/sites-available/myradius.chatara.co`. certbot adds TLS to it.
+- **Photos stay on the server,** in SeaweedFS (`storage`). Its keys are in
+  `secrets/s3.json`. Clients reach it by presigned URL at
+  `https://myradius.chatara.co/myradius-media/…`.
+- **Staging mode.** `APP_ENV=staging` with `SMS_PROVIDER=console`, so sign-in
+  codes are written to the API log (`docker compose … logs api | grep
+  sms_not_sent`). Switch to production once Africa's Talking is set up.
+- **Setup.** `deploy/vps/bootstrap.sh`, run once as root, creates:
+  - the checkout in `/srv/myradius`;
+  - `.env.production` with fresh secrets, and `secrets/s3.json`;
+  - the deploy gate;
+  - the nginx site.
+- **Logs.** journald's retention is the host's, shared with the other projects,
+  and was left as it was. Section 2's 30-day cap has not been applied here.
+
+### Continuous deployment
+
+1. **CI first.** A push to `main` runs CI.
+2. **The Deploy workflow** (`.github/workflows/deploy.yml`) runs only if CI
+   passed, one deploy at a time, never cancelled.
+3. **The SSH connection.** The workflow connects with a deploy key of its own.
+   In `/root/.ssh/authorized_keys` that key is limited to one forced command,
+   `/usr/local/bin/myradius-deploy` (`deploy/vps/deploy-gate.sh`), which:
+   - accepts only `deploy <sha>`, and only for a commit on `origin/main`;
+   - checks that commit out;
+   - runs `deploy/vps/deploy.sh`.
+4. **`deploy.sh`:**
+   - backs up the database first if the release changes migrations;
+   - runs `docker compose up -d --build`, and the API migrates as it starts;
+   - waits for `/ready`. If it never comes, it checks the previous commit out,
+     starts that again, and fails the workflow.
+5. **The final check:** the workflow then calls `https://myradius.chatara.co/ready`.
+
+Repository secrets: `DEPLOY_SSH_KEY` (the deploy key's private half) and
+`DEPLOY_KNOWN_HOSTS` (`ssh-keyscan 77.237.238.14`). Without them the workflow
+skips with a warning. To deploy by hand, run **Actions → Deploy → Run workflow**,
+or `ssh root@77.237.238.14 myradius-deploy "deploy $(git rev-parse origin/main)"`
+from a machine with root's own key.

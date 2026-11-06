@@ -1,0 +1,55 @@
+# The shared VPS (77.237.238.14): an override on top of docker-compose.prod.yml.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.vps.yml \
+#       --env-file .env.production up -d --build
+#
+# The server already runs other projects behind its own nginx, which owns ports 80
+# and 443 and gets certificates with certbot. So, compared with the plain
+# production file:
+#   - no Caddy (behind a profile nothing enables): nginx terminates TLS;
+#   - the API and object storage are published on loopback only, for nginx;
+#   - object storage is SeaweedFS on this host, not Cloudflare R2. Its access keys
+#     live in secrets/s3.json, never committed.
+# See docs/DEPLOYMENT.md, "The shared VPS".
+
+services:
+  caddy:
+    profiles: ["caddy"]
+
+  api:
+    ports:
+      - "127.0.0.1:8031:8000"
+    depends_on:
+      storage:
+        condition: service_healthy
+
+  worker:
+    depends_on:
+      storage:
+        condition: service_healthy
+
+  storage:
+    image: chrislusf/seaweedfs:4.51
+    restart: unless-stopped
+    command: >-
+      server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+      -master.volumeSizeLimitMB=1024 -volume.max=0
+    ports:
+      # Uploads and downloads arrive through nginx, by presigned URL.
+      - "127.0.0.1:8032:8333"
+    volumes:
+      - storage-data:/data
+      - ./secrets/s3.json:/etc/seaweedfs/s3.json:ro
+    logging:
+      driver: journald
+      options:
+        tag: "myradius-{{.Name}}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/status || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+
+volumes:
+  storage-data:

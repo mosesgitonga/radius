@@ -1,0 +1,63 @@
+name: Deploy
+
+# Deploys main to the staging server once CI has passed on it. Separate from CI
+# so CI can cancel superseded runs freely while a deploy, once started, always
+# finishes: deploys queue one at a time and are never cancelled.
+#
+# The server only lets this key run `deploy <sha>` (deploy/vps/deploy-gate.sh),
+# and only for a commit on main. Secrets, set in the repository's settings:
+#   DEPLOY_SSH_KEY      the private half of the CI deploy key
+#   DEPLOY_KNOWN_HOSTS  the server's host keys, so the first connection is verified
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  DEPLOY_HOST: 77.237.238.14
+  DEPLOY_URL: https://myradius.chatara.co
+
+jobs:
+  deploy:
+    name: Deploy to staging
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://myradius.chatara.co
+    steps:
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          if [ -z "$SSH_KEY" ] || [ -z "$KNOWN_HOSTS" ]; then
+            echo "::warning::DEPLOY_SSH_KEY or DEPLOY_KNOWN_HOSTS is not set; nothing deployed."
+            echo "SKIPPED=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o ServerAliveInterval=30 \
+            "root@${DEPLOY_HOST}" "deploy ${SHA}"
+
+      - name: Check the API answers
+        if: env.SKIPPED != '1'
+        run: curl -fsS --retry 6 --retry-delay 5 --retry-all-errors "${DEPLOY_URL}/ready"
+
+      - name: Forget the key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
