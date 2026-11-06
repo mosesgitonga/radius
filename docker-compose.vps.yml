@@ -31,6 +31,18 @@ services:
   storage:
     image: chrislusf/seaweedfs:4.51
     restart: unless-stopped
+    # The image's entrypoint drops from root to its `seaweed` user (uid 1000), which
+    # cannot read the root-only keys file on the host. On this server uid 1000 is
+    # also a login account, so the host file stays root's: the container copies it
+    # in for its own user while still root, then hands over to the usual entrypoint.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        mkdir -p /etc/seaweedfs &&
+        install -m 600 -o seaweed -g seaweed /run/myradius-s3.json /etc/seaweedfs/s3.json &&
+        exec /entrypoint.sh "$$@"
+      - storage
     command: >-
       server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
       -master.volumeSizeLimitMB=1024 -volume.max=0
@@ -39,7 +51,7 @@ services:
       - "127.0.0.1:8032:8333"
     volumes:
       - storage-data:/data
-      - ./secrets/s3.json:/etc/seaweedfs/s3.json:ro
+      - ./secrets/s3.json:/run/myradius-s3.json:ro
     logging:
       driver: journald
       options:
