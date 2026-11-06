@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myradius/core/api/api_client.dart';
 import 'package:myradius/core/api/token_store.dart';
+import 'package:myradius/core/offline_store.dart';
 import 'package:myradius/core/providers.dart';
 import 'package:myradius/core/realtime.dart';
 import 'package:myradius/features/me/account_models.dart';
@@ -179,6 +180,7 @@ void main() {
           tokenStoreProvider.overrideWithValue(store),
           apiClientProvider.overrideWithValue(api),
           locationReaderProvider.overrideWithValue(const FakeReader.none()),
+          offlineStoreProvider.overrideWithValue(MemoryOfflineStore()),
           realtimeProvider.overrideWith((ref) {
             final client = RealtimeClient(api, connect: FakeSockets().connect, uri: Uri.parse('ws://api.test/v1/ws'));
             ref.onDispose(client.dispose);

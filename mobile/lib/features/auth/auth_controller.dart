@@ -43,6 +43,8 @@ class AuthController extends Notifier<AuthState> {
   AuthState build() {
     ref.read(apiClientProvider).onSessionExpired = () {
       state = const AuthSignedOut();
+      // The session is over: nothing saved for it may stay on the phone.
+      ref.read(authRepositoryProvider).forgetSaved();
     };
     Future.microtask(_restore);
     return const AuthRestoring();
@@ -57,8 +59,18 @@ class AuthController extends Notifier<AuthState> {
         state = const AuthSignedOut();
       }
     } on ApiException catch (error) {
-      state = error.isNetwork ? const AuthOffline() : const AuthSignedOut();
+      state = error.isNetwork ? await _openOffline() : const AuthSignedOut();
     }
+  }
+
+  /// No connection at launch, but a session is stored: open on what was saved
+  /// (decision M.11). The first request once the phone is back online renews the
+  /// session. With nothing saved, the offline screen asks to try again.
+  Future<AuthState> _openOffline() async {
+    final hasSession = await ref.read(tokenStoreProvider).readRefreshToken() != null;
+    final saved = hasSession ? await ref.read(authRepositoryProvider).savedMe() : null;
+    if (saved == null) return const AuthOffline();
+    return saved.hasHomeLocation ? AuthSignedIn(saved) : AuthNeedsHome(saved);
   }
 
   Future<void> retry() async {
@@ -85,6 +97,7 @@ class AuthController extends Notifier<AuthState> {
   /// The server has already ended every session (a deletion request does):
   /// forget this one here too, without asking it again.
   Future<void> endedByServer() async {
+    await ref.read(authRepositoryProvider).forgetSaved();
     await ref.read(apiClientProvider).endSession();
     state = const AuthSignedOut();
   }
@@ -98,6 +111,7 @@ class AuthController extends Notifier<AuthState> {
     } on ApiException {
       // Already signed out locally; the server session expires on its own.
     }
+    await ref.read(authRepositoryProvider).forgetSaved();
     state = const AuthSignedOut();
   }
 }

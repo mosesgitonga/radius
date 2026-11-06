@@ -1,12 +1,14 @@
 import '../../core/api/api_client.dart';
+import '../../core/offline_store.dart';
 import '../../core/location.dart';
 import 'auth_models.dart';
 
 /// The account endpoints: codes, sign-up, the home area, sign-out.
 class AuthRepository {
-  AuthRepository(this._api);
+  AuthRepository(this._api, [OfflineStore? offline]) : _offline = offline ?? MemoryOfflineStore();
 
   final ApiClient _api;
+  final OfflineStore _offline;
 
   Future<OtpChallenge> requestCode(String phoneNumber) async {
     final data = await _api.post('/auth/otp/request',
@@ -54,7 +56,16 @@ class AuthRepository {
   }
 
   Future<Me> me() async =>
-      Me.fromJson(Map<String, dynamic>.from(await _api.get('/me') as Map));
+      Me.fromJson(Map<String, dynamic>.from(await fetchOrRecall(_offline, 'me', () => _api.get('/me')) as Map));
+
+  /// The account as last saved, for opening the app offline.
+  Future<Me?> savedMe() async {
+    final saved = await _offline.read('me');
+    return saved is Map ? Me.fromJson(Map<String, dynamic>.from(saved)) : null;
+  }
+
+  /// Signing out, or the session ending: nothing saved may outlive it.
+  Future<void> forgetSaved() => _offline.wipe();
 
   /// Sends a GPS reading once; the server keeps only its area's cell and answers
   /// with the area's name. Nothing is stored on the phone.

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/location.dart';
+import '../../core/offline_store.dart';
 import '../../core/providers.dart';
 import '../../core/push.dart';
 import '../../core/realtime.dart';
@@ -10,6 +13,8 @@ import '../../core/router.dart';
 import '../../core/theme.dart';
 import '../auth/auth_controller.dart';
 import '../chats/chats_controller.dart';
+import '../feed/feed_controller.dart';
+import '../stories/stories_controller.dart';
 
 /// The signed-in frame: the four tabs, each keeping its own history.
 ///
@@ -30,6 +35,7 @@ class ShellScreen extends ConsumerStatefulWidget {
 class _ShellScreenState extends ConsumerState<ShellScreen> with WidgetsBindingObserver {
   late final RealtimeClient _realtime;
   bool _checking = false;
+  Timer? _reconnect;
 
   @override
   void initState() {
@@ -38,6 +44,12 @@ class _ShellScreenState extends ConsumerState<ShellScreen> with WidgetsBindingOb
     _realtime = ref.read(realtimeProvider)..start();
     Future.microtask(_dailyCheck);
     Future.microtask(() => ref.read(pushServiceProvider).start(ref.read(routerProvider)));
+    ref.listenManual<bool>(onlineProvider, (was, online) {
+      if (online && was == false) _backOnline();
+      _reconnect?.cancel();
+      // Offline: knock every 20 seconds, quietly, until the server answers.
+      if (!online) _reconnect = Timer.periodic(const Duration(seconds: 20), (_) => _tryServer());
+    }, fireImmediately: true);
   }
 
   /// Once a day, while the app is open: is the phone at home? Only when location
@@ -58,8 +70,26 @@ class _ShellScreenState extends ConsumerState<ShellScreen> with WidgetsBindingOb
     }
   }
 
+  /// Asks the server for the account: answered, the app is back online.
+  Future<void> _tryServer() async {
+    try {
+      await ref.read(authControllerProvider.notifier).refreshMe();
+    } catch (_) {
+      // Still offline; the next knock tries again.
+    }
+  }
+
+  /// Everything shown from the saved copy is reloaded from the server.
+  void _backOnline() {
+    _realtime.resume();
+    ref.invalidate(feedControllerProvider);
+    ref.invalidate(chatsControllerProvider);
+    ref.invalidate(storiesControllerProvider);
+  }
+
   @override
   void dispose() {
+    _reconnect?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     // Signed out: the socket closes with the shell.
     _realtime.stop();
@@ -69,6 +99,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> with WidgetsBindingOb
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      if (!ref.read(onlineProvider)) _tryServer();
       _realtime.resume();
       _dailyCheck();
     }
@@ -80,24 +111,43 @@ class _ShellScreenState extends ConsumerState<ShellScreen> with WidgetsBindingOb
     final unread = ref.watch(chatsControllerProvider.select((s) => s.unread));
     final auth = ref.watch(authControllerProvider);
     final deletionPending = auth is AuthSignedIn && auth.me.deletionPending;
-    return Scaffold(
-      body: deletionPending
-          ? Column(
-              children: [
-                // Signed in during the grace period: nothing can be posted until
-                // the deletion is cancelled, so say so on every tab.
-                Material(
-                  color: Palette.glowTint,
-                  child: SafeArea(
-                    bottom: false,
-                    child: ListTile(
-                      dense: true,
-                      leading: Icon(Icons.warning_amber_rounded, color: Palette.primaryDark),
-                      title: const Text('Your account is due to be deleted'),
-                      trailing: TextButton(onPressed: () => context.go(Routes.me), child: const Text('Review')),
-                    ),
+    final online = ref.watch(onlineProvider);
+    final banner = !online
+        // Showing the saved copy: say so on every tab, with a way to try now.
+        ? Material(
+            color: Palette.sand,
+            child: SafeArea(
+              bottom: false,
+              child: ListTile(
+                dense: true,
+                leading: Icon(Icons.wifi_off_rounded, color: Palette.inkSoft),
+                title: const Text("You're offline"),
+                subtitle: const Text("Showing what was saved. Sending and posting wait until you're back."),
+                trailing: TextButton(onPressed: _tryServer, child: const Text('Retry')),
+              ),
+            ),
+          )
+        : deletionPending
+            // Signed in during the grace period: nothing can be posted until the
+            // deletion is cancelled, so say so on every tab.
+            ? Material(
+                color: Palette.glowTint,
+                child: SafeArea(
+                  bottom: false,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(Icons.warning_amber_rounded, color: Palette.primaryDark),
+                    title: const Text('Your account is due to be deleted'),
+                    trailing: TextButton(onPressed: () => context.go(Routes.me), child: const Text('Review')),
                   ),
                 ),
+              )
+            : null;
+    return Scaffold(
+      body: banner != null
+          ? Column(
+              children: [
+                banner,
                 Expanded(child: MediaQuery.removePadding(context: context, removeTop: true, child: shell)),
               ],
             )

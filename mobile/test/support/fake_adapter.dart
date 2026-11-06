@@ -6,6 +6,10 @@ import 'package:dio/dio.dart';
 /// One scripted reply.
 class FakeReply {
   const FakeReply(this.status, [this.body, this.headers = const {}]);
+
+  /// No answer at all, as with no network: the request fails to connect.
+  static const unreachable = FakeReply(-1);
+
   final int status;
   final Object? body;
   final Map<String, List<String>> headers;
@@ -27,6 +31,9 @@ class FakeAdapter implements HttpClientAdapter {
   ) async {
     requests.add(options);
     final reply = handler(options);
+    if (reply.status < 0) {
+      throw DioException(requestOptions: options, type: DioExceptionType.connectionError);
+    }
     return ResponseBody.fromString(
       reply.body == null ? '' : jsonEncode(reply.body),
       reply.status,

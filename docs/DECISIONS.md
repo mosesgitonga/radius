@@ -1985,7 +1985,7 @@ go_router, with one stateful branch per tab so each tab keeps its own history.
 **Reasoning.** One codebase for both platforms, and one repository, so an API change
 and the app change that needs it land in the same commit.
 
-### M.2 The app keeps no copy of messages on the phone
+### M.2 The app keeps no copy of messages on the phone (superseded by M.11)
 
 **Choice.** Conversations and messages are fetched when they are opened, and held in
 memory only. Nothing about them is written to disk.
@@ -2202,6 +2202,45 @@ someone may sign up far from home.
   M.7 guarantee while not turning away people who sign up on the road.
 - **Accepted trade-off:** posts made in that first week land in a neighbourhood
   that may not be the person's own.
+
+### M.11 Offline reading: recent chats and feed, encrypted on the phone (amends M.2)
+
+**Context.** The product owner asked on 2026-11-06 for the app to open offline and
+show messages and some of the feed. Mobile data in Kenya is expensive and patchy,
+so an app that is blank without a connection is a poor one. M.2 had kept messages
+off the phone deliberately, so this reverses it, with the protections below,
+decided with the product owner.
+
+**Choice.**
+- **What is kept:**
+  - the account (`/me`);
+  - the latest 50 posts of the Home feed;
+  - the 30 most recent chats, with the requests and invitations lists;
+  - each of those chats' latest 50 messages and member names.
+  Saved chats that fall out of the latest 30 are deleted. Older messages,
+  catching up, and every other screen still need the server.
+- **Encrypted:** AES-256-GCM (`cryptography`). The key is generated on the phone
+  and held in its secure keystore (`flutter_secure_storage`); the files are in
+  the app's private folder (`path_provider`). Copying the files off the phone
+  yields nothing readable.
+- **Wiped** at sign-out, when the session ends or is revoked, and when the
+  account asks to be deleted. Both the files and the key go.
+- **Opening offline:** with a stored session and a saved account, the app
+  opens on what was saved, with a banner saying so. It tries the server every
+  20 seconds and on returning to the app. When the server answers, the feed,
+  chats and stories reload. Sending, posting and reacting wait for a
+  connection and say so.
+
+**Reasoning.** Encryption with a keystore key closes the gap M.2 worried about
+for anyone who copies the phone's storage. Wiping at sign-out closes it for a
+shared phone handed on properly. What remains is someone using the phone while
+the owner is still signed in, which the phone's own lock is for, and which M.2
+did not protect against either: the open app shows the same.
+
+**Alternatives.** Plain files, wiped at sign-out: simpler, but readable from
+storage. Keeping more (all chats, 200 messages each): more to read offline,
+more on a phone that may be lost.
+
 
 ## Circle and follows
 

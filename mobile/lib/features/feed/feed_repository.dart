@@ -1,20 +1,48 @@
+import 'dart:async';
+
 import '../../core/api/api_client.dart';
+import '../../core/offline_store.dart';
 import 'feed_models.dart';
 
 /// The feed, posts, comments, reactions and reports.
 class FeedRepository {
-  FeedRepository(this._api);
+  FeedRepository(this._api, [OfflineStore? offline]) : _offline = offline ?? MemoryOfflineStore();
 
   final ApiClient _api;
+  final OfflineStore _offline;
+
+  /// Kept offline: the newest [savedPosts] posts of the Home feed.
+  static const savedPosts = 50;
 
   Future<FeedPage> feed({String? cursor}) async {
-    final data = Map<String, dynamic>.from(
-        await _api.get('/feed', query: {'cursor': ?cursor}) as Map);
+    final Map<String, dynamic> data;
+    if (cursor == null) {
+      data = Map<String, dynamic>.from(await fetchOrRecall(
+        _offline,
+        'feed',
+        () => _api.get('/feed'),
+        keep: (json) => {...(json as Map), 'next_cursor': null},
+      ) as Map);
+    } else {
+      data = Map<String, dynamic>.from(await _api.get('/feed', query: {'cursor': cursor}) as Map);
+      unawaited(_saveMore(data['items'] as List));
+    }
     return FeedPage(
       [for (final item in data['items'] as List) Post.fromJson(Map<String, dynamic>.from(item as Map))],
       data['next_cursor'] as String?,
       radiusKm: (data['radius_km'] as num).toDouble(),
     );
+  }
+
+  /// Later pages join the saved first page, up to [savedPosts].
+  Future<void> _saveMore(List<dynamic> items) async {
+    final saved = await _offline.read('feed');
+    if (saved is! Map) return;
+    final have = List<dynamic>.from(saved['items'] as List);
+    if (have.length >= savedPosts) return;
+    final known = {for (final item in have) (item as Map)['id']};
+    have.addAll(items.where((item) => !known.contains((item as Map)['id'])));
+    await _offline.write('feed', {...saved, 'items': have.take(savedPosts).toList()});
   }
 
   Future<Post> post(String id) async =>

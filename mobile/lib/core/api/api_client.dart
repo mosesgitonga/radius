@@ -51,6 +51,9 @@ class ApiClient {
   final Dio _dio;
   void Function()? onSessionExpired;
 
+  /// Told after every request whether the server could be reached at all.
+  void Function(bool reachable)? onReachability;
+
   String? _accessToken;
   Future<bool>? _refreshing;
 
@@ -152,13 +155,16 @@ class ApiClient {
       'Idempotency-Key': ?idempotencyKey,
     };
     try {
-      return await _dio.request<dynamic>(
+      final response = await _dio.request<dynamic>(
         path,
         data: body,
         queryParameters: query,
         options: Options(method: method, headers: headers),
       );
+      onReachability?.call(true);
+      return response;
     } on DioException {
+      onReachability?.call(false);
       throw const ApiException.network();
     }
   }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:myradius/core/api/api_client.dart';
 import 'package:myradius/core/api/token_store.dart';
+import 'package:myradius/core/offline_store.dart';
 import 'package:myradius/core/providers.dart';
 import 'package:myradius/main.dart';
 
@@ -29,6 +30,7 @@ void main() {
         tokenStoreProvider.overrideWithValue(store),
         apiClientProvider.overrideWithValue(api),
         locationReaderProvider.overrideWithValue(const FakeReader.none()),
+        offlineStoreProvider.overrideWithValue(MemoryOfflineStore()),
       ],
       child: const MyRadiusApp(),
     );

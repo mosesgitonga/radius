@@ -14,26 +14,29 @@ import 'api/api_client.dart';
 import 'api/media_uploader.dart';
 import 'api/token_store.dart';
 import 'location.dart';
+import 'offline_store.dart';
 import 'realtime.dart';
 
 /// The app's shared services. Tests override [tokenStoreProvider],
 /// [apiClientProvider] and [realtimeProvider] with in-memory versions.
 final tokenStoreProvider = Provider<TokenStore>((ref) => SecureTokenStore());
 
-final apiClientProvider = Provider<ApiClient>(
-  (ref) => ApiClient(store: ref.watch(tokenStoreProvider)),
-);
+final apiClientProvider = Provider<ApiClient>((ref) {
+  final client = ApiClient(store: ref.watch(tokenStoreProvider));
+  client.onReachability = (reachable) => ref.read(onlineProvider.notifier).set(reachable);
+  return client;
+});
 
 final authRepositoryProvider = Provider<AuthRepository>(
-  (ref) => AuthRepository(ref.watch(apiClientProvider)),
+  (ref) => AuthRepository(ref.watch(apiClientProvider), ref.watch(offlineStoreProvider)),
 );
 
 final feedRepositoryProvider = Provider<FeedRepository>(
-  (ref) => FeedRepository(ref.watch(apiClientProvider)),
+  (ref) => FeedRepository(ref.watch(apiClientProvider), ref.watch(offlineStoreProvider)),
 );
 
 final chatRepositoryProvider = Provider<ChatRepository>(
-  (ref) => ChatRepository(ref.watch(apiClientProvider)),
+  (ref) => ChatRepository(ref.watch(apiClientProvider), ref.watch(offlineStoreProvider)),
 );
 
 final serviceRepositoryProvider = Provider<ServiceRepository>(
