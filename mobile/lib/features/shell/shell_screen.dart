@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/location.dart';
 import '../../core/providers.dart';
+import '../../core/push.dart';
 import '../../core/realtime.dart';
 import '../../core/router.dart';
 import '../../core/theme.dart';
@@ -36,6 +37,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> with WidgetsBindingOb
     WidgetsBinding.instance.addObserver(this);
     _realtime = ref.read(realtimeProvider)..start();
     Future.microtask(_dailyCheck);
+    Future.microtask(() => ref.read(pushServiceProvider).start(ref.read(routerProvider)));
   }
 
   /// Once a day, while the app is open: is the phone at home? Only when location

@@ -16,6 +16,9 @@ htmlcov/
 !.env.example
 # Firebase service-account keys (FCM_CREDENTIALS_FILE)
 secrets/
+# Firebase app config: identifies the Firebase project; kept out of the repository.
+mobile/android/app/google-services.json
+mobile/ios/Runner/GoogleService-Info.plist
 *service-account*.json
 *firebase-adminsdk*.json
 fcm*.json

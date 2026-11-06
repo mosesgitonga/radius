@@ -3226,3 +3226,32 @@ image or text story, the nearby list, marking one seen, its viewers, deletion an
 **Fixed along the way:** the viewer marked the first story seen while it was
 still being built, which Riverpod forbids. It now waits one frame. Found by the
 widget test.
+
+## Mobile app — slice 14: push notifications (in progress)
+
+Firebase project `myradius-472ee` was created by the product owner on 2026-11-06,
+with an Android app for `ke.myradius`. Analytics and Gemini are off.
+
+**Done:**
+- **The config file:** `google-services.json` is in `mobile/android/app/` and
+  kept out of git, as is the iOS plist when it comes.
+- **Android build:** the Google Services Gradle plugin (4.5.0).
+- **Packages:** `firebase_core` and `firebase_messaging`, approved by the
+  product owner by going ahead with the setup.
+- **`lib/core/push.dart`:**
+  - on sign-in, it asks permission and registers the FCM token with
+    `POST /notifications/devices`;
+  - on sign-out, it removes the token first;
+  - tapping a notification opens its chat, post or person.
+- **A build without Firebase runs as before.** Tests have no Firebase, and
+  `flutter test` gives 90 passed.
+- **Registration tokens, not installation IDs.** firebase_messaging 17 deprecates
+  `getToken` for installation IDs, but the API's firebase-admin sends to
+  registration tokens.
+
+**Waiting on:**
+- **The service-account key:** it goes in `secrets/fcm-service-account.json`.
+  Then `.env` gets `PUSH_PROVIDER=fcm` and
+  `FCM_CREDENTIALS_FILE=/srv/app/secrets/fcm-service-account.json`, and the API
+  and worker restart.
+- **A live test** on the product owner's phone.

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/providers.dart';
+import '../../core/push.dart';
 import 'auth_models.dart';
 
 /// Where the person is in the app's lifecycle. The router follows this.
@@ -89,6 +90,8 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> signOut() async {
+    // While the session still works: stop pushes to this phone first.
+    await ref.read(pushServiceProvider).stop();
     final refreshToken = await ref.read(tokenStoreProvider).readRefreshToken();
     try {
       await ref.read(authRepositoryProvider).signOut(refreshToken);
