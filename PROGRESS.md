@@ -3255,3 +3255,38 @@ with an Android app for `ke.myradius`. Analytics and Gemini are off.
   `FCM_CREDENTIALS_FILE=/srv/app/secrets/fcm-service-account.json`, and the API
   and worker restart.
 - **A live test** on the product owner's phone.
+
+## Staging server and continuous deployment (2026-11-06)
+
+Asked for on 2026-11-06: CI/CD to the VPS at 77.237.238.14. Decided with the
+product owner: staging mode, photos on the server, and the address
+**myradius.chatara.co**. The server is shared with other projects behind their
+own nginx; nothing of theirs was changed (docs/DEPLOYMENT.md §9).
+
+**Done:**
+- **Files:** `docker-compose.vps.yml`, `deploy/vps/` (bootstrap, deploy gate,
+  deploy script, nginx site) and `.github/workflows/deploy.yml`.
+- **Server setup** by `deploy/vps/bootstrap.sh`:
+  - `/srv/myradius`;
+  - `.env.production` with fresh secrets (staging, codes to the log);
+  - `secrets/s3.json`;
+  - `/usr/local/bin/myradius-deploy`;
+  - the nginx site, over HTTP until DNS exists. nginx was tested before it
+    reloaded.
+- **Deployed `a67c438` through the gate.** The API, worker, PostgreSQL, Redis and
+  SeaweedFS are all healthy. Migrations are at 0018, the `myradius-media`
+  bucket exists, and the 36 Nyeri areas are seeded. `/ready` answers through
+  nginx.
+- **Found in the first deploy:** SeaweedFS 4.x drops to uid 1000, which is a
+  login account on this server, so the keys file is copied into the container
+  rather than handed to that account.
+- **A CI deploy key** (`~/.ssh/myradius_ci_deploy` on the development PC). Its
+  public half is to be authorized only for the deploy gate.
+
+**Waiting on the product owner:**
+- the DNS `A` record `myradius` → 77.237.238.14 at chatara.co's DNS provider;
+  then `certbot --nginx -d myradius.chatara.co`;
+- the CI key's line in root's `authorized_keys`, which an automated safety check
+  would not let the assistant add;
+- the GitHub secrets `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS`. Until they are
+  set, the Deploy workflow skips with a warning.
