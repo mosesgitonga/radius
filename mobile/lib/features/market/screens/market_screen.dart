@@ -115,7 +115,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   hintText: 'Search sofas, phones, mitumba…',
-                  prefixIcon: const Icon(Icons.search_rounded, color: Palette.muted),
+                  prefixIcon: Icon(Icons.search_rounded, color: Palette.muted),
                   suffixIcon: _search.text.isEmpty
                       ? null
                       : IconButton(
@@ -168,7 +168,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
     if (state.loading && state.listings.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [SizedBox(height: 120), Center(child: CircularProgressIndicator(color: Palette.primary))],
+        children: [SizedBox(height: 120), Center(child: CircularProgressIndicator(color: Palette.primary))],
       );
     }
     if (state.listings.isEmpty) {
@@ -219,7 +219,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
           ),
         ),
         if (state.loadingMore)
-          const SliverToBoxAdapter(
+          SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.all(16),
               child: Center(child: CircularProgressIndicator(color: Palette.primary)),
@@ -246,14 +246,14 @@ class _Chip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: ChoiceChip(
-        avatar: icon == null ? null : Icon(icon, size: 16, color: selected ? Palette.white : Palette.ink),
+        avatar: icon == null ? null : Icon(icon, size: 16, color: selected ? Palette.onPrimary : Palette.ink),
         label: Text(label),
         selected: selected,
         onSelected: (_) => onTap(),
         showCheckmark: false,
         selectedColor: Palette.ink,
-        labelStyle: TextStyle(color: selected ? Palette.white : Palette.ink, fontSize: 13.5),
-        backgroundColor: Palette.white,
+        labelStyle: TextStyle(color: selected ? Palette.onPrimary : Palette.ink, fontSize: 13.5),
+        backgroundColor: Palette.surface,
         side: BorderSide(color: selected ? Palette.ink : Palette.lineStrong),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
       ),

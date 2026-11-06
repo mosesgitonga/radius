@@ -105,7 +105,7 @@ class PostCard extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final helpful = post.myReaction != null;
     return Material(
-      color: Palette.white,
+      color: Palette.surface,
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -144,7 +144,7 @@ class PostCard extends StatelessWidget {
                     IconButton(
                       onPressed: onMore,
                       tooltip: 'More',
-                      icon: const Icon(Icons.more_vert_rounded, color: Palette.muted),
+                      icon: Icon(Icons.more_vert_rounded, color: Palette.muted),
                     )
                   else
                     const SizedBox(width: 8),
@@ -233,8 +233,8 @@ class _Photos extends StatelessWidget {
   Widget _photo(PostImage image, int width) => CachedNetworkImage(
         imageUrl: image.urlFor(width),
         fit: BoxFit.cover,
-        placeholder: (_, _) => const ColoredBox(color: Palette.sand),
-        errorWidget: (_, _, _) => const ColoredBox(
+        placeholder: (_, _) => ColoredBox(color: Palette.sand),
+        errorWidget: (_, _, _) => ColoredBox(
           color: Palette.sand,
           child: Center(child: Icon(Icons.broken_image_outlined, color: Palette.muted)),
         ),

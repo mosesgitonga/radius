@@ -158,7 +158,7 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(top: 6, right: 10),
                     child: Icon(Icons.circle, size: 6, color: Palette.inkSoft),
                   ),
@@ -186,7 +186,7 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
             style: FilledButton.styleFrom(backgroundColor: Palette.danger),
             child: _busy
                 ? const SizedBox.square(
-                    dimension: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Palette.white))
+                    dimension: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Palette.onPrimary))
                 : const Text('Delete my account'),
           ),
         ],

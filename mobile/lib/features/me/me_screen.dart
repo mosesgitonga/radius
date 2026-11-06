@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exception.dart';
+import '../../core/appearance.dart';
 import '../../core/providers.dart';
 import '../../core/router.dart';
 import '../../core/theme.dart';
@@ -87,6 +88,11 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                   label: 'Home area',
                   detail: me.areaLabel?.label,
                   onTap: () => context.go(Routes.moveHome),
+                ),
+                _Row(
+                  label: 'Appearance',
+                  detail: _appearanceName(ref.watch(themeModeProvider)),
+                  onTap: () => _chooseAppearance(context, ref),
                 ),
                 _Row(label: 'Notifications', onTap: () => context.go(Routes.notificationSettings)),
                 _Row(label: 'Privacy and consent', onTap: () => context.go(Routes.privacy)),
@@ -200,7 +206,7 @@ class _StandingCard extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: Palette.white, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: Palette.surface, borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -301,13 +307,13 @@ class _Group extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return Material(
-      color: Palette.white,
+      color: Palette.surface,
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           for (var i = 0; i < rows.length; i++) ...[
-            if (i > 0) const Divider(height: 1, color: Palette.sand),
+            if (i > 0) Divider(height: 1, color: Palette.sand),
             ListTile(
               onTap: rows[i].onTap,
               title: Text(
@@ -319,7 +325,7 @@ class _Group extends StatelessWidget {
                 children: [
                   if (rows[i].detail != null)
                     Text(rows[i].detail!, style: text.bodyMedium?.copyWith(color: Palette.muted)),
-                  const Icon(Icons.chevron_right_rounded, color: Palette.muted),
+                  Icon(Icons.chevron_right_rounded, color: Palette.muted),
                 ],
               ),
             ),
@@ -328,4 +334,34 @@ class _Group extends StatelessWidget {
       ),
     );
   }
+}
+
+
+String _appearanceName(ThemeMode mode) => switch (mode) {
+  ThemeMode.system => 'Same as phone',
+  ThemeMode.light => 'Light',
+  ThemeMode.dark => 'Dark',
+};
+
+/// Light, dark, or whatever the phone is set to.
+Future<void> _chooseAppearance(BuildContext context, WidgetRef ref) async {
+  final current = ref.read(themeModeProvider);
+  final chosen = await showModalBottomSheet<ThemeMode>(
+    context: context,
+    backgroundColor: Palette.cream,
+    builder: (sheet) => SafeArea(
+      child: RadioGroup<ThemeMode>(
+        groupValue: current,
+        onChanged: (mode) => Navigator.of(sheet).pop(mode),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final mode in [ThemeMode.system, ThemeMode.light, ThemeMode.dark])
+              RadioListTile<ThemeMode>(value: mode, title: Text(_appearanceName(mode))),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (chosen != null) await ref.read(themeModeProvider.notifier).choose(chosen);
 }

@@ -143,7 +143,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               ),
             if (mine && !message.isPending)
               ListTile(
-                leading: const Icon(Icons.delete_outline_rounded, color: Palette.danger),
+                leading: Icon(Icons.delete_outline_rounded, color: Palette.danger),
                 title: const Text('Delete for everyone'),
                 onTap: () async {
                   Navigator.of(sheet).pop();
@@ -218,7 +218,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF7EDE4),
       appBar: AppBar(
-        backgroundColor: Palette.white,
+        backgroundColor: Palette.surface,
         titleSpacing: 0,
         title: conversation == null
             ? null
@@ -276,7 +276,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.shield_outlined, size: 18, color: Palette.trustInk),
+                  Icon(Icons.shield_outlined, size: 18, color: Palette.trustInk),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(conversation!.safetyNotice!,
@@ -297,7 +297,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Widget _messages(ConversationState state, String? myId) {
     final text = Theme.of(context).textTheme;
     if (state.loading && state.messages.isEmpty) {
-      return const Center(child: CircularProgressIndicator(color: Palette.primary));
+      return Center(child: CircularProgressIndicator(color: Palette.primary));
     }
     if (state.error != null && state.conversation == null) {
       return Center(
@@ -341,7 +341,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       itemCount: messages.length + (state.hasEarlier ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == messages.length) {
-          return const Padding(
+          return Padding(
             padding: EdgeInsets.all(12),
             child: Center(child: CircularProgressIndicator(color: Palette.primary, strokeWidth: 2)),
           );
@@ -433,8 +433,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       top: false,
       child: Container(
         padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-        decoration: const BoxDecoration(
-          color: Palette.white,
+        decoration: BoxDecoration(
+          color: Palette.surface,
           border: Border(top: BorderSide(color: Palette.line)),
         ),
         child: Row(
@@ -444,7 +444,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               onPressed: _sendPhoto,
               tooltip: 'Send a photo',
               style: IconButton.styleFrom(backgroundColor: Palette.cream),
-              icon: const Icon(Icons.image_outlined, color: Palette.ink),
+              icon: Icon(Icons.image_outlined, color: Palette.ink),
             ),
             const SizedBox(width: 6),
             Expanded(
@@ -466,7 +466,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
               onPressed: _send,
               tooltip: 'Send',
               style: IconButton.styleFrom(backgroundColor: Palette.primary),
-              icon: const Icon(Icons.arrow_forward_rounded, color: Palette.white),
+              icon: const Icon(Icons.arrow_forward_rounded, color: Palette.onPrimary),
             ),
           ],
         ),
@@ -518,7 +518,7 @@ class _AboutServiceState extends ConsumerState<_AboutService> {
             if (!post.isOpen) 'Closed',
           ].join(' · ');
     return Material(
-      color: Palette.white,
+      color: Palette.surface,
       child: InkWell(
         onTap: post == null ? null : () => context.go(Routes.service(post.id), extra: DateTime.now()),
         child: Container(
@@ -528,7 +528,7 @@ class _AboutServiceState extends ConsumerState<_AboutService> {
             decoration: BoxDecoration(color: Palette.cream, borderRadius: BorderRadius.circular(12)),
             child: Row(
               children: [
-                const Icon(Icons.handyman_outlined, color: Palette.inkSoft),
+                Icon(Icons.handyman_outlined, color: Palette.inkSoft),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -540,7 +540,7 @@ class _AboutServiceState extends ConsumerState<_AboutService> {
                     ],
                   ),
                 ),
-                if (post != null) const Icon(Icons.chevron_right_rounded, color: Palette.muted),
+                if (post != null) Icon(Icons.chevron_right_rounded, color: Palette.muted),
               ],
             ),
           ),
@@ -589,7 +589,7 @@ class _AboutListingState extends ConsumerState<_AboutListing> {
             if (listing.isSold) 'Sold' else if (listing.isExpired) 'Expired' else if (listing.isReserved) 'Reserved' else 'Available',
           ].join(' · ');
     return Material(
-      color: Palette.white,
+      color: Palette.surface,
       child: InkWell(
         onTap: listing == null ? null : () => context.go(Routes.listing(listing.id), extra: DateTime.now()),
         child: Padding(
@@ -604,7 +604,7 @@ class _AboutListingState extends ConsumerState<_AboutListing> {
                   child: SizedBox.square(
                     dimension: 40,
                     child: listing == null
-                        ? const ColoredBox(color: Palette.sand)
+                        ? ColoredBox(color: Palette.sand)
                         : ListingPhoto(listing: listing, width: 40),
                   ),
                 ),
@@ -619,7 +619,7 @@ class _AboutListingState extends ConsumerState<_AboutListing> {
                     ],
                   ),
                 ),
-                if (listing != null) const Icon(Icons.chevron_right_rounded, color: Palette.muted),
+                if (listing != null) Icon(Icons.chevron_right_rounded, color: Palette.muted),
               ],
             ),
           ),
@@ -641,8 +641,8 @@ class _Panel extends StatelessWidget {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        decoration: const BoxDecoration(
-          color: Palette.white,
+        decoration: BoxDecoration(
+          color: Palette.surface,
           border: Border(top: BorderSide(color: Palette.line)),
         ),
         child: Column(
@@ -667,7 +667,7 @@ class _DayChip extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 10),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(color: const Color(0xFFEFDFD2), borderRadius: BorderRadius.circular(10)),
-        child: Text(label, style: const TextStyle(fontSize: 12, color: Palette.inkSoft)),
+        child: Text(label, style: TextStyle(fontSize: 12, color: Palette.inkSoft)),
       ),
     );
   }
@@ -709,7 +709,7 @@ class _Bubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final failed = message.sendState == SendState.failed;
-    final ink = mine ? Palette.white : Palette.ink;
+    final ink = mine ? Palette.onPrimary : Palette.ink;
     final metaInk = mine ? const Color(0xFFF8D3C3) : Palette.muted;
     final meta = switch (message.sendState) {
       SendState.sending => 'Sending…',
@@ -731,7 +731,7 @@ class _Bubble extends StatelessWidget {
               : CachedNetworkImage(
                   imageUrl: message.image!.urlFor(width),
                   fit: BoxFit.cover,
-                  placeholder: (_, _) => const SizedBox(height: 200, child: ColoredBox(color: Palette.sand)),
+                  placeholder: (_, _) => SizedBox(height: 200, child: ColoredBox(color: Palette.sand)),
                 ),
         ),
       );
@@ -746,7 +746,7 @@ class _Bubble extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 3),
           child: Material(
-            color: failed ? const Color(0xFFE8A28C) : (mine ? Palette.primary : Palette.white),
+            color: failed ? const Color(0xFFE8A28C) : (mine ? Palette.primary : Palette.surface),
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(16),
               topRight: const Radius.circular(16),
@@ -769,7 +769,7 @@ class _Bubble extends StatelessWidget {
                         child: Padding(
                           padding: const EdgeInsets.only(bottom: 2),
                           child: Text(senderName!,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   color: Palette.primaryDark, fontSize: 13, fontWeight: FontWeight.w600)),
                         ),
                       ),

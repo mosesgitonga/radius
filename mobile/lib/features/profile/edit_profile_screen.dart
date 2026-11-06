@@ -131,7 +131,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             child: SizedBox(
               height: 130,
               child: coverUrl == null
-                  ? const ColoredBox(
+                  ? ColoredBox(
                       color: Palette.sand,
                       child: Center(child: Icon(Icons.landscape_outlined)),
                     )
@@ -191,7 +191,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             const SizedBox(height: 8),
             Row(
               children: [
-                const SizedBox.square(
+                SizedBox.square(
                   dimension: 16,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Palette.primary),
                 ),

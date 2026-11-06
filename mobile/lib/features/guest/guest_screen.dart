@@ -99,7 +99,7 @@ class _GuestScreenState extends ConsumerState<GuestScreen> {
               onPressed: () => _join('post'),
               tooltip: 'New post',
               backgroundColor: Palette.primary,
-              foregroundColor: Palette.white,
+              foregroundColor: Palette.onPrimary,
               child: const Icon(Icons.add_rounded, size: 28),
             ),
       bottomNavigationBar: NavigationBar(
@@ -220,7 +220,7 @@ class _GuestScreenState extends ConsumerState<GuestScreen> {
                               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
                               child: Center(
                                 child: _loadingMore
-                                    ? const CircularProgressIndicator(color: Palette.primary)
+                                    ? CircularProgressIndicator(color: Palette.primary)
                                     : Text(
                                         feed.nextCursor == null ? 'Join to see more and take part' : '',
                                         style: text.bodySmall,
@@ -251,7 +251,7 @@ class _Finding extends StatelessWidget {
           const SizedBox(height: 20),
           Text('Finding your neighbourhood…', style: text.titleMedium),
           const SizedBox(height: 16),
-          const CircularProgressIndicator(color: Palette.primary),
+          CircularProgressIndicator(color: Palette.primary),
         ],
       ),
     );

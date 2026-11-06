@@ -101,7 +101,7 @@ class _ServicesScreenState extends ConsumerState<ServicesScreen> {
                   ServiceKind.seeking => 'What do neighbours need?',
                   ServiceKind.hiring => 'Shop attendant, driver…',
                 },
-                prefixIcon: const Icon(Icons.search_rounded, color: Palette.muted),
+                prefixIcon: Icon(Icons.search_rounded, color: Palette.muted),
                 suffixIcon: _search.text.isEmpty
                     ? null
                     : IconButton(
@@ -160,7 +160,7 @@ class _ServicesScreenState extends ConsumerState<ServicesScreen> {
     if (state.loading && state.posts.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
+        children: [
           SizedBox(height: 120),
           Center(child: CircularProgressIndicator(color: Palette.primary)),
         ],
@@ -206,7 +206,7 @@ class _ServicesScreenState extends ConsumerState<ServicesScreen> {
             ),
           ),
         if (state.loadingMore)
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(16),
             child: Center(child: CircularProgressIndicator(color: Palette.primary)),
           ),
@@ -235,8 +235,8 @@ class _CategoryChip extends StatelessWidget {
         onSelected: (_) => onTap(),
         showCheckmark: false,
         selectedColor: Palette.ink,
-        labelStyle: TextStyle(color: selected ? Palette.white : Palette.ink, fontSize: 13.5),
-        backgroundColor: Palette.white,
+        labelStyle: TextStyle(color: selected ? Palette.onPrimary : Palette.ink, fontSize: 13.5),
+        backgroundColor: Palette.surface,
         side: BorderSide(color: selected ? Palette.ink : Palette.lineStrong),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
       ),

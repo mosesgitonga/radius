@@ -33,7 +33,7 @@ class HomeMenu extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.location_on_outlined, color: Palette.primary),
+                  Icon(Icons.location_on_outlined, color: Palette.primary),
                   const SizedBox(height: 8),
                   Text(area, style: text.headlineSmall),
                   const SizedBox(height: 2),
@@ -46,15 +46,15 @@ class HomeMenu extends StatelessWidget {
                 ],
               ),
             ),
-            const Divider(height: 1, color: Palette.line),
+            Divider(height: 1, color: Palette.line),
             ListTile(
-              leading: const Icon(Icons.handyman_outlined, color: Palette.ink),
+              leading: Icon(Icons.handyman_outlined, color: Palette.ink),
               title: const Text('Services & jobs'),
               subtitle: const Text('Find a fundi, offer a service, or hire'),
               onTap: () => open(Routes.services),
             ),
             ListTile(
-              leading: const Icon(Icons.people_outline_rounded, color: Palette.ink),
+              leading: Icon(Icons.people_outline_rounded, color: Palette.ink),
               title: const Text('People nearby'),
               subtitle: const Text('Neighbours who chose to be listed'),
               onTap: () => open(Routes.peopleNearby),

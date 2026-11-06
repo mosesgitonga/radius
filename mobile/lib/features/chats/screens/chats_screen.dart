@@ -78,7 +78,7 @@ class _Inbox extends ConsumerWidget {
     final auth = ref.watch(authControllerProvider);
     final myId = auth is AuthSignedIn ? auth.me.id : null;
     if (chats.loading && chats.chats.isEmpty) {
-      return const Center(child: CircularProgressIndicator(color: Palette.primary));
+      return Center(child: CircularProgressIndicator(color: Palette.primary));
     }
     if (chats.error != null && chats.chats.isEmpty) {
       return _Empty(
@@ -161,7 +161,7 @@ class _ChatRow extends StatelessWidget {
                         ),
                       ),
                       if (conversation.muted)
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.only(right: 4),
                           child: Icon(Icons.notifications_off_outlined, size: 15, color: Palette.muted),
                         ),
@@ -224,7 +224,7 @@ class _Count extends StatelessWidget {
       ),
       child: Text(
         count > 99 ? '99+' : '$count',
-        style: const TextStyle(color: Palette.white, fontSize: 12, fontWeight: FontWeight.w600),
+        style: const TextStyle(color: Palette.onPrimary, fontSize: 12, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -260,7 +260,7 @@ class _Requests extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
     if (chats.loading && chats.requests.isEmpty) {
-      return const Center(child: CircularProgressIndicator(color: Palette.primary));
+      return Center(child: CircularProgressIndicator(color: Palette.primary));
     }
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -281,10 +281,10 @@ class _Requests extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Material(
-              color: Palette.white,
+              color: Palette.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
-                side: const BorderSide(color: Palette.line),
+                side: BorderSide(color: Palette.line),
               ),
               child: InkWell(
                 borderRadius: BorderRadius.circular(14),

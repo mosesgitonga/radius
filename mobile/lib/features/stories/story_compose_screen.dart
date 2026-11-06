@@ -109,7 +109,7 @@ class _StoryComposeScreenState extends ConsumerState<StoryComposeScreen> {
                             child: IconButton(
                               tooltip: 'Remove photo',
                               onPressed: _busy ? null : () => setState(() => _photo = null),
-                              icon: const Icon(Icons.close_rounded, color: Palette.white),
+                              icon: const Icon(Icons.close_rounded, color: Palette.onPrimary),
                             ),
                           ),
                         ],
@@ -124,8 +124,8 @@ class _StoryComposeScreenState extends ConsumerState<StoryComposeScreen> {
                           maxLength: StoryComposeScreen.maxText,
                           maxLines: null,
                           textAlign: TextAlign.center,
-                          style: text.headlineSmall?.copyWith(color: Palette.white, height: 1.3),
-                          cursorColor: Palette.white,
+                          style: text.headlineSmall?.copyWith(color: Palette.onPrimary, height: 1.3),
+                          cursorColor: Palette.onPrimary,
                           decoration: InputDecoration(
                             border: InputBorder.none,
                             filled: false,

@@ -141,11 +141,11 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                     onSelected: _busy ? null : (_) => setState(() => _category = entry.key),
                     selectedColor: Palette.primary,
                     labelStyle: text.labelMedium?.copyWith(
-                      color: _category == entry.key ? Palette.white : Palette.ink,
+                      color: _category == entry.key ? Palette.onPrimary : Palette.ink,
                     ),
                     showCheckmark: false,
                     side: BorderSide(color: _category == entry.key ? Palette.primary : Palette.lineStrong),
-                    backgroundColor: Palette.white,
+                    backgroundColor: Palette.surface,
                   ),
               ],
             ),
@@ -184,7 +184,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                           iconSize: 16,
                           visualDensity: VisualDensity.compact,
                           style: IconButton.styleFrom(backgroundColor: Palette.ink),
-                          icon: const Icon(Icons.close_rounded, color: Palette.white),
+                          icon: const Icon(Icons.close_rounded, color: Palette.onPrimary),
                         ),
                       ),
                     ],
@@ -211,7 +211,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  const SizedBox.square(
+                  SizedBox.square(
                     dimension: 18,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Palette.primary),
                   ),

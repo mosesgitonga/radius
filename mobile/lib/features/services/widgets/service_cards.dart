@@ -19,7 +19,7 @@ class ServiceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Palette.white,
+      color: Palette.surface,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -88,7 +88,7 @@ class _Offering extends StatelessWidget {
                   style: text.bodySmall?.copyWith(fontSize: 13, color: Palette.inkSoft)),
           ],
         ),
-        const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Divider(height: 1, color: Palette.sand)),
+        Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Divider(height: 1, color: Palette.sand)),
         Row(
           children: [
             Expanded(
@@ -104,7 +104,7 @@ class _Offering extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14),
               alignment: Alignment.center,
               decoration: BoxDecoration(color: Palette.glowTint, borderRadius: BorderRadius.circular(17)),
-              child: const Text('View',
+              child: Text('View',
                   style: TextStyle(color: Palette.primaryDark, fontWeight: FontWeight.w600, fontSize: 13.5)),
             ),
           ],
@@ -237,7 +237,7 @@ class JobSafetyNote extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.shield_outlined, size: 20, color: Palette.trustInk),
+          Icon(Icons.shield_outlined, size: 20, color: Palette.trustInk),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

@@ -105,7 +105,7 @@ class _PeopleNearbyScreenState extends ConsumerState<PeopleNearbyScreen> {
       ];
     }
     if (people == null) {
-      return const [
+      return [
         SizedBox(height: 60),
         Center(child: CircularProgressIndicator(color: Palette.primary)),
       ];
@@ -113,7 +113,7 @@ class _PeopleNearbyScreenState extends ConsumerState<PeopleNearbyScreen> {
     if (people.isEmpty) {
       return [
         const SizedBox(height: 40),
-        const Icon(Icons.people_outline_rounded, size: 40, color: Palette.muted),
+        Icon(Icons.people_outline_rounded, size: 40, color: Palette.muted),
         const SizedBox(height: 12),
         Text('Nobody nearby is listed yet', style: text.titleMedium, textAlign: TextAlign.center),
         const SizedBox(height: 4),
@@ -180,7 +180,7 @@ class _ShowMeCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Palette.white,
+        color: Palette.surface,
         border: Border.all(color: Palette.line),
         borderRadius: BorderRadius.circular(14),
       ),
@@ -217,7 +217,7 @@ class _NotYet extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.home_outlined, size: 40, color: Palette.muted),
+          Icon(Icons.home_outlined, size: 40, color: Palette.muted),
           const SizedBox(height: 12),
           Text('Settle in first', style: text.titleMedium),
           const SizedBox(height: 6),

@@ -214,7 +214,7 @@ class _ServicePostScreenState extends ConsumerState<ServicePostScreen> {
         appBar: AppBar(),
         body: Center(
           child: _loading
-              ? const CircularProgressIndicator(color: Palette.primary)
+              ? CircularProgressIndicator(color: Palette.primary)
               : Padding(
                   padding: const EdgeInsets.all(32),
                   child: Text(_error ?? '', textAlign: TextAlign.center, style: text.bodyLarge),
@@ -322,8 +322,8 @@ class _ServicePostScreenState extends ConsumerState<ServicePostScreen> {
           : SafeArea(
               child: Container(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                decoration: const BoxDecoration(
-                  color: Palette.white,
+                decoration: BoxDecoration(
+                  color: Palette.surface,
                   border: Border(top: BorderSide(color: Palette.line)),
                 ),
                 child: FilledButton.icon(
@@ -375,7 +375,7 @@ class _Details extends StatelessWidget {
     ];
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: Palette.white, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: Palette.surface, borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

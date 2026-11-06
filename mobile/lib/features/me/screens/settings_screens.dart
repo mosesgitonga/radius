@@ -28,7 +28,7 @@ class _Loaded<T> extends StatelessWidget {
         ),
       );
     }
-    return const Center(child: CircularProgressIndicator(color: Palette.primary));
+    return Center(child: CircularProgressIndicator(color: Palette.primary));
   }
 }
 
@@ -103,7 +103,7 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
               Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.fromLTRB(14, 10, 6, 6),
-                decoration: BoxDecoration(color: Palette.white, borderRadius: BorderRadius.circular(14)),
+                decoration: BoxDecoration(color: Palette.surface, borderRadius: BorderRadius.circular(14)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

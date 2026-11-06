@@ -185,7 +185,7 @@ class _PostScreenState extends ConsumerState<PostScreen> {
             child: post == null
                 ? Center(
                     child: _loading
-                        ? const CircularProgressIndicator(color: Palette.primary)
+                        ? CircularProgressIndicator(color: Palette.primary)
                         : Padding(
                             padding: const EdgeInsets.all(32),
                             child: Text(_error ?? '', textAlign: TextAlign.center, style: text.bodyLarge),
@@ -220,7 +220,7 @@ class _PostScreenState extends ConsumerState<PostScreen> {
                           ),
                         if (_nextCursor != null)
                           TextButton(onPressed: _moreComments, child: const Text('Show more comments')),
-                        if (_loading) const LinearProgressIndicator(color: Palette.primary),
+                        if (_loading) LinearProgressIndicator(color: Palette.primary),
                       ],
                     ),
                   ),
@@ -230,8 +230,8 @@ class _PostScreenState extends ConsumerState<PostScreen> {
               top: false,
               child: Container(
                 padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-                decoration: const BoxDecoration(
-                  color: Palette.white,
+                decoration: BoxDecoration(
+                  color: Palette.surface,
                   border: Border(top: BorderSide(color: Palette.line)),
                 ),
                 child: Row(
@@ -258,9 +258,9 @@ class _PostScreenState extends ConsumerState<PostScreen> {
                       icon: _sending
                           ? const SizedBox.square(
                               dimension: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Palette.white),
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Palette.onPrimary),
                             )
-                          : const Icon(Icons.arrow_upward_rounded, color: Palette.white),
+                          : const Icon(Icons.arrow_upward_rounded, color: Palette.onPrimary),
                     ),
                   ],
                 ),
@@ -297,7 +297,7 @@ class _CommentTile extends StatelessWidget {
           Expanded(
             child: Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Palette.white, borderRadius: BorderRadius.circular(14)),
+              decoration: BoxDecoration(color: Palette.surface, borderRadius: BorderRadius.circular(14)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -320,7 +320,7 @@ class _CommentTile extends StatelessWidget {
             IconButton(
               onPressed: onReport,
               tooltip: 'Report comment',
-              icon: const Icon(Icons.flag_outlined, size: 18, color: Palette.muted),
+              icon: Icon(Icons.flag_outlined, size: 18, color: Palette.muted),
             ),
         ],
       ),

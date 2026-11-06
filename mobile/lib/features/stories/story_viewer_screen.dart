@@ -216,9 +216,9 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> with Sing
               CachedNetworkImage(
                 imageUrl: sizeFor(story.image, pixels) ?? '',
                 fit: BoxFit.contain,
-                placeholder: (_, _) => const Center(child: CircularProgressIndicator(color: Palette.white)),
+                placeholder: (_, _) => const Center(child: CircularProgressIndicator(color: Palette.onPrimary)),
                 errorWidget: (_, _, _) =>
-                    const Center(child: Icon(Icons.broken_image_outlined, color: Palette.white, size: 40)),
+                    const Center(child: Icon(Icons.broken_image_outlined, color: Palette.onPrimary, size: 40)),
               )
             else
               Container(
@@ -228,7 +228,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> with Sing
                 child: Text(
                   story.text ?? '',
                   textAlign: TextAlign.center,
-                  style: text.headlineSmall?.copyWith(color: Palette.white, height: 1.3),
+                  style: text.headlineSmall?.copyWith(color: Palette.onPrimary, height: 1.3),
                 ),
               ),
             SafeArea(
@@ -248,7 +248,7 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> with Sing
                                   value: i < _index ? 1 : (i == _index ? _clock.value : 0),
                                   minHeight: 3,
                                   backgroundColor: Colors.white24,
-                                  color: Palette.white,
+                                  color: Palette.onPrimary,
                                 ),
                               ),
                             ),
@@ -258,19 +258,19 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> with Sing
                   ),
                   ListTile(
                     leading: InitialsAvatar(author: story.author),
-                    title: Text(story.author.displayName, style: text.titleSmall?.copyWith(color: Palette.white)),
+                    title: Text(story.author.displayName, style: text.titleSmall?.copyWith(color: Palette.onPrimary)),
                     subtitle: Text(where, style: text.bodySmall?.copyWith(color: Colors.white70)),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
                           tooltip: 'More',
-                          icon: const Icon(Icons.more_vert_rounded, color: Palette.white),
+                          icon: const Icon(Icons.more_vert_rounded, color: Palette.onPrimary),
                           onPressed: _menu,
                         ),
                         IconButton(
                           tooltip: 'Close',
-                          icon: const Icon(Icons.close_rounded, color: Palette.white),
+                          icon: const Icon(Icons.close_rounded, color: Palette.onPrimary),
                           onPressed: () => Navigator.of(context).maybePop(),
                         ),
                       ],
@@ -282,10 +282,10 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> with Sing
                       padding: const EdgeInsets.only(bottom: 16),
                       child: TextButton.icon(
                         onPressed: _showViewers,
-                        icon: const Icon(Icons.visibility_outlined, color: Palette.white),
+                        icon: const Icon(Icons.visibility_outlined, color: Palette.onPrimary),
                         label: Text(
                           '${story.viewCount ?? 0} ${story.viewCount == 1 ? 'view' : 'views'}',
-                          style: text.titleSmall?.copyWith(color: Palette.white),
+                          style: text.titleSmall?.copyWith(color: Palette.onPrimary),
                         ),
                       ),
                     ),

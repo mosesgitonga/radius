@@ -117,7 +117,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
         onPressed: () => context.push(Routes.compose),
         tooltip: 'New post',
         backgroundColor: Palette.primary,
-        foregroundColor: Palette.white,
+        foregroundColor: Palette.onPrimary,
         child: const Icon(Icons.add_rounded, size: 28),
       ),
       body: SafeArea(
@@ -175,7 +175,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                 ),
               ),
               if (feed.loading && feed.posts.isEmpty)
-                const SliverFillRemaining(
+                SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(child: CircularProgressIndicator(color: Palette.primary)),
                 )
@@ -227,7 +227,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
                     child: Center(
                       child: feed.loadingMore
-                          ? const CircularProgressIndicator(color: Palette.primary)
+                          ? CircularProgressIndicator(color: Palette.primary)
                           : Text(feed.hasMore ? '' : "You're all caught up", style: text.bodySmall),
                     ),
                   ),
@@ -260,7 +260,7 @@ class _ProvisionalHomeCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
       decoration: BoxDecoration(
-        color: Palette.white,
+        color: Palette.surface,
         border: Border.all(color: Palette.line),
         borderRadius: BorderRadius.circular(14),
       ),

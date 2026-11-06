@@ -63,7 +63,7 @@ class ReviewsSection extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: Palette.white, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: Palette.surface, borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -89,7 +89,7 @@ class ReviewsSection extends StatelessWidget {
             ],
           ),
           for (final review in reviews) ...[
-            const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: Palette.sand)),
+            Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: Palette.sand)),
             _ReviewTile(review: review, onReply: canReply(review) ? () => onReply(review) : null),
           ],
           if (hasMore) TextButton(onPressed: onMore, child: const Text('More reviews')),

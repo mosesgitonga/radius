@@ -58,7 +58,7 @@ class _MyServicesScreenState extends ConsumerState<MyServicesScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push(Routes.newService(ServiceKind.offering)),
         backgroundColor: Palette.primary,
-        foregroundColor: Palette.white,
+        foregroundColor: Palette.onPrimary,
         icon: const Icon(Icons.add_rounded),
         label: const Text('New post'),
       ),
@@ -66,7 +66,7 @@ class _MyServicesScreenState extends ConsumerState<MyServicesScreen> {
         color: Palette.primary,
         onRefresh: _load,
         child: _loading
-            ? ListView(children: const [
+            ? ListView(children: [
                 SizedBox(height: 120),
                 Center(child: CircularProgressIndicator(color: Palette.primary)),
               ])
@@ -90,7 +90,7 @@ class _MyServicesScreenState extends ConsumerState<MyServicesScreen> {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Material(
-                        color: Palette.white,
+                        color: Palette.surface,
                         borderRadius: BorderRadius.circular(14),
                         child: ListTile(
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

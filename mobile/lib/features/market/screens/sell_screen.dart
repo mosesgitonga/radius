@@ -195,7 +195,7 @@ class _SellScreenState extends ConsumerState<SellScreen> {
                             visualDensity: VisualDensity.compact,
                             style: IconButton.styleFrom(backgroundColor: Palette.ink.withValues(alpha: 0.7)),
                             onPressed: _busy ? null : () => setState(() => _photos.removeAt(i)),
-                            icon: const Icon(Icons.close_rounded, size: 16, color: Palette.white),
+                            icon: const Icon(Icons.close_rounded, size: 16, color: Palette.onPrimary),
                           ),
                         ),
                       ],
@@ -210,9 +210,9 @@ class _SellScreenState extends ConsumerState<SellScreen> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: Palette.lineStrong),
-                        color: Palette.white,
+                        color: Palette.surface,
                       ),
-                      child: const Column(
+                      child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.add_a_photo_outlined, color: Palette.inkSoft),

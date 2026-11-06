@@ -17,7 +17,7 @@ class ListingPhoto extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (listing.images.isEmpty) {
-      return const ColoredBox(
+      return ColoredBox(
         color: Palette.sand,
         child: Center(child: Icon(Icons.image_outlined, color: Palette.muted)),
       );
@@ -26,8 +26,8 @@ class ListingPhoto extends StatelessWidget {
     return CachedNetworkImage(
       imageUrl: listing.images.first.urlFor(pixels),
       fit: fit,
-      placeholder: (_, _) => const ColoredBox(color: Palette.sand),
-      errorWidget: (_, _, _) => const ColoredBox(
+      placeholder: (_, _) => ColoredBox(color: Palette.sand),
+      errorWidget: (_, _, _) => ColoredBox(
         color: Palette.sand,
         child: Center(child: Icon(Icons.broken_image_outlined, color: Palette.muted)),
       ),
@@ -55,7 +55,7 @@ class ListingCard extends StatelessWidget {
                     ? 'Held'
                     : null;
     return Material(
-      color: Palette.white,
+      color: Palette.surface,
       borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -80,7 +80,7 @@ class ListingCard extends StatelessWidget {
                           color: Palette.ink.withValues(alpha: 0.8),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: Text(badge, style: const TextStyle(color: Palette.white, fontSize: 12)),
+                        child: Text(badge, style: const TextStyle(color: Palette.onPrimary, fontSize: 12)),
                       ),
                     ),
                 ],

@@ -274,7 +274,7 @@ class _ListingScreenState extends ConsumerState<ListingScreen> {
         appBar: AppBar(),
         body: Center(
           child: _loading
-              ? const CircularProgressIndicator(color: Palette.primary)
+              ? CircularProgressIndicator(color: Palette.primary)
               : Padding(
                   padding: const EdgeInsets.all(32),
                   child: Text(_error ?? '', textAlign: TextAlign.center, style: text.bodyLarge),
@@ -298,7 +298,7 @@ class _ListingScreenState extends ConsumerState<ListingScreen> {
                     : null;
 
     return Scaffold(
-      backgroundColor: Palette.white,
+      backgroundColor: Palette.surface,
       body: RefreshIndicator(
         color: Palette.primary,
         onRefresh: _load,
@@ -307,7 +307,7 @@ class _ListingScreenState extends ConsumerState<ListingScreen> {
             SliverAppBar(
               pinned: true,
               expandedHeight: 320,
-              backgroundColor: Palette.white,
+              backgroundColor: Palette.surface,
               leading: const _Round(child: BackButton()),
               actions: [
                 if (!listing.isMine)
@@ -416,7 +416,7 @@ class _ListingScreenState extends ConsumerState<ListingScreen> {
           : SafeArea(
               child: Container(
                 padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
-                decoration: const BoxDecoration(border: Border(top: BorderSide(color: Palette.line))),
+                decoration: BoxDecoration(border: Border(top: BorderSide(color: Palette.line))),
                 child: FilledButton.icon(
                   onPressed: _contact,
                   style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
@@ -440,7 +440,7 @@ class _Round extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.all(4),
       child: DecoratedBox(
-        decoration: const BoxDecoration(color: Palette.white, shape: BoxShape.circle),
+        decoration: BoxDecoration(color: Palette.surface, shape: BoxShape.circle),
         child: child,
       ),
     );
@@ -458,7 +458,7 @@ class _Photos extends StatelessWidget {
   Widget build(BuildContext context) {
     final images = listing.images;
     if (images.isEmpty) {
-      return const ColoredBox(
+      return ColoredBox(
         color: Palette.sand,
         child: Center(child: Icon(Icons.image_outlined, size: 48, color: Palette.muted)),
       );
@@ -473,7 +473,7 @@ class _Photos extends StatelessWidget {
           itemBuilder: (context, index) => CachedNetworkImage(
             imageUrl: images[index].urlFor(width),
             fit: BoxFit.cover,
-            placeholder: (_, _) => const ColoredBox(color: Palette.sand),
+            placeholder: (_, _) => ColoredBox(color: Palette.sand),
           ),
         ),
         if (images.length > 1)
@@ -489,7 +489,7 @@ class _Photos extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text('${page + 1} / ${images.length}',
-                    style: const TextStyle(color: Palette.white, fontSize: 12)),
+                    style: const TextStyle(color: Palette.onPrimary, fontSize: 12)),
               ),
             ),
           ),
@@ -567,7 +567,7 @@ class _SellerCard extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: Palette.muted),
+          Icon(Icons.chevron_right_rounded, color: Palette.muted),
         ],
       ),
     ),

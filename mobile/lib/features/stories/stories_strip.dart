@@ -120,7 +120,7 @@ class _Bubble extends StatelessWidget {
                             border: Border.all(color: Palette.cream, width: 2),
                           ),
                           padding: const EdgeInsets.all(2),
-                          child: const Icon(Icons.add_rounded, size: 18, color: Palette.white),
+                          child: const Icon(Icons.add_rounded, size: 18, color: Palette.onPrimary),
                         ),
                       ),
                     ),

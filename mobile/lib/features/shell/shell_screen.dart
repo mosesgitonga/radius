@@ -92,7 +92,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> with WidgetsBindingOb
                     bottom: false,
                     child: ListTile(
                       dense: true,
-                      leading: const Icon(Icons.warning_amber_rounded, color: Palette.primaryDark),
+                      leading: Icon(Icons.warning_amber_rounded, color: Palette.primaryDark),
                       title: const Text('Your account is due to be deleted'),
                       trailing: TextButton(onPressed: () => context.go(Routes.me), child: const Text('Review')),
                     ),

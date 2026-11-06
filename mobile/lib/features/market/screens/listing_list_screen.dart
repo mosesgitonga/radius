@@ -74,7 +74,7 @@ class _ListingListScreenState extends ConsumerState<ListingListScreen> {
           ? FloatingActionButton.extended(
               onPressed: () => context.push(Routes.sell),
               backgroundColor: Palette.primary,
-              foregroundColor: Palette.white,
+              foregroundColor: Palette.onPrimary,
               icon: const Icon(Icons.add_rounded),
               label: const Text('Sell'),
             )
@@ -83,7 +83,7 @@ class _ListingListScreenState extends ConsumerState<ListingListScreen> {
         color: Palette.primary,
         onRefresh: _load,
         child: _loading
-            ? ListView(children: const [
+            ? ListView(children: [
                 SizedBox(height: 120),
                 Center(child: CircularProgressIndicator(color: Palette.primary)),
               ])

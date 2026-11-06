@@ -11,7 +11,7 @@ class RestoringScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    return Scaffold(
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -45,7 +45,7 @@ class OfflineScreen extends ConsumerWidget {
             children: [
               const Wordmark(),
               const Spacer(),
-              const Icon(Icons.wifi_off_rounded, size: 40, color: Palette.primary),
+              Icon(Icons.wifi_off_rounded, size: 40, color: Palette.primary),
               const SizedBox(height: 16),
               Text("You're offline", style: text.headlineSmall),
               const SizedBox(height: 8),

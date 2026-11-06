@@ -170,7 +170,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         appBar: AppBar(),
         body: Center(
           child: _error == null
-              ? const CircularProgressIndicator(color: Palette.primary)
+              ? CircularProgressIndicator(color: Palette.primary)
               : Padding(
                   padding: const EdgeInsets.all(32),
                   child: Text(
@@ -257,7 +257,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                 child: _loadingList
-                    ? const Center(child: CircularProgressIndicator(color: Palette.primary))
+                    ? Center(child: CircularProgressIndicator(color: Palette.primary))
                     : _cursors[_tab] != null
                     ? TextButton(onPressed: () => _loadList(_tab, more: true), child: const Text('More'))
                     : const SizedBox.shrink(),
@@ -375,7 +375,7 @@ class _Header extends StatelessWidget {
           Positioned.fill(
             bottom: avatarRadius,
             child: coverUrl == null
-                ? const DecoratedBox(
+                ? DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [Palette.glowTint, Palette.sand],
@@ -387,7 +387,7 @@ class _Header extends StatelessWidget {
                 : CachedNetworkImage(
                     imageUrl: coverUrl,
                     fit: BoxFit.cover,
-                    placeholder: (_, _) => const ColoredBox(color: Palette.sand),
+                    placeholder: (_, _) => ColoredBox(color: Palette.sand),
                   ),
           ),
           SafeArea(
@@ -401,7 +401,7 @@ class _Header extends StatelessWidget {
             bottom: 0,
             child: Container(
               padding: const EdgeInsets.all(3),
-              decoration: const BoxDecoration(color: Palette.cream, shape: BoxShape.circle),
+              decoration: BoxDecoration(color: Palette.cream, shape: BoxShape.circle),
               child: InitialsAvatar(author: profile.asAuthor, radius: avatarRadius - 3),
             ),
           ),
@@ -463,7 +463,7 @@ class _Round extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.all(4),
       child: DecoratedBox(
-        decoration: const BoxDecoration(color: Palette.white, shape: BoxShape.circle),
+        decoration: BoxDecoration(color: Palette.surface, shape: BoxShape.circle),
         child: child,
       ),
     );

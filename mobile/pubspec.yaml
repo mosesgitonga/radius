@@ -48,6 +48,8 @@ dependencies:
   share_plus: ^13.3.1
   firebase_core: ^5.1.0
   firebase_messaging: ^17.0.1
+  path_provider: ^2.1.6
+  cryptography: ^2.9.0
 
 dev_dependencies:
   flutter_test:

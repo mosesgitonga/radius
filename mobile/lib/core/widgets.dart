@@ -71,7 +71,7 @@ class BusyButton extends StatelessWidget {
       child: busy
           ? const SizedBox.square(
               dimension: 22,
-              child: CircularProgressIndicator(strokeWidth: 2.5, color: Palette.white),
+              child: CircularProgressIndicator(strokeWidth: 2.5, color: Palette.onPrimary),
             )
           : Text(label),
     );
@@ -92,7 +92,7 @@ class FormError extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline, size: 18, color: Palette.danger),
+          Icon(Icons.error_outline, size: 18, color: Palette.danger),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -123,7 +123,7 @@ class NeighbourBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.shield_outlined, size: 13, color: Palette.trustInk),
+          Icon(Icons.shield_outlined, size: 13, color: Palette.trustInk),
           const SizedBox(width: 4),
           Flexible(
             child: Text(
@@ -144,18 +144,20 @@ class NeighbourBadge extends StatelessWidget {
 
 /// A calm panel with an icon, used for privacy notes and empty states.
 class NotePanel extends StatelessWidget {
-  const NotePanel({super.key, required this.icon, required this.text, this.tint = Palette.white});
+  const NotePanel({super.key, required this.icon, required this.text, this.tint});
 
   final IconData icon;
   final String text;
-  final Color tint;
+
+  /// The panel's background; the surface colour when not given.
+  final Color? tint;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: tint,
+        color: tint ?? Palette.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Palette.line),
       ),
