@@ -3300,3 +3300,39 @@ own nginx; nothing of theirs was changed (docs/DEPLOYMENT.md §9).
   would not let the assistant add;
 - the GitHub secrets `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS`. Until they are
   set, the Deploy workflow skips with a warning.
+
+## Mobile app — slice 15: offline reading and dark mode
+
+### Plan
+
+Asked for on 2026-11-06: the app opens offline and shows messages and some saved
+feed; and dark mode. Decided with the product owner the same day:
+- **Reversing M.2.** Chats and the feed are saved on the phone, **encrypted**
+  (AES-GCM, with the key in the phone's secure keystore). Everything is wiped
+  when the person signs out or the session ends. This is decision M.11.
+- **What is kept:** the 30 most recent chats with their last 50 messages each,
+  the Home feed's last 50 posts, and the account (`/me`).
+- **Dark mode** follows the phone, with a System / Light / Dark switch in
+  settings.
+- **New packages:** `path_provider` and `cryptography`.
+
+**App:**
+- **`lib/core/offline_store.dart`:** encrypted JSON files in the app's private
+  folder, one per kind; it writes on every successful load and wipes at
+  sign-out.
+- **Opening offline** with a stored session goes to the app, not the offline
+  screen. A banner says "You're offline: showing what was saved", and the app
+  reconnects by itself when the network returns.
+- **Feed, chat list and a conversation** fall back to what was saved when a load
+  fails for lack of network. Sending, posting and reacting still need a
+  connection and say so.
+- **Dark mode:**
+  - the palette resolves against the current brightness;
+  - a dark theme is built from the same colours;
+  - the choice is remembered on the phone; it is a display preference, not
+    personal data.
+- **Records:** decision M.11 (amending M.2), and DATA_MAP's table of what stays
+  on the phone.
+- **Tests:** widget tests for the encrypted store's round trip and wipe, offline
+  start, the fallbacks, and dark mode. A live check on the emulator in
+  aeroplane mode.
