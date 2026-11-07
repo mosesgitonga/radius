@@ -23,6 +23,7 @@ from app.modules.auth.models import DeviceSession
 from app.modules.circle import service as circle_service
 from app.modules.events import service as events_service
 from app.modules.feed import service as feed_service
+from app.modules.feed import votes as feed_votes
 from app.modules.follows import service as follows_service
 from app.modules.groups import service as groups_service
 from app.modules.marketplace import service as marketplace_service
@@ -82,6 +83,7 @@ async def purge_deleted_accounts(
 
     for user in due:
         await auth_service.revoke_sessions_for_deleted_account(session, user_id=user.id)
+        await feed_votes.purge_user_votes(session, user_id=user.id)
         await feed_service.purge_author_content(session, user_id=user.id)
         # Messages before media: the media purge strips every image the account
         # uploaded, message images included, so messaging only clears text here.

@@ -45,6 +45,7 @@ PURGE_REGISTRY: dict[str, tuple[Handling, str]] = {
     "event_reminders_sent.user_id": (Handling.erased, "Reminder ledger"),
     "saved_listings.user_id": (Handling.erased, "Saved items"),
     "reactions.user_id": (Handling.erased, "Reactions carry no content"),
+    "comment_votes.user_id": (Handling.erased, "Taken back out of the scores too"),
     "story_views.viewer_id": (Handling.erased, "Who watched what"),
     "vouches.voucher_id": (Handling.erased, "Both directions"),
     "vouches.vouchee_id": (Handling.erased, "Both directions"),

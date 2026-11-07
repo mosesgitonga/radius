@@ -30,14 +30,20 @@ from datetime import UTC, datetime
 from typing import Any
 
 from redis.asyncio import Redis
-from sqlalchemy import Select, delete, or_, select, update
+from sqlalchemy import Select, and_, delete, or_, select, tuple_, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import RadiusFeature, Settings
 from app.core.db import execute_dml
-from app.core.errors import BadRequestError, ConflictError, ForbiddenError, NotFoundError
-from app.core.pagination import PageParams, paginate
+from app.core.errors import (
+    BadRequestError,
+    ConflictError,
+    ForbiddenError,
+    InvalidCursorError,
+    NotFoundError,
+)
+from app.core.pagination import PageParams, decode_cursor, encode_cursor, paginate
 from app.modules.circle import links as circle_links
 from app.modules.feed.models import (
     Audience,
@@ -638,10 +644,12 @@ async def list_comments(
     parent_id: uuid.UUID | None,
     params: PageParams,
 ) -> tuple[list[Comment], str | None]:
-    """Top-level comments on a post, or the replies to one, oldest first.
+    """Top-level comments on a post, best first; or the replies to one, oldest
+    first.
 
-    Oldest first because a conversation reads top to bottom — unlike the feed,
-    where the newest thing is the most useful one.
+    Top-level comments are ranked by net score (up minus down votes), ties oldest
+    first (decision 2.21). Replies stay oldest first, because a thread reads top
+    to bottom.
     """
     post = await get_post(session, viewer=viewer, post_id=post_id)
     if parent_id is not None:
@@ -662,14 +670,54 @@ async def list_comments(
     if blocked:
         statement = statement.where(Comment.author_id.not_in(blocked))
 
-    return await paginate(
-        session,
-        statement,
-        sort_column=Comment.created_at,
-        id_column=Comment.id,
-        params=params,
-        descending=False,
+    if parent_id is not None:
+        return await paginate(
+            session,
+            statement,
+            sort_column=Comment.created_at,
+            id_column=Comment.id,
+            params=params,
+            descending=False,
+        )
+    return await _ranked(session, statement, params)
+
+
+async def _ranked(
+    session: AsyncSession, statement: Select[Comment], params: PageParams
+) -> tuple[list[Comment], str | None]:
+    """Keyset paging on (score descending, created_at, id): the shared paginator
+    handles one sort column, and this order needs two. The cursor carries the last
+    row's score and time together."""
+    if params.cursor:
+        sort_value, last_id = decode_cursor(params.cursor)
+        try:
+            score_text, created_text = str(sort_value).split("|", 1)
+            score, created = int(score_text), datetime.fromisoformat(created_text)
+        except ValueError:
+            raise InvalidCursorError() from None
+        statement = statement.where(
+            or_(
+                Comment.score < score,
+                and_(
+                    Comment.score == score,
+                    tuple_(Comment.created_at, Comment.id) > tuple_(created, last_id),
+                ),
+            )
+        )
+    rows = list(
+        (
+            await session.execute(
+                statement.order_by(
+                    Comment.score.desc(), Comment.created_at.asc(), Comment.id.asc()
+                ).limit(params.limit + 1)
+            )
+        ).scalars()
     )
+    if len(rows) <= params.limit:
+        return rows, None
+    page = rows[: params.limit]
+    last = page[-1]
+    return page, encode_cursor(f"{last.score}|{last.created_at.isoformat()}", last.id)
 
 
 async def delete_comment(session: AsyncSession, *, viewer: User, comment_id: uuid.UUID) -> None:

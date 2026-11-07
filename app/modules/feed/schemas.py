@@ -158,6 +158,13 @@ class CommentOut(BaseModel):
     reply_count: int
     reaction_count: int
     my_reaction: str | None = None
+    score: int = Field(
+        default=0,
+        description="Upvotes minus downvotes. Top-level comments come highest first.",
+    )
+    my_vote: int = Field(
+        default=0, ge=-1, le=1, description="The caller's vote: 1 up, -1 down, 0 none."
+    )
     created_at: datetime
 
 
@@ -178,6 +185,15 @@ class ReactionIn(BaseModel):
 class ReactionOut(BaseModel):
     kind: str | None = Field(description="The caller's reaction now, or null if removed.")
     reaction_count: int
+
+
+class VoteIn(BaseModel):
+    value: Literal[-1, 1] = Field(description="1 to vote up, -1 to vote down.", examples=[1])
+
+
+class VoteOut(BaseModel):
+    score: int = Field(description="The comment's score now: upvotes minus downvotes.")
+    my_vote: int = Field(ge=-1, le=1, description="The caller's vote now; 0 once removed.")
 
 
 class GuestFeedIn(HomeReadingIn):

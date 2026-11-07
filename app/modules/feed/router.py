@@ -24,7 +24,7 @@ from app.modules.auth.dependencies import (
     tiered_user_rate_limit,
     user_rate_limit,
 )
-from app.modules.feed import guest, views
+from app.modules.feed import guest, views, votes
 from app.modules.feed import service as feed_service
 from app.modules.feed.models import Post, Story, StoryKind
 from app.modules.feed.schemas import (
@@ -45,6 +45,8 @@ from app.modules.feed.schemas import (
     StoryPageOut,
     StoryViewerOut,
     StoryViewerPageOut,
+    VoteIn,
+    VoteOut,
 )
 from app.modules.users import service as users_service
 from app.modules.users.models import User
@@ -548,6 +550,41 @@ async def unreact_to_comment(
 ) -> ReactionOut:
     count = await feed_service.remove_reaction(session, user=user, comment_id=comment_id)
     return ReactionOut(kind=None, reaction_count=count)
+
+
+@router.put(
+    "/comments/{comment_id}/vote",
+    response_model=VoteOut,
+    summary="Vote a comment up or down",
+    description=(
+        "One vote per person per comment; sending the other value changes it. "
+        "Top-level comments are listed highest score first. You can't vote on your "
+        "own comment. An upvote notifies the author; a downvote never does."
+    ),
+    dependencies=[Depends(_reaction_limit)],
+)
+async def vote_on_comment(
+    comment_id: uuid.UUID,
+    payload: VoteIn,
+    user: ActiveUser,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> VoteOut:
+    score = await votes.set_vote(
+        session, user=user, comment_id=comment_id, value=payload.value, settings=settings
+    )
+    return VoteOut(score=score, my_vote=payload.value)
+
+
+@router.delete(
+    "/comments/{comment_id}/vote",
+    response_model=VoteOut,
+    summary="Take back my vote on a comment",
+    description="Succeeds if there was no vote, since the outcome already holds.",
+)
+async def unvote_comment(comment_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> VoteOut:
+    score = await votes.remove_vote(session, user=user, comment_id=comment_id)
+    return VoteOut(score=score, my_vote=0)
 
 
 # ---------------------------------------------------------------------------

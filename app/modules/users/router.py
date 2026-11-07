@@ -22,6 +22,7 @@ from app.modules.auth.dependencies import ActiveUser, CurrentUser, user_rate_lim
 from app.modules.circle import service as circle_service
 from app.modules.events import service as events_service
 from app.modules.feed import service as feed_service
+from app.modules.feed import votes as feed_votes
 from app.modules.follows import service as follows_service
 from app.modules.groups import service as groups_service
 from app.modules.location import cells
@@ -511,6 +512,7 @@ async def export_my_data(
     # Each module exports its own data; the router assembles the whole. The users
     # service cannot do it itself, because the feed imports the users service.
     export["content"] = await feed_service.export_author_content(session, user_id=user.id)
+    export["comment_votes"] = await feed_votes.export_user_votes(session, user_id=user.id)
     export["media"] = await media_service.export_owner_media(session, owner_id=user.id)
     export["groups"] = await groups_service.export_user_groups(session, user_id=user.id)
     export["marketplace"] = await marketplace_service.export_user_listings(session, user_id=user.id)

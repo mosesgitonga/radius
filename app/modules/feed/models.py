@@ -31,6 +31,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    SmallInteger,
     String,
     UniqueConstraint,
     func,
@@ -339,6 +340,9 @@ class Comment(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reply_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     reaction_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    score: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    """Upvotes minus downvotes. Top-level comments are ranked by it (decision
+    2.21); changed only by SQL increments, as the other counters are."""
 
     __table_args__ = (
         CheckConstraint("length(body) > 0", name="comment_body_not_empty"),
@@ -346,11 +350,40 @@ class Comment(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
         CheckConstraint("parent_id IS NULL OR parent_id <> id", name="comment_not_self_parent"),
         # Top-level comments on a post, oldest first, paginated.
         Index("ix_comments_post_id_parent_id_created_at", "post_id", "parent_id", "created_at"),
+        # Top-level comments best first: score, then oldest.
+        Index(
+            "ix_comments_post_id_parent_id_score_created_at",
+            "post_id",
+            "parent_id",
+            text("score DESC"),
+            "created_at",
+        ),
     )
 
     @property
     def is_reply(self) -> bool:
         return self.parent_id is not None
+
+
+class CommentVote(Base, UUIDPrimaryKeyMixin):
+    """One person's up (+1) or down (-1) vote on a comment. Separate from reactions,
+    which say how someone felt; a vote says whether the comment should rank higher."""
+
+    __tablename__ = "comment_votes"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    comment_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("comments.id", ondelete="CASCADE"), index=True
+    )
+    value: Mapped[int] = mapped_column(SmallInteger)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "comment_id", name="uq_comment_votes_user_id_comment_id"),
+        CheckConstraint("value IN (-1, 1)", name="comment_vote_value"),
+    )
 
 
 class Reaction(Base, UUIDPrimaryKeyMixin):

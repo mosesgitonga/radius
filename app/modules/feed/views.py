@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.providers.storage import StorageProvider
+from app.modules.feed import votes
 from app.modules.feed.models import Comment, Post, Story, StoryKind, StoryView
 from app.modules.feed.schemas import (
     AuthorOut,
@@ -221,6 +222,9 @@ async def comment_views(
     mine = await reactions_by(
         session, user_id=viewer.id, comment_ids=[comment.id for comment in comments]
     )
+    my_votes = await votes.votes_by(
+        session, user_id=viewer.id, comment_ids=[comment.id for comment in comments]
+    )
 
     views: list[CommentOut] = []
     for comment in comments:
@@ -241,6 +245,8 @@ async def comment_views(
                 reply_count=comment.reply_count,
                 reaction_count=comment.reaction_count,
                 my_reaction=mine.get(comment.id),
+                score=comment.score,
+                my_vote=my_votes.get(comment.id, 0),
                 created_at=comment.created_at,
             )
         )
