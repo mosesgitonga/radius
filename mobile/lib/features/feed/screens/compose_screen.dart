@@ -99,7 +99,8 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final auth = ref.watch(authControllerProvider);
-    final area = auth is AuthSignedIn ? (auth.me.areaLabel?.label ?? 'your area') : 'your area';
+    final label = auth is AuthSignedIn ? auth.me.areaLabel : null;
+    final area = label == null || label.precision == 'generic' ? 'your area' : label.label;
 
     return Scaffold(
       appBar: AppBar(

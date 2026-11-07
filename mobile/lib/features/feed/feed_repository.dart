@@ -45,6 +45,13 @@ class FeedRepository {
     await _offline.write('feed', {...saved, 'items': have.take(savedPosts).toList()});
   }
 
+  Future<void> _savePosted(Object? post) async {
+    final saved = await _offline.read('feed');
+    if (saved is! Map || post is! Map) return;
+    final items = [post, ...(saved['items'] as List).where((item) => (item as Map)['id'] != post['id'])];
+    await _offline.write('feed', {...saved, 'items': items.take(savedPosts).toList()});
+  }
+
   Future<Post> post(String id) async =>
       Post.fromJson(Map<String, dynamic>.from(await _api.get('/posts/$id') as Map));
 
@@ -94,6 +101,8 @@ class FeedRepository {
   }) async {
     final data = Map<String, dynamic>.from(await _api.post('/posts',
         body: {'body': body, 'category': category, 'media_ids': mediaIds}, idempotent: true) as Map);
+    // Shown at the top of the feed straight away, so it joins the saved copy too.
+    unawaited(_savePosted(data['post']));
     return (
       Post.fromJson(Map<String, dynamic>.from(data['post'] as Map)),
       data['reach_estimate'] as int,

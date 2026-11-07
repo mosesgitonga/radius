@@ -35,7 +35,8 @@ class _HomeAreaScreenState extends ConsumerState<HomeAreaScreen> {
     try {
       final reading = await ref.read(locationReaderProvider).readHere();
       final area = await ref.read(authRepositoryProvider).setHome(reading, atHome: atHome);
-      setState(() => _areaName = area.label);
+      // Too few neighbours yet to name the place safely: say "your area" instead.
+      setState(() => _areaName = area.precision == 'generic' ? 'your area' : area.label);
     } on LocationProblem catch (problem) {
       setState(() => _error = problem.message);
     } on ApiException catch (error) {

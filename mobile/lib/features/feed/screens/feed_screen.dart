@@ -108,7 +108,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     final feed = ref.watch(feedControllerProvider);
     final auth = ref.watch(authControllerProvider);
     final me = auth is AuthSignedIn ? auth.me : null;
-    final area = me?.areaLabel?.label ?? 'Your area';
+    final area = me?.areaLabel?.heading ?? 'Your area';
     final radius = feed.radiusKm;
 
     return Scaffold(

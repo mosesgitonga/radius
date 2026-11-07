@@ -3336,3 +3336,59 @@ feed; and dark mode. Decided with the product owner the same day:
 - **Tests:** widget tests for the encrypted store's round trip and wipe, offline
   start, the fallbacks, and dark mode. A live check on the emulator in
   aeroplane mode.
+
+### Built and verified (2026-11-07)
+
+**Dark mode:**
+- **The palette:** `Palette` resolves light or dark (`PaletteColors.light` /
+  `.dark`), and `buildTheme(Brightness)` builds both themes. The app sets the
+  palette from the theme in use, and switching modes rebuilds the screens under
+  a new key.
+- **White, split in two:** `Palette.white` became `Palette.surface` (cards,
+  sheets, fields; dark at night) and `Palette.onPrimary` (text and icons on the
+  brand colour or photos; white always). The `const` keywords this made invalid
+  were removed.
+- **The setting:** Me › Appearance offers Same as phone, Light or Dark, kept in
+  `appearance.json`.
+- **Contrast:** body text in dark mode passes WCAG AA (tested).
+
+**Offline:**
+- **The store:** `lib/core/offline_store.dart`, AES-256-GCM, with the key in the
+  keystore.
+- **`fetchOrRecall`:** saves each good response in the background and recalls
+  it when the network fails.
+- **What is saved:**
+  - the account;
+  - the Home feed, up to 50 posts. Your own new posts join it at once.
+  - the three inbox lists, up to 30 chats; saved chats outside the latest 30 are
+    pruned;
+  - each chat's latest 50 messages and its member names.
+  Older pages and catching up are never served from the saved copy.
+- **Opening offline** with a stored session goes into the app. A banner says
+  so, with Retry. The app tries the server every 20 seconds and on returning to
+  the app; once it answers, the feed, chats and stories reload.
+- **Wiped** at sign-out, when the session ends, and on a deletion request.
+- **Tests:** `test/offline_test.dart` (repositories and app) and
+  `test/appearance_test.dart`. The sign-in and Me tests use the in-memory
+  store, since real file I/O does not complete under the widget-test clock.
+
+**Live**, on the emulator against the staging server (https://myradius.chatara.co):
+- dark mode followed the phone;
+- a new staging account signed up (code read from the server log) and posted;
+- with the network cut and the app restarted from cold, the app opened on the
+  saved post under the offline banner;
+- with the network back, it reconnected by itself in about 20 seconds.
+
+**Found and fixed in the live check:**
+- **A missing post.** A post you had just made was not in the saved feed, as the
+  screen adds it without reloading. It is now saved too.
+- **"nearby" as a heading.** It showed wherever an area cannot be named yet for
+  privacy (a near-empty server). Headings now say "Around you", and the home step
+  and new-post screen say "your area".
+- **Pale initials** on avatar circles in dark mode.
+
+**Not covered:**
+- **Photo cache:** it is still not encrypted or cleared at sign-out (DATA_MAP,
+  as before).
+- **Chats live:** offline chats are covered by the widget tests, not live,
+  because the new staging account had no chats.

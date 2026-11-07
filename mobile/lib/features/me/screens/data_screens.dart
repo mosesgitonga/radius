@@ -245,7 +245,7 @@ class _MoveHomeScreenState extends ConsumerState<MoveHomeScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          Text(_moved ?? me?.areaLabel?.label ?? 'Not set', style: text.headlineSmall),
+          Text(_moved ?? me?.areaLabel?.heading ?? 'Not set', style: text.headlineSmall),
           const SizedBox(height: 6),
           Text(
             _moved != null

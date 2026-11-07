@@ -29,7 +29,8 @@ class InitialsAvatar extends StatelessWidget {
       backgroundColor: tone,
       child: Text(
         author.initials,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontSize: radius * 0.7),
+        // The tones are light in both modes, so the initials stay dark on them.
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontSize: radius * 0.7, color: PaletteColors.light.ink),
       ),
     );
     final url = sizeFor(author.avatar, (radius * 2 * MediaQuery.devicePixelRatioOf(context)).round());

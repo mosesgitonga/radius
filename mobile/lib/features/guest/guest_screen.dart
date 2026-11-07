@@ -155,7 +155,7 @@ class _GuestScreenState extends ConsumerState<GuestScreen> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(feed.area.label, style: text.headlineSmall),
+                                      Text(feed.area.heading, style: text.headlineSmall),
                                       const SizedBox(height: 2),
                                       Text('Posts from around you', style: text.bodySmall),
                                     ],
@@ -186,7 +186,7 @@ class _GuestScreenState extends ConsumerState<GuestScreen> {
                                   Text('Nothing here yet', style: text.titleLarge),
                                   const SizedBox(height: 8),
                                   Text(
-                                    'Be the first in ${feed.area.label}: join and post a question, a '
+                                    'Be the first around here: join and post a question, a '
                                     'recommendation, or something lost or found.',
                                     style: text.bodyMedium?.copyWith(color: Palette.muted),
                                     textAlign: TextAlign.center,

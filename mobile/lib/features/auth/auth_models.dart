@@ -43,6 +43,10 @@ class AreaLabel {
 
   final String label;
   final String precision;
+
+  /// For a heading: too few neighbours to name the place yet (k-anonymity) reads
+  /// as "Around you" rather than a bare "nearby".
+  String get heading => precision == 'generic' ? 'Around you' : label;
 }
 
 /// The signed-in account, as `GET /v1/me` returns it.
