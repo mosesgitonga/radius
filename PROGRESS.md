@@ -3392,3 +3392,41 @@ feed; and dark mode. Decided with the product owner the same day:
   as before).
 - **Chats live:** offline chats are covered by the widget tests, not live,
   because the new staging account had no chats.
+
+## Slice 16 — replies, and voting on comments
+
+### Plan
+
+Asked for on 2026-11-07: reply to a comment, upvote or downvote comments, and the
+most upvoted comments shown first. Decided with the product owner the same day:
+- **Ranking:** top-level comments by **net score** (up minus down), ties oldest
+  first.
+- **Display:** one score between ▲ and ▼; the counts of each are not shown.
+- **Replies:** oldest first, like a conversation, and they can be voted on too.
+
+**Backend (migration 0019):**
+- **`comment_votes`:** (user, comment, value +1 or −1), one per person per
+  comment.
+- **`comments.score`:** the net of the votes, changed by SQL increments so
+  simultaneous votes cannot be lost, and indexed for the ranking.
+- **Endpoints:**
+  - `PUT /v1/comments/{id}/vote` with `{"value": 1 | -1}`, and
+    `DELETE /v1/comments/{id}/vote`;
+  - both return the new score and the caller's vote.
+  - You cannot vote on your own comment.
+  - Blocking and moderation apply as for reading the comment.
+- **Listing:** `GET /posts/{id}/comments` ranks top-level comments by score
+  (keyset on score, time and ID). Replies stay oldest first.
+- **`CommentOut`** gains `score` and `my_vote`. Reactions stay as they were.
+- **Notifications:** an upvote notifies the author like a reaction, collapsed;
+  a downvote never notifies.
+- **Data rights:** votes are exported. A purge removes them and takes them back
+  out of the scores they counted in. Recorded in DATA_MAP and decision 2.x.
+
+**App:**
+- **On each comment:** ▲ score ▼ (yours highlighted; tap again to undo), a
+  **Reply** button, and "N replies" to open them in place.
+- **Replying:** shows "Replying to Name" above the comment box. A reply to a
+  reply joins the same thread, since there is one level of replies.
+- **Tests:** server and widget tests, and a live check on the phone against
+  staging.
