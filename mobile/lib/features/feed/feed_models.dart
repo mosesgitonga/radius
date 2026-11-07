@@ -169,6 +169,10 @@ class Comment {
     required this.isVisiting,
     required this.createdAt,
     this.authorArea,
+    this.parentId,
+    this.replyCount = 0,
+    this.score = 0,
+    this.myVote = 0,
   });
 
   factory Comment.fromJson(Map<String, dynamic> json) => Comment(
@@ -180,6 +184,10 @@ class Comment {
         authorArea: json['author_area_label'] == null
             ? null
             : AreaLabel.fromJson(Map<String, dynamic>.from(json['author_area_label'] as Map)),
+        parentId: json['parent_id'] as String?,
+        replyCount: json['reply_count'] as int? ?? 0,
+        score: json['score'] as int? ?? 0,
+        myVote: json['my_vote'] as int? ?? 0,
       );
 
   final String id;
@@ -188,7 +196,37 @@ class Comment {
   final bool isVisiting;
   final DateTime createdAt;
   final AreaLabel? authorArea;
+
+  /// The top-level comment this replies to; null for a top-level comment.
+  final String? parentId;
+  final int replyCount;
+
+  /// Upvotes minus downvotes. Top-level comments come highest first.
+  final int score;
+
+  /// The viewer's vote: 1 up, -1 down, 0 none.
+  final int myVote;
+
+  /// The top-level comment whose thread this belongs to. Replies are one level
+  /// deep, so a reply to a reply joins the same thread.
+  String get threadId => parentId ?? id;
+
+  Comment copyWith({int? replyCount, int? score, int? myVote}) => Comment(
+        id: id,
+        author: author,
+        body: body,
+        isVisiting: isVisiting,
+        createdAt: createdAt,
+        authorArea: authorArea,
+        parentId: parentId,
+        replyCount: replyCount ?? this.replyCount,
+        score: score ?? this.score,
+        myVote: myVote ?? this.myVote,
+      );
 }
+
+/// A comment's score and the viewer's vote, as the server has them after a vote.
+typedef VoteResult = ({int score, int myVote});
 
 /// A page of anything, as every list in the API returns it.
 class ResultPage<T> {

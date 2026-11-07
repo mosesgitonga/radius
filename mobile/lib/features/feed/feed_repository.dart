@@ -55,18 +55,34 @@ class FeedRepository {
   Future<Post> post(String id) async =>
       Post.fromJson(Map<String, dynamic>.from(await _api.get('/posts/$id') as Map));
 
-  Future<ResultPage<Comment>> comments(String postId, {String? cursor}) async {
-    final data = Map<String, dynamic>.from(
-        await _api.get('/posts/$postId/comments', query: {'cursor': ?cursor}) as Map);
+  /// Top-level comments, highest score first; or, with [parentId], that
+  /// comment's replies, oldest first.
+  Future<ResultPage<Comment>> comments(String postId, {String? cursor, String? parentId}) async {
+    final data = Map<String, dynamic>.from(await _api.get('/posts/$postId/comments',
+        query: {'cursor': ?cursor, 'parent_id': ?parentId}) as Map);
     return ResultPage(
       [for (final item in data['items'] as List) Comment.fromJson(Map<String, dynamic>.from(item as Map))],
       data['next_cursor'] as String?,
     );
   }
 
-  Future<Comment> addComment(String postId, String body) async => Comment.fromJson(
+  /// A comment, or with [parentId] a reply to that top-level comment.
+  Future<Comment> addComment(String postId, String body, {String? parentId}) async => Comment.fromJson(
       Map<String, dynamic>.from(await _api.post('/posts/$postId/comments',
-          body: {'body': body}, idempotent: true) as Map));
+          body: {'body': body, 'parent_id': ?parentId}, idempotent: true) as Map));
+
+  /// Votes a comment up (1) or down (-1), replacing any earlier vote.
+  Future<VoteResult> vote(String commentId, int value) async =>
+      _voteResult(await _api.put('/comments/$commentId/vote', body: {'value': value}));
+
+  /// Takes the vote back.
+  Future<VoteResult> unvote(String commentId) async =>
+      _voteResult(await _api.delete('/comments/$commentId/vote'));
+
+  static VoteResult _voteResult(dynamic json) {
+    final data = Map<String, dynamic>.from(json as Map);
+    return (score: data['score'] as int, myVote: data['my_vote'] as int);
+  }
 
   /// Sets the caller's reaction; returns the new count.
   Future<int> react(String postId, String kind) async {

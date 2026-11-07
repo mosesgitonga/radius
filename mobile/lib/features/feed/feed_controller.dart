@@ -59,9 +59,12 @@ class FeedController extends Notifier<FeedState> {
   }
 
   Future<void> refresh() async {
+    // Nothing is watching any more (the screen that read it has gone).
+    if (!ref.mounted) return;
     state = state.copyWith(loading: true, clearError: true);
     try {
       final page = await ref.read(feedRepositoryProvider).feed();
+      if (!ref.mounted) return;
       state = FeedState(
         posts: page.items,
         nextCursor: page.nextCursor,
@@ -69,7 +72,7 @@ class FeedController extends Notifier<FeedState> {
         loading: false,
       );
     } on ApiException catch (error) {
-      state = state.copyWith(loading: false, error: error);
+      if (ref.mounted) state = state.copyWith(loading: false, error: error);
     }
   }
 
