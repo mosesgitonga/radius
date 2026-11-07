@@ -821,6 +821,33 @@ their module's data. The export endpoint and the purge task call all of them.
 data-map rule is that a phase adding personal data extends export and erasure in the
 same change. This shape makes that one new function per module.
 
+### 2.21 Comment votes, and top comments ranked by net score (added with slice 16)
+
+**Choice.**
+- **Votes:** anyone who may comment on a post may vote each comment on it up (+1)
+  or down (-1), one vote per person per comment. Voting the other way changes the
+  vote; `DELETE` takes it back. `comments.score` holds upvotes minus downvotes and
+  is changed only by SQL increments.
+- **Not on your own comment.** Refused with a 400, so nobody props up their own.
+- **Ranking:** top-level comments list highest score first, ties oldest first.
+  The keyset cursor carries the score, the time and the ID. Replies stay oldest
+  first, since a reply thread is a conversation, and can be voted on too.
+- **Notifications:** an upvote notifies the author, collapsed with reactions on
+  that comment. A downvote never notifies anyone.
+- **Shown as one number,** ▲ score ▼, not separate up and down counts. Who voted
+  is never shown.
+- **Data rights:** votes are exported. The purge subtracts the person's votes from
+  the scores they counted in, then deletes them.
+
+**Reasoning.** Net score is the simplest ranking people already understand.
+Telling someone their comment was downvoted only invites a row, so downvotes stay
+silent. The existing like reaction on comments stays: it is a different signal
+("I like this"), and the app shows the vote, not the like, under comments.
+
+**Alternatives.** Ranking by upvotes only: downvotes would then do nothing visible.
+A Wilson-score or time-decayed rank: fairer to new comments on busy posts, but
+hard to explain, and threads here are small. Revisit with real data.
+
 ---
 
 ### Deferred from Phase 2, with the phase that will own it

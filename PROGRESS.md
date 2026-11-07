@@ -3421,7 +3421,7 @@ most upvoted comments shown first. Decided with the product owner the same day:
 - **Notifications:** an upvote notifies the author like a reaction, collapsed;
   a downvote never notifies.
 - **Data rights:** votes are exported. A purge removes them and takes them back
-  out of the scores they counted in. Recorded in DATA_MAP and decision 2.x.
+  out of the scores they counted in. Recorded in DATA_MAP and decision 2.21.
 
 **App:**
 - **On each comment:** ▲ score ▼ (yours highlighted; tap again to undo), a

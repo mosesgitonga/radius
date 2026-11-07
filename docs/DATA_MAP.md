@@ -207,6 +207,8 @@ and filtered through blocking.
 | Comment: `post_id`, `author_id`, `parent_id`, `body`, `status` | The conversation | Soft-deleted; purged with the account |
 | `is_visiting` | Marks a comment written while exploring (decision 1.1, rule 3) | With the comment |
 | Reaction: `user_id`, target, `kind`, `created_at` | Reactions | Deleted on account purge |
+| Comment `score` | Upvotes minus downvotes; ranks top-level comments (decision 2.21) | With the comment; a purged voter's votes are subtracted |
+| Comment vote: `user_id`, `comment_id`, `value` (+1/-1), `created_at` | One vote per person per comment | Exported; deleted on account purge |
 
 `is_visiting` is a boolean, not a location: it records *that* the author was
 elsewhere, never *where*.
@@ -800,7 +802,7 @@ drops an unsent message.
 
 | Right | Status | Where |
 | --- | --- | --- |
-| Access (export as JSON) | **Implemented** (through Phase 8) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, uploads, group memberships and groups created, listings and saved listings, service posts, reviews written and received, events organised and replied to, conversations, messages sent, devices, notification preferences and notifications, standing, vouches, warnings received and reports filed, the circle and its requests, and follows |
+| Access (export as JSON) | **Implemented** (through Phase 8) | `GET /v1/me/export`: account, consents, blocks, location summary, posts, comments, stories, reactions, comment votes, uploads, group memberships and groups created, listings and saved listings, service posts, reviews written and received, events organised and replied to, conversations, messages sent, devices, notification preferences and notifications, standing, vouches, warnings received and reports filed, the circle and its requests, and follows |
 | Rectification | **Implemented** | `PATCH /v1/me` |
 | Erasure | **Implemented** (through Phase 8) | `POST /v1/me/deletion-request`, 30-day grace, then `run_retention` purges the account, its content, its group memberships (passing on groups it owned), its listings and saved listings, its service posts and reviews, its events and replies, its messages, its devices and notifications, its stored images, its blocks, vouches and warnings, its circle links and requests (both ways) and follows, and the installation hashes on its sessions. Content and records are then hard-deleted by retention |
 | Restriction of processing | **Implemented** | Moderators suspend or restrict an account (`/v1/admin/users/{id}/suspend`, `/restrict`); the person sees it at `GET /v1/me/standing` |
