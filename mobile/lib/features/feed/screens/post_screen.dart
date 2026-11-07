@@ -254,8 +254,10 @@ class _PostScreenState extends ConsumerState<PostScreen> {
       comment: comment,
       onAuthor: () => openProfile(context, ref, comment.author.id),
       onReport: mine ? null : () => _report('comment', comment.id, 'comment'),
-      // Nobody votes on their own comment; they still see its score.
-      onVote: mine ? null : (value) => _vote(comment, value),
+      // Nobody votes on their own comment. The arrows stay, faded, and say why
+      // when tapped, so they never look broken.
+      ownComment: mine,
+      onVote: mine ? (_) => _toast("You can't vote on your own comment") : (value) => _vote(comment, value),
       onReply: () => _startReply(comment),
     );
   }
@@ -409,17 +411,19 @@ class _CommentTile extends StatelessWidget {
     required this.comment,
     required this.onAuthor,
     required this.onReply,
+    required this.onVote,
     this.onReport,
-    this.onVote,
+    this.ownComment = false,
   });
 
   final Comment comment;
   final VoidCallback onAuthor;
   final VoidCallback onReply;
   final VoidCallback? onReport;
+  final ValueChanged<int> onVote;
 
-  /// Null on the viewer's own comment.
-  final ValueChanged<int>? onVote;
+  /// The viewer wrote it, so the arrows are faded.
+  final bool ownComment;
 
   @override
   Widget build(BuildContext context) {
@@ -467,7 +471,7 @@ class _CommentTile extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    _VoteArrow(up: true, active: comment.myVote == 1, onTap: onVote),
+                    _VoteArrow(up: true, active: comment.myVote == 1, faded: ownComment, onTap: onVote),
                     Text(
                       '${comment.score}',
                       style: text.labelMedium?.copyWith(
@@ -475,7 +479,7 @@ class _CommentTile extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    _VoteArrow(up: false, active: comment.myVote == -1, onTap: onVote),
+                    _VoteArrow(up: false, active: comment.myVote == -1, faded: ownComment, onTap: onVote),
                     const SizedBox(width: 6),
                     TextButton(
                       onPressed: onReply,
@@ -508,17 +512,17 @@ Color _voteColour({required bool up}) => up ? Palette.primary : Palette.danger;
 
 /// ▲ or ▼. Lit when it is the viewer's vote; tapping it again takes the vote back.
 class _VoteArrow extends StatelessWidget {
-  const _VoteArrow({required this.up, required this.active, required this.onTap});
+  const _VoteArrow({required this.up, required this.active, required this.onTap, this.faded = false});
 
   final bool up;
   final bool active;
-  final ValueChanged<int>? onTap;
+  final bool faded;
+  final ValueChanged<int> onTap;
 
   @override
   Widget build(BuildContext context) {
-    final tap = onTap;
     return IconButton(
-      onPressed: tap == null ? null : () => tap(up ? 1 : -1),
+      onPressed: () => onTap(up ? 1 : -1),
       tooltip: up ? 'Vote up' : 'Vote down',
       isSelected: active,
       visualDensity: VisualDensity.compact,
@@ -527,7 +531,7 @@ class _VoteArrow extends StatelessWidget {
       icon: Icon(
         up ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
         size: 18,
-        color: active ? _voteColour(up: up) : Palette.muted,
+        color: active ? _voteColour(up: up) : Palette.muted.withValues(alpha: faded ? 0.4 : 1),
       ),
     );
   }

@@ -112,9 +112,12 @@ void main() {
       expect(find.text('4'), findsOneWidget);
       expect(sent.last.method, 'DELETE');
 
-      // Your own comment shows its score, with the arrows off.
-      final ownArrows = tester.widgetList<IconButton>(find.widgetWithIcon(IconButton, Icons.arrow_upward_rounded));
-      expect(ownArrows.where((button) => button.onPressed == null), hasLength(1));
+      // Your own comment: the arrows say why they do nothing, and send nothing.
+      final before = sent.length;
+      await tester.tap(find.byTooltip('Vote up').last);
+      await tester.pumpAndSettle();
+      expect(find.text("You can't vote on your own comment"), findsOneWidget);
+      expect(sent.length, before);
     });
 
     testWidgets('a refused vote is put back', (tester) async {
