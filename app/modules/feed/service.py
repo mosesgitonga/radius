@@ -50,6 +50,7 @@ from app.modules.feed.models import (
     Comment,
     Post,
     PostApproval,
+    PostEdit,
     PostImage,
     Reaction,
     Story,
@@ -334,6 +335,66 @@ async def delete_post(session: AsyncSession, *, viewer: User, post_id: uuid.UUID
         raise ForbiddenError("Only the author can delete a post")
     post.deleted_at = datetime.now(UTC)
     await session.flush()
+
+
+async def edit_post(
+    session: AsyncSession,
+    *,
+    viewer: User,
+    post_id: uuid.UUID,
+    body: str | None,
+    category: str | None,
+    settings: Settings,
+) -> Post:
+    """Change one's own post's text or category (decision 2.22).
+
+    The previous version is kept for moderators, so an edit can't hide what was
+    reported. The checks are posting's, including the hold on a restricted
+    account. In a group that approves posts, a member's edit goes back for
+    approval; the group's moderators edit freely. Sending what is already there
+    changes nothing.
+    """
+    post = await get_post(session, viewer=viewer, post_id=post_id)
+    if post.author_id != viewer.id:
+        raise ForbiddenError("Only the author can edit a post")
+
+    new_body = post.body if body is None else body.strip()
+    new_category = post.category if category is None else category
+    if not new_body:
+        raise BadRequestError("A post cannot be empty")
+    if len(new_body) > settings.post_max_body_length:
+        raise BadRequestError(
+            f"Posts are limited to {settings.post_max_body_length} characters",
+            details={"max_length": settings.post_max_body_length},
+        )
+    if new_category not in settings.post_category_list:
+        raise BadRequestError(
+            "That category does not exist",
+            details={"categories": list(settings.post_category_list)},
+        )
+    if new_body == post.body and new_category == post.category:
+        return post
+
+    back_to_approval = False
+    if post.group_id is not None:
+        view = await group_access.require_participation(
+            session, group_id=post.group_id, viewer_id=viewer.id
+        )
+        back_to_approval = view.group.requires_post_approval and view.role == GroupRole.member
+
+    session.add(PostEdit(post_id=post.id, body=post.body, category=post.category))
+    post.body = new_body
+    post.category = new_category
+    post.edited_at = datetime.now(UTC)
+    if back_to_approval:
+        post.approval_status = PostApproval.pending
+        post.pinned_at = None
+    await session.flush()
+    await hold_if_restricted(session, author=viewer, content=post, target_type="post")
+    logger.info(
+        "post_edited", extra={"post_id": str(post.id), "back_to_approval": back_to_approval}
+    )
+    return post
 
 
 # ---------------------------------------------------------------------------
@@ -1151,6 +1212,22 @@ async def export_author_content(session: AsyncSession, *, user_id: uuid.UUID) ->
             select(Post).where(Post.author_id == user_id).order_by(Post.created_at)
         )
     ).scalars()
+    edits: dict[uuid.UUID, list[dict[str, Any]]] = {}
+    for edit in (
+        await session.execute(
+            select(PostEdit)
+            .join(Post, Post.id == PostEdit.post_id)
+            .where(Post.author_id == user_id)
+            .order_by(PostEdit.edited_at, PostEdit.id)
+        )
+    ).scalars():
+        edits.setdefault(edit.post_id, []).append(
+            {
+                "body": edit.body,
+                "category": edit.category,
+                "replaced_at": edit.edited_at.isoformat(),
+            }
+        )
     comments = (
         await session.execute(
             select(Comment).where(Comment.author_id == user_id).order_by(Comment.created_at)
@@ -1177,6 +1254,8 @@ async def export_author_content(session: AsyncSession, *, user_id: uuid.UUID) ->
                 "image_media_ids": [str(image.media_id) for image in post.images],
                 "status": str(post.status),
                 "created_at": _when(post.created_at),
+                "edited_at": _when(post.edited_at),
+                "earlier_versions": edits.get(post.id, []),
                 "deleted_at": _when(post.deleted_at),
             }
             for post in posts

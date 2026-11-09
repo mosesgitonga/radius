@@ -99,7 +99,17 @@ class PostOut(BaseModel):
         ),
     )
     pinned: bool = False
+    edited_at: datetime | None = Field(
+        default=None, description="When the author last changed the text or category."
+    )
     created_at: datetime
+
+
+class PostUpdateIn(BaseModel):
+    """Only what is sent changes. Photos can't be changed by editing."""
+
+    body: str | None = Field(default=None, min_length=1, max_length=4000)
+    category: str | None = None
 
 
 class PostCreatedOut(BaseModel):

@@ -156,6 +156,7 @@ async def post_views(
                 group_id=post.group_id,
                 approval_status=post.approval_status,
                 pinned=post.pinned_at is not None,
+                edited_at=post.edited_at,
                 created_at=post.created_at,
             )
         )

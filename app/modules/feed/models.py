@@ -19,7 +19,7 @@ they are exploring elsewhere. See decision 1.1.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from geoalchemy2 import Geography
@@ -157,6 +157,10 @@ class Post(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, LocatedCo
     )
     hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    """When the author last changed the text or category (decision 2.22). Not
+    `updated_at`, which moves whenever a counter does."""
+
     reach_estimate: Mapped[int | None] = mapped_column(Integer, nullable=True)
     """Roughly how many active neighbours could see this, computed once at
     creation. Cached because it is shown to the author and never aggregated."""
@@ -198,6 +202,28 @@ class Post(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, LocatedCo
 
     def __repr__(self) -> str:  # pragma: no cover — debugging aid
         return f"<Post {self.id} by {self.author_id}>"
+
+
+class PostEdit(Base, UUIDPrimaryKeyMixin):
+    """What a post said before one edit (decision 2.22).
+
+    Reports don't copy what was reported, so without these an author could edit
+    reported abuse into something harmless before a moderator looked. Only
+    moderators see them, and they go with their post.
+    """
+
+    __tablename__ = "post_edits"
+
+    post_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("posts.id", ondelete="CASCADE"), index=True
+    )
+    body: Mapped[str] = mapped_column(String(4000))
+    category: Mapped[str] = mapped_column(String(50))
+    edited_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now()
+    )
+    """When this version was replaced. A Python default too, as for `created_at`
+    (decision 2.19), so two edits in one transaction keep their order."""
 
 
 class PostImage(Base, UUIDPrimaryKeyMixin):

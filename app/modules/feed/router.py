@@ -38,6 +38,7 @@ from app.modules.feed.schemas import (
     PostCreateIn,
     PostOut,
     PostPageOut,
+    PostUpdateIn,
     ReactionIn,
     ReactionOut,
     StoryCreateIn,
@@ -88,6 +89,7 @@ _story_limit = tiered_user_rate_limit(
     established_limit=lambda s: s.stories_per_day,
 )
 _reaction_limit = user_rate_limit(bucket="react", limit=300, window_seconds=3600)
+_post_edit_limit = user_rate_limit(bucket="post_edit", limit=60, window_seconds=3600)
 
 
 async def _one_post_view(
@@ -385,6 +387,38 @@ async def get_post(
 )
 async def delete_post(post_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> None:
     await feed_service.delete_post(session, viewer=user, post_id=post_id)
+
+
+@router.patch(
+    "/posts/{post_id}",
+    response_model=PostOut,
+    summary="Edit my post",
+    description=(
+        "Change the text or the category; only what is sent changes, and photos "
+        "can't be changed. The post then shows `edited_at`. The previous version "
+        "is kept for moderators. In a group that approves posts, a member's edit "
+        "goes back for approval."
+    ),
+    dependencies=[Depends(_post_edit_limit)],
+)
+async def edit_post(
+    post_id: uuid.UUID,
+    payload: PostUpdateIn,
+    user: ActiveUser,
+    session: SessionDep,
+    redis: RedisDep,
+    storage: StorageDep,
+    settings: SettingsDep,
+) -> PostOut:
+    post = await feed_service.edit_post(
+        session,
+        viewer=user,
+        post_id=post_id,
+        body=payload.body,
+        category=payload.category,
+        settings=settings,
+    )
+    return await _one_post_view(session, redis, storage, post=post, viewer=user, settings=settings)
 
 
 # ---------------------------------------------------------------------------

@@ -51,7 +51,7 @@ from app.core.errors import BadRequestError, ConflictError, InvalidCursorError, 
 from app.modules.auth import service as auth_service
 from app.modules.auth.models import DeviceSession
 from app.modules.events.models import Event
-from app.modules.feed.models import Comment, Post, PostImage, Story
+from app.modules.feed.models import Comment, Post, PostEdit, PostImage, Story
 from app.modules.groups import service as groups_service
 from app.modules.groups.models import Group
 from app.modules.marketplace.models import Listing, ListingImage
@@ -331,6 +331,18 @@ async def _media_ids(
     return [value] if value is not None else []
 
 
+async def _post_versions(session: AsyncSession, post_id: uuid.UUID) -> list[dict[str, Any]]:
+    rows = await session.execute(
+        select(PostEdit.body, PostEdit.category, PostEdit.edited_at)
+        .where(PostEdit.post_id == post_id)
+        .order_by(PostEdit.edited_at, PostEdit.id)
+    )
+    return [
+        {"body": body, "category": category, "replaced_at": edited_at.isoformat()}
+        for body, category, edited_at in rows.all()
+    ]
+
+
 async def _load_target(
     session: AsyncSession,
     target_type: ReportTargetType,
@@ -356,6 +368,10 @@ async def view_target(
         status = str(row.status)
     else:
         status = "visible"
+    if target_type == ReportTargetType.post:
+        # What it said before any edit, so an edit can't hide what was reported
+        # (decision 2.22).
+        details["earlier_versions"] = await _post_versions(session, row.id)
     author_column = AUTHOR_COLUMN.get(target_type)
     return TargetView(
         target_type=target_type,
