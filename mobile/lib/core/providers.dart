@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/auth/auth_repository.dart';
 import '../features/chats/chat_repository.dart';
 import '../features/feed/feed_repository.dart';
+import '../features/groups/group_repository.dart';
 import '../features/guest/guest_repository.dart';
 import '../features/market/listing_repository.dart';
 import '../features/me/account_repository.dart';
@@ -61,6 +62,10 @@ final reviewRepositoryProvider = Provider<ReviewRepository>(
 
 final storyRepositoryProvider = Provider<StoryRepository>(
   (ref) => StoryRepository(ref.watch(apiClientProvider)),
+);
+
+final groupRepositoryProvider = Provider<GroupRepository>(
+  (ref) => GroupRepository(ref.watch(apiClientProvider)),
 );
 
 final guestRepositoryProvider = Provider<GuestRepository>(

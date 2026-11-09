@@ -59,6 +59,12 @@ class HomeMenu extends StatelessWidget {
               subtitle: const Text('Neighbours who chose to be listed'),
               onTap: () => open(Routes.peopleNearby),
             ),
+            ListTile(
+              leading: Icon(Icons.groups_outlined, color: Palette.ink),
+              title: const Text('Groups'),
+              subtitle: const Text('Your estate, church, chama or team'),
+              onTap: () => open(Routes.groups),
+            ),
           ],
         ),
       ),

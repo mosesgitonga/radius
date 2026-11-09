@@ -107,6 +107,9 @@ class Post {
     required this.myReaction,
     required this.status,
     required this.createdAt,
+    this.groupId,
+    this.approvalStatus,
+    this.pinned = false,
   });
 
   factory Post.fromJson(Map<String, dynamic> json) => Post(
@@ -125,6 +128,9 @@ class Post {
         myReaction: json['my_reaction'] as String?,
         status: json['status'] as String,
         createdAt: DateTime.parse(json['created_at'] as String),
+        groupId: json['group_id'] as String?,
+        approvalStatus: json['approval_status'] as String?,
+        pinned: json['pinned'] as bool? ?? false,
       );
 
   final String id;
@@ -140,7 +146,15 @@ class Post {
   final String status;
   final DateTime createdAt;
 
+  /// Set for a post in a group; such posts never reach the neighbourhood feed.
+  final String? groupId;
+
+  /// In a group that approves posts: `pending`, `approved` or `rejected`.
+  final String? approvalStatus;
+  final bool pinned;
+
   bool get isHeld => status == 'hidden_pending_review';
+  bool get awaitsApproval => approvalStatus == 'pending';
   String get categoryLabel => postCategories[category] ?? category;
 
   Post copyWith({int? commentCount, int? reactionCount, String? myReaction, bool clearReaction = false}) {
@@ -157,6 +171,9 @@ class Post {
       myReaction: clearReaction ? null : (myReaction ?? this.myReaction),
       status: status,
       createdAt: createdAt,
+      groupId: groupId,
+      approvalStatus: approvalStatus,
+      pinned: pinned,
     );
   }
 }

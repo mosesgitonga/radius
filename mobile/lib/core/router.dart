@@ -11,6 +11,11 @@ import '../features/auth/screens/status_screens.dart';
 import '../features/chats/screens/chats_screen.dart';
 import '../features/chats/screens/conversation_screen.dart';
 import '../features/feed/screens/compose_screen.dart';
+import '../features/groups/group_models.dart';
+import '../features/groups/screens/group_admin_screens.dart';
+import '../features/groups/screens/group_edit_screen.dart';
+import '../features/groups/screens/group_screen.dart';
+import '../features/groups/screens/groups_screen.dart';
 import '../features/feed/screens/feed_screen.dart';
 import '../features/feed/screens/post_screen.dart';
 import '../features/guest/guest_screen.dart';
@@ -68,6 +73,13 @@ class Routes {
   static const deleteAccount = '/me/delete';
   static const services = '/feed/services';
   static const peopleNearby = '/feed/people';
+  static const groups = '/feed/groups';
+  static const newGroup = '/groups/new';
+  static String group(String id) => '/feed/groups/g/$id';
+  static String groupMembers(String id) => '/feed/groups/g/$id/members';
+  static String groupPending(String id) => '/feed/groups/g/$id/pending';
+  static String editGroup(String id) => '/groups/$id/edit';
+  static String groupCompose(String id) => '/groups/$id/post';
   static const myServices = '/feed/services/mine';
   static String service(String id) => '/feed/services/p/$id';
   static String newService(ServiceKind kind) => '/services/new?kind=${kind.key}';
@@ -130,6 +142,16 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
         ),
       ),
+      GoRoute(path: Routes.newGroup, builder: (_, _) => const GroupEditScreen()),
+      GoRoute(
+        path: '/groups/:id/edit',
+        builder: (_, state) => GroupEditScreen(editing: state.extra as Group?),
+      ),
+      GoRoute(
+        path: '/groups/:id/post',
+        builder: (_, state) =>
+            ComposeScreen(groupId: state.pathParameters['id'], groupName: state.extra as String?),
+      ),
       GoRoute(
         path: '/services/:id/edit',
         builder: (_, state) => ServiceComposeScreen(editing: state.extra as ServicePost?),
@@ -150,6 +172,29 @@ final routerProvider = Provider<GoRouter>((ref) {
                   builder: (_, state) => PostScreen(postId: state.pathParameters['id']!),
                 ),
                 GoRoute(path: 'people', builder: (_, _) => const PeopleNearbyScreen()),
+                GoRoute(
+                  path: 'groups',
+                  builder: (_, _) => const GroupsScreen(),
+                  routes: [
+                    GoRoute(
+                      path: 'g/:id',
+                      builder: (_, state) => GroupScreen(
+                        key: ValueKey(state.pathParameters['id']),
+                        groupId: state.pathParameters['id']!,
+                      ),
+                      routes: [
+                        GoRoute(
+                          path: 'members',
+                          builder: (_, state) => GroupMembersScreen(groupId: state.pathParameters['id']!),
+                        ),
+                        GoRoute(
+                          path: 'pending',
+                          builder: (_, state) => GroupPendingPostsScreen(groupId: state.pathParameters['id']!),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
                 GoRoute(
                   path: 'services',
                   builder: (_, _) => const ServicesScreen(),

@@ -3495,3 +3495,16 @@ expected.
 **Tests:** widget tests for the groups home, joining, posting in a group, and
 the admin request queue; analyzer clean; then a live check on the phone against
 staging.
+
+### Built (2026-11-09)
+
+As planned, app only, with no server changes:
+- **Screens:** Groups home, a group, members and join requests, posts waiting,
+  and create or edit a group.
+- **Composer:** the post composer now posts into a group when opened from one.
+- **Tests:** 7 new widget and unit tests; 111 app tests pass, and the analyzer is
+  clean.
+- **Live check:** on the product owner's phone against staging, Groups opens
+  from the Home menu and loads (no groups nearby yet). Creating, joining and
+  posting are covered by widget tests; trying them live is left to the product
+  owner, so no test group was made in their account.

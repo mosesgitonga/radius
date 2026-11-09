@@ -10,15 +10,21 @@ import '../../../core/providers.dart';
 import '../../../core/theme.dart';
 import '../../../core/widgets.dart';
 import '../../auth/auth_controller.dart';
+import '../../groups/group_models.dart' show groupPostPostedMessage;
 import '../feed_controller.dart';
 import '../feed_models.dart';
 
 const _maxPhotos = 6;
 const _maxLength = 2000;
 
-/// Writing a post to the home area: a category, words, and up to six photos.
+/// Writing a post: a category, words, and up to six photos. To the home area, or
+/// with [groupId] to that group, in which case the new post is handed back to
+/// the group screen when this closes.
 class ComposeScreen extends ConsumerStatefulWidget {
-  const ComposeScreen({super.key});
+  const ComposeScreen({super.key, this.groupId, this.groupName});
+
+  final String? groupId;
+  final String? groupName;
 
   @override
   ConsumerState<ComposeScreen> createState() => _ComposeScreenState();
@@ -74,6 +80,16 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
         mediaIds.add(await uploader.uploadPhoto(_photos[i], purpose: 'post'));
       }
       setState(() => _progress = 'Posting…');
+      final groupId = widget.groupId;
+      if (groupId != null) {
+        final post = await ref
+            .read(groupRepositoryProvider)
+            .createPost(groupId, body: body, category: _category, mediaIds: mediaIds);
+        if (!mounted) return;
+        context.pop(post);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(groupPostPostedMessage(post))));
+        return;
+      }
       final (post, reach) = await repo.createPost(body: body, category: _category, mediaIds: mediaIds);
       ref.read(feedControllerProvider.notifier).prepend(post);
       if (!mounted) return;
@@ -109,7 +125,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
           tooltip: 'Cancel',
           icon: const Icon(Icons.close_rounded),
         ),
-        title: Text('Post to $area'),
+        title: Text('Post to ${widget.groupName ?? area}', overflow: TextOverflow.ellipsis),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -203,11 +219,18 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            const NotePanel(
-              icon: Icons.location_on_outlined,
-              text: 'Posted to your home area. Neighbours see the area and a rough '
-                  'distance, never where you are. Photo location data is removed.',
-            ),
+            if (widget.groupId != null)
+              const NotePanel(
+                icon: Icons.groups_outlined,
+                text: "Posted in the group only; it doesn't reach the neighbourhood feed. "
+                    'Photo location data is removed.',
+              )
+            else
+              const NotePanel(
+                icon: Icons.location_on_outlined,
+                text: 'Posted to your home area. Neighbours see the area and a rough '
+                    'distance, never where you are. Photo location data is removed.',
+              ),
             if (_progress != null) ...[
               const SizedBox(height: 16),
               Row(
