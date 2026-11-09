@@ -3565,3 +3565,14 @@ suite and all 117 app tests pass. CI and the staging deploy passed, migration
 0020 ran on staging, and the app is on the product owner's phone. Trying edit
 and delete on the phone is left to the product owner, since doing it would
 change their real posts.
+
+## Service categories: transport and gas (2026-11-09)
+
+Asked for by the product owner: transport by boda boda or taxi, and gas supply,
+are among the commonest services.
+- **New categories:** `transport` (shown as "Boda boda & taxi") and `gas`
+  ("Gas supply"), on the server and in the app's copy of the list.
+- **Delivery:** stays for parcels and errands. Boda boda rides were filed under
+  it before.
+- **Staging:** its `.env.production` was copied from `.env.example`, so it sets
+  `SERVICE_CATEGORIES` itself and needs the same line changed on the server.

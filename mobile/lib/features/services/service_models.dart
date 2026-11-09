@@ -23,6 +23,8 @@ const serviceCategories = <String, String>{
   'electrical': 'Electrical',
   'laundry': 'Laundry',
   'house_help': 'House help',
+  'transport': 'Boda boda & taxi',
+  'gas': 'Gas supply',
   'tutoring': 'Tutoring',
   'delivery': 'Delivery',
   'mechanics': 'Mechanics',

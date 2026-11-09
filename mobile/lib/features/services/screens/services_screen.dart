@@ -97,7 +97,7 @@ class _ServicesScreenState extends ConsumerState<ServicesScreen> {
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: switch (state.kind) {
-                  ServiceKind.offering => 'Plumber, mama fua, tutor…',
+                  ServiceKind.offering => 'Plumber, boda boda, gas, mama fua…',
                   ServiceKind.seeking => 'What do neighbours need?',
                   ServiceKind.hiring => 'Shop attendant, driver…',
                 },

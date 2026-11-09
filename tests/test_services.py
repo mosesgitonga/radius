@@ -646,3 +646,24 @@ async def test_export_and_purge(
 
     rated = (await (await authenticate(provider)).get(f"/v1/users/{provider_id}/reviews")).json()
     assert (rated["rating_average"], rated["rating_count"], rated["items"]) == (None, 0, [])
+
+
+@pytest.mark.parametrize(
+    ("category", "title"),
+    [("transport", "Boda boda to town"), ("gas", "Gas refills, 6kg and 13kg")],
+)
+async def test_transport_and_gas_are_categories(
+    db_session: AsyncSession, authenticate: Authenticate, category: str, title: str
+) -> None:
+    """Rides by boda boda or taxi, and cooking gas: two of the commonest services."""
+    provider = await person(db_session)
+    neighbour = await person(db_session)
+    await post(await authenticate(provider), category=category, title=title)
+
+    found = (
+        await (await authenticate(neighbour)).get(
+            "/v1/services", params={"kind": "offering", "category": category}
+        )
+    ).json()
+
+    assert [item["title"] for item in found["items"]] == [title]

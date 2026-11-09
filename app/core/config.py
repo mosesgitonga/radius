@@ -570,11 +570,14 @@ class Settings(BaseSettings):
 
     # -- Jobs and services ---------------------------------------------------
     service_categories: str = (
-        "plumbing,electrical,laundry,house_help,tutoring,delivery,mechanics,salon_barber,"
-        "tailoring,construction,catering,photography,phone_it_repair,cleaning,other"
+        "plumbing,electrical,laundry,house_help,transport,gas,tutoring,delivery,mechanics,"
+        "salon_barber,tailoring,construction,catering,photography,phone_it_repair,cleaning,other"
     )
-    """The brief's seeded list — mama fua is `laundry`, boda boda is `delivery`,
-    fundi is `construction` — and configurable like every other category list."""
+    """The brief's seeded list — mama fua is `laundry`, fundi is `construction` —
+    and configurable like every other category list. `transport` is rides, by boda
+    boda or taxi; `delivery` stays for parcels and errands. `gas` is cooking-gas
+    supply and refills, added with `transport` on 2026-11-09 as two of the most
+    common services neighbours look for."""
 
     service_title_max_length: int = Field(default=120, ge=10, le=300)
     service_description_max_length: int = Field(default=4000, ge=0, le=20_000)
