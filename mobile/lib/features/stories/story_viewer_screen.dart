@@ -132,6 +132,29 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> with Sing
     );
   });
 
+  /// Your own story, from the button beside the view count: asks first.
+  Future<void> _confirmDelete() => _paused(() async {
+    final story = _story;
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Delete this story?'),
+        content: const Text('It disappears for everyone now, before its 24 hours are up.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialog).pop(false), child: const Text('Keep')),
+          TextButton(onPressed: () => Navigator.of(dialog).pop(true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (sure != true || !mounted) return;
+    try {
+      await ref.read(storiesControllerProvider.notifier).delete(story.id);
+      if (mounted) Navigator.of(context).maybePop();
+    } on ApiException catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+    }
+  });
+
   Future<void> _menu() => _paused(() async {
     final story = _story;
     final mine = _mine;
@@ -279,14 +302,24 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen> with Sing
                   const Spacer(),
                   if (_mine)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: TextButton.icon(
-                        onPressed: _showViewers,
-                        icon: const Icon(Icons.visibility_outlined, color: Palette.onPrimary),
-                        label: Text(
-                          '${story.viewCount ?? 0} ${story.viewCount == 1 ? 'view' : 'views'}',
-                          style: text.titleSmall?.copyWith(color: Palette.onPrimary),
-                        ),
+                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          TextButton.icon(
+                            onPressed: _showViewers,
+                            icon: const Icon(Icons.visibility_outlined, color: Palette.onPrimary),
+                            label: Text(
+                              '${story.viewCount ?? 0} ${story.viewCount == 1 ? 'view' : 'views'}',
+                              style: text.titleSmall?.copyWith(color: Palette.onPrimary),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: _confirmDelete,
+                            icon: const Icon(Icons.delete_outline_rounded, color: Palette.onPrimary),
+                            label: Text('Delete', style: text.titleSmall?.copyWith(color: Palette.onPrimary)),
+                          ),
+                        ],
                       ),
                     ),
                 ],

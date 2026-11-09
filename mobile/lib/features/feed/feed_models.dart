@@ -110,6 +110,7 @@ class Post {
     this.groupId,
     this.approvalStatus,
     this.pinned = false,
+    this.editedAt,
   });
 
   factory Post.fromJson(Map<String, dynamic> json) => Post(
@@ -131,6 +132,7 @@ class Post {
         groupId: json['group_id'] as String?,
         approvalStatus: json['approval_status'] as String?,
         pinned: json['pinned'] as bool? ?? false,
+        editedAt: json['edited_at'] == null ? null : DateTime.parse(json['edited_at'] as String),
       );
 
   final String id;
@@ -153,6 +155,9 @@ class Post {
   final String? approvalStatus;
   final bool pinned;
 
+  /// When the author last changed the text or category; null if never.
+  final DateTime? editedAt;
+
   bool get isHeld => status == 'hidden_pending_review';
   bool get awaitsApproval => approvalStatus == 'pending';
   String get categoryLabel => postCategories[category] ?? category;
@@ -174,6 +179,7 @@ class Post {
       groupId: groupId,
       approvalStatus: approvalStatus,
       pinned: pinned,
+      editedAt: editedAt,
     );
   }
 }

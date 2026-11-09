@@ -53,6 +53,7 @@ String postMeta(Post post) => [
       post.areaLabel.label,
       ?distanceLabel(post.distanceBucket),
       timeAgo(post.createdAt),
+      if (post.editedAt != null) 'edited',
     ].join(' · ');
 
 class CategoryTag extends StatelessWidget {

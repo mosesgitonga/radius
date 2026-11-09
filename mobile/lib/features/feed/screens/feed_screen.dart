@@ -16,6 +16,7 @@ import '../../stories/stories_strip.dart';
 import '../feed_controller.dart';
 import '../feed_models.dart';
 import '../widgets/home_menu.dart';
+import '../widgets/own_post_actions.dart';
 import '../widgets/post_card.dart';
 import '../widgets/report_sheet.dart';
 
@@ -64,6 +65,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (mine) ...ownPostTiles(sheet, context, ref, post, onDone: (_) {}),
             if (!mine)
               ListTile(
                 leading: const Icon(Icons.chat_bubble_outline_rounded),

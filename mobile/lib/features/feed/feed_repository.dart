@@ -71,6 +71,16 @@ class FeedRepository {
       Map<String, dynamic>.from(await _api.post('/posts/$postId/comments',
           body: {'body': body, 'parent_id': ?parentId}, idempotent: true) as Map));
 
+  /// Deletes a comment: your own, or any under your post.
+  Future<void> deleteComment(String commentId) => _api.delete('/comments/$commentId');
+
+  /// Changes your post's text or category. Photos stay as they are.
+  Future<Post> editPost(String postId, {required String body, required String category}) async =>
+      Post.fromJson(Map<String, dynamic>.from(
+          await _api.patch('/posts/$postId', body: {'body': body, 'category': category}) as Map));
+
+  Future<void> deletePost(String postId) => _api.delete('/posts/$postId');
+
   /// Votes a comment up (1) or down (-1), replacing any earlier vote.
   Future<VoteResult> vote(String commentId, int value) async =>
       _voteResult(await _api.put('/comments/$commentId/vote', body: {'value': value}));

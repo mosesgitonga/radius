@@ -11,6 +11,7 @@ import '../../core/widgets.dart';
 import '../auth/auth_controller.dart';
 import '../chats/start_chat.dart';
 import '../feed/feed_models.dart';
+import '../feed/widgets/own_post_actions.dart';
 import '../feed/widgets/post_card.dart';
 import '../feed/widgets/report_sheet.dart';
 import '../market/listing_models.dart';
@@ -269,6 +270,30 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  void _ownPostMenu(Post post) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Palette.cream,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: ownPostTiles(sheet, context, ref, post, onDone: (edited) {
+            if (!mounted) return;
+            setState(() {
+              final at = _posts.indexWhere((p) => p.id == post.id);
+              if (at < 0) return;
+              if (edited == null) {
+                _posts.removeAt(at);
+              } else {
+                _posts[at] = edited;
+              }
+            });
+          }),
+        ),
+      ),
+    );
+  }
+
   List<Widget> _list(Profile profile, bool mine) {
     final first = profile.displayName.split(' ').first;
     Widget empty(String text) => SliverToBoxAdapter(
@@ -297,7 +322,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               itemBuilder: (context, index) {
                 final post = _posts[index];
                 void open() => context.go(Routes.post(post.id));
-                return PostCard(post: post, mine: mine, onOpen: open, onHelpful: open);
+                return PostCard(
+                  post: post,
+                  mine: mine,
+                  onOpen: open,
+                  onHelpful: open,
+                  onMore: mine ? () => _ownPostMenu(post) : null,
+                );
               },
             ),
           ),

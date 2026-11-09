@@ -13,6 +13,7 @@ import '../../auth/auth_controller.dart';
 import '../../chats/start_chat.dart';
 import '../../feed/feed_controller.dart';
 import '../../feed/feed_models.dart';
+import '../../feed/widgets/own_post_actions.dart';
 import '../../feed/widgets/post_card.dart';
 import '../../feed/widgets/report_sheet.dart';
 import '../../profile/profile_screen.dart';
@@ -229,6 +230,17 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (mine)
+                ...ownPostTiles(sheet, context, ref, post, onDone: (edited) {
+                  if (edited == null) {
+                    setState(() {
+                      _posts = [..._posts.where((p) => p.id != post.id)];
+                      _pinned = [..._pinned.where((p) => p.id != post.id)];
+                    });
+                  } else {
+                    _replacePost(post.id, (_) => edited);
+                  }
+                }),
               if (group.isAdmin && !post.awaitsApproval)
                 ListTile(
                   leading: Icon(post.pinned ? Icons.push_pin_outlined : Icons.push_pin_rounded),
@@ -451,7 +463,11 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
               post: post,
               mine: mine,
               onHelpful: () => _toggleHelpful(post),
-              onOpen: () => context.push(Routes.post(post.id)),
+              onOpen: () async {
+                // It may have been edited, deleted or commented on there.
+                await context.push(Routes.post(post.id));
+                if (mounted) await _load();
+              },
               onMore: () => _postMenu(post, mine: mine),
               onAuthor: () => openProfile(context, ref, post.author.id),
             ),

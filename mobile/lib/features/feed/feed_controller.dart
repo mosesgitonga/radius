@@ -127,6 +127,17 @@ class FeedController extends Notifier<FeedState> {
     if (post != null) _replace(post.copyWith(commentCount: post.commentCount + 1));
   }
 
+  void commentRemoved(String postId) {
+    final post = state.posts.where((p) => p.id == postId).firstOrNull;
+    if (post != null && post.commentCount > 0) _replace(post.copyWith(commentCount: post.commentCount - 1));
+  }
+
+  /// After the author edits a post: shown as the server now has it.
+  void edited(Post post) => _replace(post);
+
+  /// After the author deletes a post.
+  void removed(String postId) => state = state.copyWith(posts: [...state.posts.where((p) => p.id != postId)]);
+
   void _replace(Post post) {
     state = state.copyWith(posts: [for (final p in state.posts) p.id == post.id ? post : p]);
   }

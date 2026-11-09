@@ -10,6 +10,7 @@ import '../../chats/start_chat.dart';
 import '../../profile/profile_screen.dart';
 import '../feed_controller.dart';
 import '../feed_models.dart';
+import '../widgets/own_post_actions.dart';
 import '../widgets/post_card.dart';
 import '../widgets/report_sheet.dart';
 
@@ -244,16 +245,113 @@ class _PostScreenState extends ConsumerState<PostScreen> {
     );
   }
 
+  void _ownPostMenu(Post post) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Palette.cream,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: ownPostTiles(sheet, context, ref, post, onDone: (edited) {
+            if (!mounted) return;
+            if (edited == null) {
+              Navigator.of(context).maybePop();
+            } else {
+              setState(() => _post = edited);
+            }
+          }),
+        ),
+      ),
+    );
+  }
+
+  /// Deletes a comment: your own, or any under your post. Its replies go from
+  /// view with it.
+  Future<void> _deleteComment(Comment comment) async {
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Delete this comment?'),
+        content: const Text('It goes for everyone. This can’t be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialog).pop(false), child: const Text('Keep')),
+          TextButton(onPressed: () => Navigator.of(dialog).pop(true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (sure != true) return;
+    try {
+      await ref.read(feedRepositoryProvider).deleteComment(comment.id);
+      ref.read(feedControllerProvider.notifier).commentRemoved(widget.postId);
+      if (!mounted) return;
+      setState(() {
+        _comments.removeWhere((c) => c.id == comment.id);
+        _replies.remove(comment.id);
+        _replyCursors.remove(comment.id);
+        final parent = comment.parentId;
+        if (parent != null) {
+          _replies[parent]?.removeWhere((c) => c.id == comment.id);
+          _updateComment(parent, (c) => c.copyWith(replyCount: c.replyCount > 0 ? c.replyCount - 1 : 0));
+        }
+        if (_replyingTo?.id == comment.id) _replyingTo = null;
+        if (_post != null && _post!.commentCount > 0) _post = _post!.copyWith(commentCount: _post!.commentCount - 1);
+      });
+      _toast('Comment deleted.');
+    } on ApiException catch (error) {
+      _toast(error.message);
+    }
+  }
+
+  void _commentMenu(Comment comment, {required bool mine, required bool onMyPost}) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Palette.cream,
+      builder: (sheet) {
+        void run(VoidCallback action) {
+          Navigator.of(sheet).pop();
+          action();
+        }
+
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (mine || onMyPost)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline_rounded),
+                  title: const Text('Delete comment'),
+                  subtitle: mine ? null : const Text('It’s under your post, so you can remove it'),
+                  onTap: () => run(() => _deleteComment(comment)),
+                ),
+              if (!mine)
+                ListTile(
+                  leading: const Icon(Icons.flag_outlined),
+                  title: const Text('Report comment'),
+                  onTap: () => run(() => _report('comment', comment.id, 'comment')),
+                ),
+              ListTile(
+                leading: const Icon(Icons.close_rounded),
+                title: const Text('Cancel'),
+                onTap: () => Navigator.of(sheet).pop(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _toast(String message) {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _tile(Comment comment, String? myId) {
     final mine = comment.author.id == myId;
+    final onMyPost = _post?.author.id == myId && myId != null;
     return _CommentTile(
       comment: comment,
       onAuthor: () => openProfile(context, ref, comment.author.id),
-      onReport: mine ? null : () => _report('comment', comment.id, 'comment'),
+      onMore: () => _commentMenu(comment, mine: mine, onMyPost: onMyPost),
       // Nobody votes on their own comment. The arrows stay, faded, and say why
       // when tapped, so they never look broken.
       ownComment: mine,
@@ -294,7 +392,7 @@ class _PostScreenState extends ConsumerState<PostScreen> {
                           post: post,
                           mine: post.author.id == myId,
                           onHelpful: _toggleHelpful,
-                          onMore: post.author.id == myId ? null : () => _postMenu(post),
+                          onMore: post.author.id == myId ? () => _ownPostMenu(post) : () => _postMenu(post),
                           onAuthor: () => openProfile(context, ref, post.author.id),
                         ),
                         const SizedBox(height: 16),
@@ -412,14 +510,14 @@ class _CommentTile extends StatelessWidget {
     required this.onAuthor,
     required this.onReply,
     required this.onVote,
-    this.onReport,
+    required this.onMore,
     this.ownComment = false,
   });
 
   final Comment comment;
   final VoidCallback onAuthor;
   final VoidCallback onReply;
-  final VoidCallback? onReport;
+  final VoidCallback onMore;
   final ValueChanged<int> onVote;
 
   /// The viewer wrote it, so the arrows are faded.
@@ -496,12 +594,11 @@ class _CommentTile extends StatelessWidget {
               ],
             ),
           ),
-          if (onReport != null)
-            IconButton(
-              onPressed: onReport,
-              tooltip: 'Report comment',
-              icon: Icon(Icons.flag_outlined, size: 18, color: Palette.muted),
-            ),
+          IconButton(
+            onPressed: onMore,
+            tooltip: 'Comment options',
+            icon: Icon(Icons.more_vert_rounded, size: 18, color: Palette.muted),
+          ),
         ],
       ),
     );

@@ -19,20 +19,22 @@ const _maxLength = 2000;
 
 /// Writing a post: a category, words, and up to six photos. To the home area, or
 /// with [groupId] to that group, in which case the new post is handed back to
-/// the group screen when this closes.
+/// the group screen when this closes. With [editing], it changes one of your
+/// posts instead: text and category only (decision 2.22).
 class ComposeScreen extends ConsumerStatefulWidget {
-  const ComposeScreen({super.key, this.groupId, this.groupName});
+  const ComposeScreen({super.key, this.groupId, this.groupName, this.editing});
 
   final String? groupId;
   final String? groupName;
+  final Post? editing;
 
   @override
   ConsumerState<ComposeScreen> createState() => _ComposeScreenState();
 }
 
 class _ComposeScreenState extends ConsumerState<ComposeScreen> {
-  final _body = TextEditingController();
-  String _category = 'general';
+  late final _body = TextEditingController(text: widget.editing?.body);
+  late String _category = widget.editing?.category ?? 'general';
   final List<Uint8List> _photos = [];
   bool _busy = false;
   String? _progress;
@@ -73,7 +75,21 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     });
     final repo = ref.read(feedRepositoryProvider);
     final uploader = ref.read(mediaUploaderProvider);
+    final editing = widget.editing;
     try {
+      if (editing != null) {
+        final post = await repo.editPost(editing.id, body: body, category: _category);
+        if (!mounted) return;
+        context.pop(post);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(post.awaitsApproval && !editing.awaitsApproval
+              ? 'Saved. It goes back to a moderator for approval.'
+              : post.isHeld && !editing.isHeld
+                  ? 'Saved. It will show again once a moderator has looked at it.'
+                  : 'Post updated.'),
+        ));
+        return;
+      }
       final mediaIds = <String>[];
       for (var i = 0; i < _photos.length; i++) {
         setState(() => _progress = 'Uploading photo ${i + 1} of ${_photos.length}…');
@@ -125,7 +141,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
           tooltip: 'Cancel',
           icon: const Icon(Icons.close_rounded),
         ),
-        title: Text('Post to ${widget.groupName ?? area}', overflow: TextOverflow.ellipsis),
+        title: Text(
+          widget.editing != null ? 'Edit post' : 'Post to ${widget.groupName ?? area}',
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -136,7 +155,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 18),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               ),
-              child: const Text('Post'),
+              child: Text(widget.editing != null ? 'Save' : 'Post'),
             ),
           ),
         ],
@@ -179,7 +198,15 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                 hintText: 'Ask a question, share a tip, report something lost or found…',
               ),
             ),
-            if (_photos.isNotEmpty)
+            if (widget.editing != null)
+              NotePanel(
+                icon: Icons.history_rounded,
+                text: widget.editing!.images.isEmpty
+                    ? 'The post will show it was edited.'
+                    : "Photos can't be changed: to change them, delete the post and post again. "
+                        'The post will show it was edited.',
+              ),
+            if (widget.editing == null && _photos.isNotEmpty)
               SizedBox(
                 height: 96,
                 child: ListView.separated(
@@ -208,6 +235,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
                   ),
                 ),
               ),
+            if (widget.editing == null) ...[
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerLeft,
@@ -219,7 +247,10 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            if (widget.groupId != null)
+            ],
+            if (widget.editing != null)
+              const SizedBox.shrink()
+            else if (widget.groupId != null)
               const NotePanel(
                 icon: Icons.groups_outlined,
                 text: "Posted in the group only; it doesn't reach the neighbourhood feed. "

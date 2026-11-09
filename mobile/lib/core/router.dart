@@ -11,6 +11,7 @@ import '../features/auth/screens/status_screens.dart';
 import '../features/chats/screens/chats_screen.dart';
 import '../features/chats/screens/conversation_screen.dart';
 import '../features/feed/screens/compose_screen.dart';
+import '../features/feed/feed_models.dart';
 import '../features/groups/group_models.dart';
 import '../features/groups/screens/group_admin_screens.dart';
 import '../features/groups/screens/group_edit_screen.dart';
@@ -55,6 +56,7 @@ class Routes {
   static const compose = '/compose';
   static const newStory = '/stories/new';
   static String post(String id) => '/feed/post/$id';
+  static String editPost(String id) => '/posts/$id/edit';
   static String conversation(String id) => '/chats/c/$id';
   static String listing(String id) => '/market/l/$id';
   static const myListings = '/market/mine';
@@ -141,6 +143,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             orElse: () => ServiceKind.offering,
           ),
         ),
+      ),
+      GoRoute(
+        path: '/posts/:id/edit',
+        builder: (_, state) => ComposeScreen(editing: state.extra as Post?),
       ),
       GoRoute(path: Routes.newGroup, builder: (_, _) => const GroupEditScreen()),
       GoRoute(

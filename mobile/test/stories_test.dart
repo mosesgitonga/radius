@@ -58,6 +58,10 @@ void main() {
       final body = Map<String, dynamic>.from(request.data as Map);
       return FakeReply(201, story('s-new', 'u1', 'Amina K.', body['text'] as String, seen: true, views: 0));
     }
+    if (path == '/stories/s-mine' && request.method == 'DELETE') {
+      live = [];
+      return const FakeReply(204, null);
+    }
     if (path.endsWith('/view')) return const FakeReply(204, null);
     if (path == '/stories/s-mine/viewers') {
       return const FakeReply(200, {
@@ -143,6 +147,24 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Wanjiku M.'), findsOneWidget);
+  });
+
+  testWidgets('my own story has a delete button that asks first', (tester) async {
+    live = [story('s-mine', 'u1', 'Amina K.', 'Selling mandazi today', seen: true, views: 0)];
+    await openApp(tester);
+    await tester.tap(find.text('Your story'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.text('Delete'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Delete this story?'), findsOneWidget);
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+
+    expect(adapter.requests.where((r) => r.method == 'DELETE' && r.path == '/stories/s-mine'), hasLength(1));
+    expect(find.text('Selling mandazi today'), findsNothing);
   });
 
   testWidgets('posting a text story', (tester) async {
