@@ -3508,3 +3508,52 @@ As planned, app only, with no server changes:
   from the Home menu and loads (no groups nearby yet). Creating, joining and
   posting are covered by widget tests; trying them live is left to the product
   owner, so no test group was made in their account.
+
+## Slice 18 — editing and deleting posts, deleting comments and stories
+
+### Plan
+
+Asked for on 2026-11-09: "there's no delete, edit for posts and no delete for
+comments or stories."
+
+**What exists:**
+- **The server** already deletes posts (author only), comments (the comment's
+  author or the post's author) and stories (author only).
+- **The app** shows none of these, except story delete, which is hidden in the
+  story viewer's ⋮ menu.
+- **Editing a post** exists nowhere.
+
+**Decided with the product owner:**
+- **What an edit changes:** the text and the category. Photos stay as posted.
+- **Readers can tell:** an edited post shows "edited" next to its time.
+- **Earlier versions are kept.** Each edit saves the previous text and
+  category. Only moderators see them, and they go when the post goes. Reports
+  don't copy what was reported, so without this an edit could hide reported
+  abuse.
+- **Groups:** in a group that approves posts, a member's edit sends the post
+  back for approval. A moderator's edit doesn't.
+
+**Server (migration 0020):**
+- **Storage:** `posts.edited_at`, and `post_edits` (post, previous body,
+  previous category, when), deleted with their post.
+- **`PATCH /v1/posts/{id}`:**
+  - takes `{body?, category?}`, for the author only;
+  - runs the same checks as posting, including the hold on a restricted
+    account;
+  - sending what is already there changes nothing.
+- **Responses:** `PostOut` gains `edited_at`.
+- **Moderators:** the console's target view lists the earlier versions.
+- **Data rights:** the export includes earlier versions with each post. The
+  purge already soft-deletes posts, and the retention job's hard delete takes
+  the versions with them. Recorded in DATA_MAP and decision 2.22.
+
+**App:**
+- **Your own post's ⋮ menu:** Edit and Delete, on Home, a post, a group and a
+  profile.
+  - Edit reuses the composer, with text and category only.
+  - Delete asks first, then takes the post off every list.
+- **Comments:** a ⋮ on each comment. **Delete** appears for your own comment, or
+  for any comment under your post; Report stays for others' comments.
+- **Stories:** a visible **Delete** button next to the view count on your own
+  story.
+- **Tests:** server and widget tests, then a live check on the phone.
