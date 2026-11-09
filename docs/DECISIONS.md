@@ -848,6 +848,37 @@ silent. The existing like reaction on comments stays: it is a different signal
 A Wilson-score or time-decayed rank: fairer to new comments on busy posts, but
 hard to explain, and threads here are small. Revisit with real data.
 
+### 2.22 Editing a post keeps what it said before (added with slice 18)
+
+**Choice.**
+- **What changes:** the author may change a post's text and category, any time.
+  Photos stay as posted; to change them, delete and post again.
+- **Readers can tell:** the post carries `edited_at`, and the app shows
+  "edited".
+- **Earlier versions are kept.** Each edit saves the previous text and category
+  in `post_edits`.
+  - Moderators see them on the reported item.
+  - The author gets them in their export.
+  - Nobody else sees them, and they are deleted with the post.
+- **The checks are posting's.** That includes the length, the category list and
+  the hold on a restricted account.
+- **Groups:** in a group that approves posts, a member's edit sends the post
+  back for approval and unpins it. The group's moderators and admins edit
+  freely. A muted member, or someone who has left, can't edit.
+- **No-op edits:** sending what is already there changes nothing.
+
+**Reasoning.** Reports record what was reported, not what it said. Without the
+history, someone could post abuse, be reported, and edit it into something
+harmless before a moderator looked. Snapshotting the text into each report was
+the other way to fix this, but it would miss edits made between two reports and
+touch every reportable type. Sending a group member's edit back for approval
+keeps approval from being bypassed.
+
+**Alternatives.**
+- **An edit window** (say 15 minutes): stops late rewrites, but blocks fixing an
+  old post's details, such as a changed meeting time.
+- **No history:** simpler, but it opens the hole above.
+
 ---
 
 ### Deferred from Phase 2, with the phase that will own it

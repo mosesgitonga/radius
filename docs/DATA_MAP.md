@@ -184,6 +184,8 @@ references it, and nothing servable remains.
 | `cell_res9/8/7/6`, `centroid`, `area_id` | Radius filtering and the area label | With the post |
 | `status`, `hidden_at` | Moderation state | With the post |
 | `reach_estimate`, `comment_count`, `reaction_count` | Display | With the post |
+| `edited_at` | Shows readers the post was edited (decision 2.22) | With the post |
+| `post_edits`: `post_id`, previous `body` and `category`, `edited_at` | What the post said before each edit, so an edit can't hide reported abuse. Seen only by moderators, and by the author in their export | Deleted with the post (cascade), so the retention job's hard delete takes them too |
 
 The location is the **author's home cell at posting time** — a cell centre, never a
 coordinate — and stays with the post if the author later moves. Authored content
