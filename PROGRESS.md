@@ -3557,3 +3557,11 @@ comments or stories."
 - **Stories:** a visible **Delete** button next to the view count on your own
   story.
 - **Tests:** server and widget tests, then a live check on the phone.
+
+### Built (2026-11-09)
+
+As planned. **Tests:** 12 new server tests and 6 new app tests; the full server
+suite and all 117 app tests pass. CI and the staging deploy passed, migration
+0020 ran on staging, and the app is on the product owner's phone. Trying edit
+and delete on the phone is left to the product owner, since doing it would
+change their real posts.
