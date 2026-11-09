@@ -3430,3 +3430,68 @@ most upvoted comments shown first. Decided with the product owner the same day:
   reply joins the same thread, since there is one level of replies.
 - **Tests:** server and widget tests, and a live check on the phone against
   staging.
+
+### Built and verified (2026-11-07)
+
+Server and widget tests pass, CI and the staging deploy passed, and the app is on
+the product owner's phone. **Fixed after the first try:** arrows on your own
+comment looked tappable and did nothing. They are now faded, and a tap says you
+can't vote on your own comment.
+
+## Mobile app — slice 17: groups
+
+### Plan
+
+Asked for on 2026-11-09. The server has had groups since Phase 4: nearby
+discovery, public and private groups, join requests, invitations and invite
+links, posts with optional approval, pinning, members and roles, and a linked
+group chat. This slice is the app's screens for them. No server changes are
+expected.
+
+**Decided with the product owner:**
+- **Where:** a **Groups** entry in the Home menu, next to People nearby. The
+  "Around you" row that slice 4 had was replaced by that menu in slice 10, so the
+  menu is the only way in. The bottom bar stays at four tabs.
+- **Admin scope:** the core, plus approving join requests and pending posts,
+  removing members, and pinning. Mute, bans and role changes come later.
+- **Invite links:** copied to the clipboard as
+  `https://myradius.chatara.co/g/<token>`, and joined by pasting the link (or
+  its code) into "Join with a link". No new packages and no app links yet.
+
+**Screens:**
+- **Groups home** (`/feed/groups`):
+  - **Your groups:** `GET /groups/mine`.
+  - **Invitations:** `GET /groups/invitations`, accepted or declined in place.
+  - **Discover:** `GET /groups/discover`, busiest first, with a name search and
+    category chips; the radius is shown.
+  - **Actions:** create a group, and join with a link.
+- **A group** (`/feed/groups/g/:id`):
+  - **Header:** cover, name, place and distance band (public groups only),
+    member count, description and rules.
+  - **The button that fits:** Join, Ask to join, Requested (tap to cancel),
+    Accept or decline an invitation, or Leave from the menu.
+  - **Posts:** pinned first, then newest, each opening the usual post screen with
+    comments and votes. Members write with the usual composer, pointed at the
+    group. In a group that approves posts, the author sees "Waiting for
+    approval".
+  - **Group chat:** opened when it exists; admins can turn it on.
+  - **Members:** listed for anyone who can read the group.
+- **Admin, for admins and the owner (moderators for posts):**
+  - **Edit:** name, description, category, rules, public or private, open or
+    approval, post approval, and the cover photo.
+  - **Requests:** approve or reject people asking to join.
+  - **Waiting posts:** approve or reject.
+  - **Members:** remove someone below you.
+  - **Pin and unpin** a post. **Remove** a post from the group.
+  - **Invite link:** create one and copy it.
+- **Create a group:** name, category, description, public or private, open or
+  approval, post approval, and an optional cover.
+
+**Not in this slice:**
+- inviting people by name, since the app has no way to pick people yet;
+- mute, bans and role changes;
+- invite links that open the app directly.
+
+**Tests:** widget tests for the groups home, joining, posting in a group, and
+the admin request queue; analyzer clean; then a live check on the phone against
+staging.
