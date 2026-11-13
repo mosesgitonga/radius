@@ -14,6 +14,11 @@ class AppConfig {
 
   static const apiPrefix = '/v1';
 
+  /// This build's number, given at build time by the release scripts
+  /// (`--dart-define=APP_BUILD=…`, from `pubspec.yaml`). Zero in development
+  /// builds, which skip the update check.
+  static const build = int.fromEnvironment('APP_BUILD');
+
   /// Kenya's calling code. Numbers are typed without it and sent in E.164.
   static const countryCode = '+254';
 }
