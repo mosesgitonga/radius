@@ -27,6 +27,7 @@ from app.core.observability import init_sentry
 from app.core.queue import close_queue
 from app.core.realtime import close_hub
 from app.core.redis import close_redis
+from app.modules.app_version.router import router as app_version_router
 from app.modules.auth.router import router as auth_router
 from app.modules.circle.router import router as circle_router
 from app.modules.events.router import router as events_router
@@ -74,6 +75,13 @@ location. Places are described by area label and distance bucket only.
 
 TAGS_METADATA = [
     {"name": "system", "description": "Liveness and readiness probes."},
+    {
+        "name": "app",
+        "description": (
+            "Whether a newer mobile build exists, and whether the caller's is still "
+            "supported. No sign-in."
+        ),
+    },
     {
         "name": "auth",
         "description": (
@@ -231,6 +239,7 @@ def build_v1_router(settings: Settings) -> APIRouter:
     Phase 9.
     """
     router = APIRouter(prefix=settings.api_prefix, responses=COMMON_ERROR_RESPONSES)
+    router.include_router(app_version_router)
     router.include_router(auth_router)
     router.include_router(users_router)
     router.include_router(location_router)

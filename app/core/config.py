@@ -568,6 +568,20 @@ class Settings(BaseSettings):
     containing one is refused with the term named, so an honest seller can rephrase.
     Configurable because the list is a policy decision, and policy changes."""
 
+    # -- App versions (slice 19) ---------------------------------------------
+    app_latest_build: int | None = Field(default=None, ge=1)
+    """The newest mobile build. Older builds are offered an update. Unset: none
+    is offered. Code pushed over the air doesn't change the build number."""
+    app_min_supported_build: int | None = Field(default=None, ge=1)
+    """Builds older than this must update before going on: for a change the API
+    can't serve to old builds. Unset: every build is supported."""
+    app_update_url_android: str = ""
+    """Where an Android phone gets the new build: the download page now, the
+    Play Store listing later."""
+    app_update_url_ios: str = ""
+    app_update_message: str = ""
+    """An optional line shown with the update, e.g. what's new."""
+
     # -- Jobs and services ---------------------------------------------------
     service_categories: str = (
         "plumbing,electrical,laundry,house_help,transport,gas,tutoring,delivery,mechanics,"
