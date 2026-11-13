@@ -3634,3 +3634,24 @@ data goes to them. Recorded in DATA_MAP as a processor, and in decision M.12.
 
 **Tests:** server tests for the version endpoint, and widget tests for the
 banner and the blocking screen.
+
+### Built so far (2026-11-13)
+
+**Done:**
+- **The server:** `GET /v1/app/version` is live on staging. Nothing is set
+  there yet, so nobody is told to update.
+- **The app:** the update check, the "Update required" screen and the banner.
+  Version is now 1.1.0+2.
+- **Scripts:** `scripts/app_release.sh` and `scripts/app_patch.sh`.
+- **Shorebird CLI:** installed on the development machine (1.6.139, with its own
+  Flutter 3.47.9).
+- **Fixed on the way:** an app test had the provisional-home deadline fixed at
+  2026-11-10, and it failed once that date passed. The deadline is now relative
+  to today.
+- **Tests:** 3 server tests and 5 app tests. All 122 app tests pass, the server
+  suite passes, and CI and the deploy are green.
+
+**Waiting on the product owner:**
+- A Shorebird account and `shorebird login`.
+- Then `shorebird init` (which adds `mobile/shorebird.yaml`), the first release
+  with `scripts/app_release.sh`, and installing that APK on the phone once.
