@@ -1,6 +1,6 @@
 # Deployment
 
-How to run MyRadius on a single VPS: Caddy for TLS, the API and worker containers,
+How to run Hoodora on a single VPS: Caddy for TLS, the API and worker containers,
 PostgreSQL with PostGIS, and Redis, all from `docker-compose.prod.yml`. Media lives in
 Cloudflare R2, SMS goes through Africa's Talking, and push goes through FCM.
 
@@ -186,7 +186,7 @@ one machine, change these first, in this order:
 
 ## 9. The shared VPS (staging, from 2026-11-06)
 
-MyRadius staging runs on 77.237.238.14 at **https://myradius.chatara.co**. The
+Hoodora staging runs on 77.237.238.14 at **https://myradius.chatara.co**. The
 server is shared: it also runs other projects behind their own nginx, which owns
 ports 80 and 443, plus its own PostgreSQL and Redis on loopback. So the setup
 differs from the sections above. Nothing here touches the other projects.

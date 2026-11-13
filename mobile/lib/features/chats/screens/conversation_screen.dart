@@ -179,7 +179,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       case 'block':
         final name = conversation.otherUser?.displayName ?? 'this person';
         if (await _confirm('Block $name?',
-                "You won't see each other anywhere in MyRadius, and they can't message you.", 'Block') &&
+                "You won't see each other anywhere in Hoodora, and they can't message you.", 'Block') &&
             await _attempt(_controller.blockOther) &&
             mounted) {
           context.go(Routes.chats);

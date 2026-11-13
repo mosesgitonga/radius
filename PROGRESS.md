@@ -1,6 +1,6 @@
-# MyRadius Backend — Progress
+# Hoodora Backend — Progress
 
-Backend for MyRadius, a hyperlocal community app for Kenya. See the build brief for
+Backend for Hoodora, a hyperlocal community app for Kenya. See the build brief for
 product context. This file tracks what each phase planned, built, and deferred.
 
 ---
@@ -2368,7 +2368,7 @@ The Market tab, replacing its placeholder.
 **Not yet:**
 - **Map and distance:** a map, and a distance choice beyond the default radius.
 - **Photo order:** photos cannot be reordered when editing; remove and add instead.
-- **Review labels:** a listing review reads "Bought or sold through MyRadius",
+- **Review labels:** a listing review reads "Bought or sold through Hoodora",
   because the app cannot tell which side the reviewer was on.
 
 ### Slice 6 — the Me tab: plan
@@ -3002,7 +3002,7 @@ a profile, message, post). Decided with the product owner the same day:
   - posts by "A neighbour", with a "Sign up" button in the header;
   - the tab bar is shown, but Market, Chats and Me ask to sign up;
   - Helpful, comment, opening a post, the author, the menu and the post button
-    all show a "Join MyRadius to…" sheet with Sign up and Not now.
+    all show a "Join Hoodora to…" sheet with Sign up and Not now.
 - **Signing up** uses the existing flow: phone, then code, then name, then home
   by GPS, which ends on Home.
 - **Tests:** widget tests for the guest feed, every prompt, and refused location.
@@ -3028,7 +3028,7 @@ a profile, message, post). Decided with the product owner the same day:
   It asks for location once and shows the feed around the phone, by "A
   neighbour", with a Sign up button.
 - **Prompts:** Helpful, opening a post, the author, the ⋮ menu, the post button,
-  and the Market, Chats and Me tabs each show "Join MyRadius to …", with Sign
+  and the Market, Chats and Me tabs each show "Join Hoodora to …", with Sign
   up and Not now.
 - **Refusals:** refusing location, a bad fix, or any other failure explains
   itself and offers "Sign up instead".
@@ -3043,7 +3043,7 @@ cleared:
 - the app opened on "Finding your neighbourhood…" and asked for location;
 - after "While using the app" it showed Nyeri Town's posts, each by "A
   neighbour";
-- "1 helpful" brought up "Join MyRadius to mark posts helpful";
+- "1 helpful" brought up "Join Hoodora to mark posts helpful";
 - Sign up opened the phone screen.
 
 ## Slice 12 — real area names, and signing up away from home
@@ -3099,7 +3099,7 @@ set later):**
   either. The daily check records nothing until home is confirmed.
 - **App:**
   - the home step asks "Are you at home right now?";
-  - while home is provisional, Home shows a card: "You're using MyRadius from
+  - while home is provisional, Home shows a card: "You're using Hoodora from
     {area}. Set your home when you're there, by {date}", with a button;
   - Me › Home area offers "I'm at home now".
 - **Records:** decision M.10, DATA_MAP, and tests for every part.
@@ -3148,7 +3148,7 @@ set later):**
 - the guest feed's posts now read "Rware" (the emulator stands in Nyeri town);
 - a new account signed up with "No, I'm away from home";
 - the app said "You're in Rware for now", then showed Home with "You're using
-  MyRadius from Rware for now · Set your home when you're there, by 10 Nov 2026
+  Hoodora from Rware for now · Set your home when you're there, by 10 Nov 2026
   · I'm at home now";
 - the database showed `home_provisional = true`, an empty presence mask, and no
   unlock.
@@ -3219,7 +3219,7 @@ image or text story, the nearby list, marking one seen, its viewers, deletion an
 - opening a story could not be checked live. The emulator had just been
   cold-booted with 2.5 GB of memory; Play services, Photos and the Play Store
   left it swapping, Android reported "System UI isn't responding" and then
-  "MyRadius isn't responding", and its storage stopped answering. MyRadius was
+  "Hoodora isn't responding", and its storage stopped answering. Hoodora was
   not among the busy processes. The viewer is covered by the widget tests, and
   should be checked on the phone.
 
@@ -3629,7 +3629,7 @@ Store or a fresh download.
   gets one more install, from the first Shorebird release.
 
 **Privacy:** Shorebird's servers see each phone's patch checks: the app ID, the
-release, the platform, and the phone's IP address. Nothing from MyRadius's own
+release, the platform, and the phone's IP address. Nothing from Hoodora's own
 data goes to them. Recorded in DATA_MAP as a processor, and in decision M.12.
 
 **Tests:** server tests for the version endpoint, and widget tests for the
@@ -3655,3 +3655,28 @@ banner and the blocking screen.
 - A Shorebird account and `shorebird login`.
 - Then `shorebird init` (which adds `mobile/shorebird.yaml`), the first release
   with `scripts/app_release.sh`, and installing that APK on the phone once.
+
+## The app is now Hoodora (2026-11-13)
+
+The product owner renamed the app from MyRadius to Hoodora. Slice 19's Shorebird
+setup is paused until this is done.
+
+**Decided with the product owner:**
+- **What people see becomes Hoodora:**
+  - the app's name on the phone and every screen;
+  - the sign-in SMS and notifications;
+  - the API's title and docs;
+  - the data-export file name, the README and the docs.
+- **Internal names stay:**
+  - the Android package `ke.myradius`, so updates install over the current app
+    and Firebase keeps working;
+  - the Dart and Python package names;
+  - database, bucket and container names, and `/srv/myradius`;
+  - the staging domain `myradius.chatara.co`, until the production domain is
+    chosen.
+- **Code identifiers that aren't the brand** stay too: `MyRadiusOut` is a
+  person's own radius, and `MyRadiusApp` is the app's root widget.
+
+**Signing in survives the rename.** Sign-in tokens used the app's name as their
+issuer, so renaming it would have signed everyone out. They now use a separate
+`TOKEN_ISSUER` setting, which keeps the old value.

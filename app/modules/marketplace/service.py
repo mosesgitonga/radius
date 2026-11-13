@@ -108,7 +108,7 @@ def _check_allowed(title: str, description: str, settings: Settings) -> None:
     if matches:
         term = matches[0]
         raise BadRequestError(
-            "This item cannot be listed on MyRadius",
+            "This item cannot be listed on Hoodora",
             details={"reason": "prohibited_item", "term": term},
         )
 

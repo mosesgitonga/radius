@@ -9,7 +9,7 @@ rectification, and erasure requests across all of it.
 and extends the export and deletion routines in the same change. A field that is
 not in this table cannot be exported or erased, because nobody knows it exists.
 
-- **Data controller:** MyRadius. **Registration with the Office of the Data
+- **Data controller:** Hoodora. **Registration with the Office of the Data
   Protection Commissioner is still to be done, by the controller, before launch.**
   It is a legal filing, not a software task, and nothing in the code can complete it.
 - **Lawful basis:** consent for optional processing (location use, marketing),
@@ -802,9 +802,9 @@ drops an unsent message.
 
 | What | Who sees it | Why | Kept |
 | --- | --- | --- | --- |
-| Patch checks: the Shorebird app ID, the release version, platform and CPU type, and the phone's IP address | **Shorebird** (code-push service), as a processor | Downloading code patches (DECISIONS M.12) | By Shorebird, under its terms. MyRadius sends it nothing of its own: no account, phone number or location |
+| Patch checks: the Shorebird app ID, the release version, platform and CPU type, and the phone's IP address | **Shorebird** (code-push service), as a processor | Downloading code patches (DECISIONS M.12) | By Shorebird, under its terms. Hoodora sends it nothing of its own: no account, phone number or location |
 | A downloaded patch | The app's private folder | Applying it at the next launch | Until the next patch or release replaces it |
-| `GET /v1/app/version?platform=…` | MyRadius's API | Whether this build should update | Nothing stored: no sign-in and no build number sent; only the usual access log line and an IP rate-limit counter |
+| `GET /v1/app/version?platform=…` | Hoodora's API | Whether this build should update | Nothing stored: no sign-in and no build number sent; only the usual access log line and an IP rate-limit counter |
 
 Shorebird belongs in the privacy notice's list of processors, beside Google
 (Firebase Cloud Messaging), before launch.

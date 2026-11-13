@@ -270,7 +270,7 @@ class _ProvisionalHomeCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            overdue ? 'Set your home to post again' : "You're using MyRadius from $area for now",
+            overdue ? 'Set your home to post again' : "You're using Hoodora from $area for now",
             style: text.titleSmall,
           ),
           const SizedBox(height: 4),

@@ -5,7 +5,7 @@ import '../../core/router.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
 
-/// "Join MyRadius to …": what a visitor sees when they try to take part.
+/// "Join Hoodora to …": what a visitor sees when they try to take part.
 Future<void> showJoinSheet(BuildContext context, {required String toDo}) {
   return showModalBottomSheet<void>(
     context: context,
@@ -20,7 +20,7 @@ Future<void> showJoinSheet(BuildContext context, {required String toDo}) {
             children: [
               const RadiusMark(size: 44),
               const SizedBox(height: 14),
-              Text('Join MyRadius to $toDo', style: text.titleMedium, textAlign: TextAlign.center),
+              Text('Join Hoodora to $toDo', style: text.titleMedium, textAlign: TextAlign.center),
               const SizedBox(height: 6),
               Text(
                 'It takes a minute with your phone number. Your neighbours see your name '

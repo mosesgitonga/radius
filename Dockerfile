@@ -1,4 +1,4 @@
-# MyRadius backend image.
+# Hoodora backend image.
 #
 # One Dockerfile, three targets:
 #   deps     — dependency layer, shared by the other two

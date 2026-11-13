@@ -50,7 +50,7 @@ class OfflineScreen extends ConsumerWidget {
               Text("You're offline", style: text.headlineSmall),
               const SizedBox(height: 8),
               Text(
-                "We can't reach MyRadius right now. Check your data or Wi-Fi and try again.",
+                "We can't reach Hoodora right now. Check your data or Wi-Fi and try again.",
                 style: text.bodyLarge?.copyWith(color: Palette.muted),
               ),
               const Spacer(),

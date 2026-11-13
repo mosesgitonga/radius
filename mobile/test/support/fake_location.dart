@@ -5,7 +5,7 @@ class FakeReader extends LocationReader {
   const FakeReader({this.problem});
 
   /// No GPS at all: the guest Home offers sign-up instead.
-  const FakeReader.none() : problem = 'MyRadius needs your location to find your area.';
+  const FakeReader.none() : problem = 'Hoodora needs your location to find your area.';
 
   final String? problem;
 

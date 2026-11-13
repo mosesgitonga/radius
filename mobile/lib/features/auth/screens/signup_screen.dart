@@ -111,7 +111,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             _Consent(
               value: _marketing,
               onChanged: (v) => setState(() => _marketing = v),
-              label: 'Send me occasional news about MyRadius',
+              label: 'Send me occasional news about Hoodora',
               detail: 'Optional. You can change this any time.',
             ),
             FormError(_error),

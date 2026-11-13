@@ -1,6 +1,6 @@
-# MyRadius — backend
+# Hoodora — backend
 
-Backend API for **MyRadius**, a hyperlocal community app for Kenya: everything happening
+Backend API for **Hoodora**, a hyperlocal community app for Kenya: everything happening
 around you — your neighbours, local sellers, services, groups, and events, all within
 your radius.
 

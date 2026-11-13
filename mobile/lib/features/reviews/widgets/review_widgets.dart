@@ -95,7 +95,7 @@ class ReviewsSection extends StatelessWidget {
           if (hasMore) TextButton(onPressed: onMore, child: const Text('More reviews')),
           const SizedBox(height: 12),
           Text(
-            'Only neighbours who dealt with $name through MyRadius can review them.',
+            'Only neighbours who dealt with $name through Hoodora can review them.',
             style: text.bodySmall?.copyWith(fontSize: 12),
           ),
         ],
@@ -123,7 +123,7 @@ class _ReviewTile extends StatelessWidget {
           ],
         ),
         Text(
-          '${review.contextType == 'listing' ? 'Bought or sold' : 'Hired'} through MyRadius · ${timeAgo(review.createdAt)}',
+          '${review.contextType == 'listing' ? 'Bought or sold' : 'Hired'} through Hoodora · ${timeAgo(review.createdAt)}',
           style: text.bodySmall?.copyWith(fontSize: 12),
         ),
         if (review.body.isNotEmpty) ...[

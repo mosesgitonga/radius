@@ -82,9 +82,9 @@ def test_totp_rejects_malformed_codes(code: str) -> None:
 
 def test_provisioning_uri() -> None:
     uri = credentials.provisioning_uri(
-        secret="JBSWY3DPEHPK3PXP", email="a@example.com", issuer="MyRadius staff"
+        secret="JBSWY3DPEHPK3PXP", email="a@example.com", issuer="Hoodora staff"
     )
-    assert uri.startswith("otpauth://totp/MyRadius%20staff%3Aa%40example.com?")
+    assert uri.startswith("otpauth://totp/Hoodora%20staff%3Aa%40example.com?")
     assert "secret=JBSWY3DPEHPK3PXP" in uri
 
 

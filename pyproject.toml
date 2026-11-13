@@ -1,7 +1,7 @@
 [project]
 name = "myradius"
 version = "0.1.0"
-description = "MyRadius — hyperlocal community backend for Kenya"
+description = "Hoodora — hyperlocal community backend for Kenya"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [

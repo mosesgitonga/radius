@@ -112,7 +112,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 const SizedBox(height: 16),
                 Text(
                   'Signed in as ${me.phoneNumber}'
-                  '${me.memberSince == null ? '' : ' · on MyRadius since ${_monthYear(me.memberSince!)}'}',
+                  '${me.memberSince == null ? '' : ' · on Hoodora since ${_monthYear(me.memberSince!)}'}',
                   textAlign: TextAlign.center,
                   style: text.bodySmall,
                 ),
@@ -244,7 +244,7 @@ class _StandingCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     "You can message people you haven't talked to once you've been at home on "
-                    '${me.contactUnlockDays} of the last ${me.contactUnlockWindowDays} days. MyRadius checks once a day while the app is open. You can already post, comment, '
+                    '${me.contactUnlockDays} of the last ${me.contactUnlockWindowDays} days. Hoodora checks once a day while the app is open. You can already post, comment, '
                     'and reply to anyone who writes to you.',
                     style: text.bodySmall?.copyWith(color: Palette.ink),
                   ),

@@ -1,6 +1,6 @@
-# MyRadius app
+# Hoodora app
 
-The Flutter app for MyRadius, for Android (and iOS, which needs a Mac to build).
+The Flutter app for Hoodora, for Android (and iOS, which needs a Mac to build).
 The backend is in the repository root; see `PROGRESS.md` for what each slice adds.
 
 ## Run it

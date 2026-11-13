@@ -2324,7 +2324,7 @@ plugin, new native code, or an API change old builds can't follow.
 
 The check sends no build number and no identity, and nothing about it is kept.
 Shorebird sees only patch checks, which carry the phone's IP but nothing from
-MyRadius.
+Hoodora.
 
 Code push is described as within Play policy for normal fixes and features.
 That is Shorebird's claim, not a ruling from Google. Large changes to what the
@@ -2472,3 +2472,33 @@ coarse enough to say about anyone. Leaving strangers with the finer label would
 have made a circle member the less private party.
 
 **Alternatives.** Town labels for circle members only: inconsistent, as above.
+
+---
+
+## Naming
+
+### N.1 The app is Hoodora; internal names keep "myradius" (2026-11-13)
+
+**Choice.**
+- **What people see says Hoodora:**
+  - the app's name on the phone and every screen;
+  - the sign-in SMS and push notifications (`APP_NAME`);
+  - the API's title, the README and these docs.
+- **Internal names stay as they were:**
+  - the Android package `ke.myradius`;
+  - the Dart package `myradius` and the Python project;
+  - database, bucket and container names, and `/srv/myradius`;
+  - the staging domain.
+- **Sign-in tokens** carry a separate, fixed issuer (`TOKEN_ISSUER=MyRadius`).
+
+**Reasoning.**
+- **The Android package is the app's identity.** Changing it would install
+  Hoodora as a second app beside the old one, and break Firebase's
+  registration, which is tied to the package.
+- **The other internal names** are seen by no one, and renaming them means
+  downtime and migrations for no visible gain.
+- **Tokens:** they were checked against the app's name. Renaming without the
+  split would have signed every user and staff member out.
+
+**Revisit** when production gets its own domain and Play listing: that is the
+time for a new package, if wanted, since there are no installs to carry over.

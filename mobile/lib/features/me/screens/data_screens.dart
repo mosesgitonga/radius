@@ -37,11 +37,11 @@ class _MyDataScreenState extends ConsumerState<MyDataScreen> {
     try {
       final json = await ref.read(accountRepositoryProvider).export();
       final today = DateTime.now().toIso8601String().substring(0, 10);
-      final name = 'myradius-data-$today.json';
+      final name = 'hoodora-data-$today.json';
       await SharePlus.instance.share(ShareParams(
         files: [XFile.fromData(utf8.encode(json), mimeType: 'application/json', name: name)],
         fileNameOverrides: [name],
-        subject: 'My MyRadius data',
+        subject: 'My Hoodora data',
       ));
     } on ApiException catch (error) {
       setState(() => _error = error.message);
@@ -59,7 +59,7 @@ class _MyDataScreenState extends ConsumerState<MyDataScreen> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
           Text(
-            'A copy of everything MyRadius holds about you: your account, consents, posts, comments, '
+            'A copy of everything Hoodora holds about you: your account, consents, posts, comments, '
             'listings, services, reviews, messages you sent, devices, notifications, and any moderation '
             'decisions about you.',
             style: text.bodyLarge,
@@ -251,7 +251,7 @@ class _MoveHomeScreenState extends ConsumerState<MoveHomeScreen> {
             _moved != null
                 ? 'Home is now $_moved. Your feed, the marketplace and services follow it.'
                 : provisional
-                    ? "You're using MyRadius from here for now. When you're at home, set it here"
+                    ? "You're using Hoodora from here for now. When you're at home, set it here"
                         "${me?.homeConfirmBy == null ? '' : ' by ${shortDate(me!.homeConfirmBy!)}'}."
                     : 'Your feed, the marketplace and services are built around your home area.',
             style: text.bodyLarge?.copyWith(color: Palette.muted),

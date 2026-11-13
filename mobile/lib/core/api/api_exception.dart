@@ -15,7 +15,7 @@ class ApiException implements Exception {
   /// No response at all: offline, a timeout, the server unreachable.
   const ApiException.network()
       : code = 'network',
-        message = "Can't reach MyRadius. Check your connection and try again.",
+        message = "Can't reach Hoodora. Check your connection and try again.",
         statusCode = null,
         details = const {},
         retryAfterSeconds = null;

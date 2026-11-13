@@ -1,6 +1,6 @@
 # Architecture
 
-MyRadius is a **modular monolith**: one FastAPI application, one PostgreSQL
+Hoodora is a **modular monolith**: one FastAPI application, one PostgreSQL
 database, one Redis, one background worker, deployed as a couple of containers on
 a single VPS. That is a deliberate choice for a product launching in one town with
 low initial density — the operational cost of microservices would exceed the

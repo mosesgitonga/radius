@@ -125,7 +125,7 @@ class SignupIn(DeviceIn):
     accept_privacy_policy: Literal[True] = Field(description="Must be `true`.")
     accept_location_use: Literal[True] = Field(
         description=(
-            "Must be `true`. Everything in MyRadius is scoped by location, so "
+            "Must be `true`. Everything in Hoodora is scoped by location, so "
             "there is no version of the product that works without it."
         )
     )

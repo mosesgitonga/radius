@@ -68,11 +68,11 @@ void main() {
   });
 
   for (final (what, prompt) in [
-    ('5 helpful', 'Join MyRadius to mark posts helpful'),
-    ('New post', 'Join MyRadius to post'),
-    ('Market', 'Join MyRadius to buy and sell'),
-    ('Chats', 'Join MyRadius to chat with neighbours'),
-    ('Me', 'Join MyRadius to have a profile'),
+    ('5 helpful', 'Join Hoodora to mark posts helpful'),
+    ('New post', 'Join Hoodora to post'),
+    ('Market', 'Join Hoodora to buy and sell'),
+    ('Chats', 'Join Hoodora to chat with neighbours'),
+    ('Me', 'Join Hoodora to have a profile'),
   ]) {
     testWidgets('$what asks to join', (tester) async {
       await openApp(tester);
@@ -91,7 +91,7 @@ void main() {
     await openApp(tester);
     await tester.tap(find.text('Water is off on Saturday from 9am'));
     await tester.pumpAndSettle();
-    expect(find.text('Join MyRadius to read the comments'), findsOneWidget);
+    expect(find.text('Join Hoodora to read the comments'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Sign up').last);
     await tester.pumpAndSettle();
@@ -99,8 +99,8 @@ void main() {
   });
 
   testWidgets('refusing location explains and offers sign-up', (tester) async {
-    await openApp(tester, problem: 'MyRadius needs your location to find your area.');
-    expect(find.text('MyRadius needs your location to find your area.'), findsOneWidget);
+    await openApp(tester, problem: 'Hoodora needs your location to find your area.');
+    expect(find.text('Hoodora needs your location to find your area.'), findsOneWidget);
     expect(adapter.requests.where((r) => r.path == '/guest/feed'), isEmpty);
     await tester.tap(find.text('Sign up instead'));
     await tester.pumpAndSettle();

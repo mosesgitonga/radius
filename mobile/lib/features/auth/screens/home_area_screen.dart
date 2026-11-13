@@ -73,7 +73,7 @@ class _HomeAreaScreenState extends ConsumerState<HomeAreaScreen> {
               const SizedBox(height: 12),
               Text(
                 !found
-                    ? "MyRadius finds your area from where your phone is. If you're at home, we'll "
+                    ? "Hoodora finds your area from where your phone is. If you're at home, we'll "
                         "set it now. If you're away, you can start from where you are and set your "
                         'home when you get there.'
                     : away

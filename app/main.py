@@ -51,7 +51,7 @@ from app.modules.users.router import router as users_router
 logger = logging.getLogger(__name__)
 
 DESCRIPTION = """
-Backend API for **MyRadius**, a hyperlocal community app for Kenya.
+Backend API for **Hoodora**, a hyperlocal community app for Kenya.
 
 Everything is scoped to the caller's own **radius**, which adapts to how many
 active users are nearby: it shrinks where the neighbourhood is dense and widens

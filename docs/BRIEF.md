@@ -1,4 +1,4 @@
-# MyRadius Backend — Build Brief
+# Hoodora Backend — Build Brief
 
 > Committed verbatim as the authoritative statement of what is being built and
 > why. Everything in `docs/DECISIONS.md` either implements a choice made here or
@@ -11,7 +11,7 @@
 
 **Tagline:** Everything happening around you: your neighbours, local sellers, services, groups, and events, all within your radius.
 
-MyRadius connects people with their neighbours and their local area. It replaces what people currently piece together from WhatsApp groups, Facebook pages, and word of mouth: what's happening nearby, who's selling what, who can fix a leaking tank, and where this weekend's events are.
+Hoodora connects people with their neighbours and their local area. It replaces what people currently piece together from WhatsApp groups, Facebook pages, and word of mouth: what's happening nearby, who's selling what, who can fix a leaking tank, and where this weekend's events are.
 
 **The core idea, and what makes it different:** every user has their own radius, which adjusts automatically to how many active users are nearby. In busy, dense areas the radius shrinks so the feed stays truly local. In quieter areas it widens so there's always something to see. The radius has sensible minimum and maximum limits. Some features (marketplace, services, events) reach further than the social feed, and users can adjust those with distance filters.
 

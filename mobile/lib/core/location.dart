@@ -46,10 +46,10 @@ class LocationReader {
       permission = await Geolocator.requestPermission();
     }
     if (permission == LocationPermission.denied || permission == LocationPermission.unableToDetermine) {
-      throw const LocationProblem('MyRadius needs your location to find your area.');
+      throw const LocationProblem('Hoodora needs your location to find your area.');
     }
     if (permission == LocationPermission.deniedForever) {
-      throw const LocationProblem('Location permission is off for MyRadius. Allow it in Settings › Apps › MyRadius.');
+      throw const LocationProblem('Location permission is off for Hoodora. Allow it in Settings › Apps › Hoodora.');
     }
     final Position position;
     try {

@@ -198,7 +198,7 @@ async def request_otp(
     result = await sms.send(
         to=phone_number,
         body=(
-            f"Your MyRadius code is {code}. "
+            f"Your Hoodora code is {code}. "
             f"It expires in {settings.otp_ttl_seconds // 60} minutes. "
             "Do not share it with anyone."
         ),

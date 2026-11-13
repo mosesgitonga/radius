@@ -74,7 +74,7 @@ def _fetch_once(county: str) -> dict[str, Any] | str:
             response = httpx.post(
                 url,
                 data={"data": _query(county)},
-                headers={"User-Agent": "MyRadius seed builder", "Accept": "application/json"},
+                headers={"User-Agent": "Hoodora seed builder", "Accept": "application/json"},
                 timeout=240,
             )
         except httpx.HTTPError as error:

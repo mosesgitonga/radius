@@ -35,7 +35,7 @@ class HealthResponse(BaseModel):
         "json_schema_extra": {
             "example": {
                 "status": "ok",
-                "service": "MyRadius",
+                "service": "Hoodora",
                 "environment": "production",
             }
         }

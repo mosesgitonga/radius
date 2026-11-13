@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# One-time setup of MyRadius on the shared VPS, as root. Safe to run again: it
+# One-time setup of Hoodora on the shared VPS, as root. Safe to run again: it
 # creates only what is missing and never overwrites a secret.
 #
 #   bash deploy/vps/bootstrap.sh          # from a checkout in /srv/myradius

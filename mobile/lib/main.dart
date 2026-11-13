@@ -47,7 +47,7 @@ class _MyRadiusAppState extends ConsumerState<MyRadiusApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'MyRadius',
+      title: 'Hoodora',
       theme: buildTheme(),
       darkTheme: buildTheme(Brightness.dark),
       themeMode: ref.watch(themeModeProvider),

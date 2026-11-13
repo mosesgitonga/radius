@@ -80,7 +80,7 @@ void main() {
 
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
-    expect(find.text("You're using MyRadius from Rware for now"), findsOneWidget);
+    expect(find.text("You're using Hoodora from Rware for now"), findsOneWidget);
     expect(find.text("I'm at home now"), findsOneWidget);
   });
 

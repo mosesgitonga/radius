@@ -223,7 +223,7 @@ class _PrivacyScreenState extends ConsumerState<PrivacyScreen> {
               const SizedBox(height: 8),
               const NotePanel(
                 icon: Icons.info_outline_rounded,
-                text: 'These are needed for MyRadius to work. To withdraw them, delete your account.',
+                text: 'These are needed for Hoodora to work. To withdraw them, delete your account.',
               ),
               const SizedBox(height: 20),
               SwitchListTile(
@@ -293,7 +293,7 @@ class _BlockedScreenState extends ConsumerState<BlockedScreen> {
       context: context,
       builder: (dialog) => AlertDialog(
         title: Text('Unblock ${person.displayName}?'),
-        content: const Text('You will see each other again in MyRadius, and they can message you.'),
+        content: const Text('You will see each other again in Hoodora, and they can message you.'),
         actions: [
           TextButton(onPressed: () => Navigator.of(dialog).pop(false), child: const Text('Cancel')),
           TextButton(onPressed: () => Navigator.of(dialog).pop(true), child: const Text('Unblock')),
@@ -334,7 +334,7 @@ class _BlockedScreenState extends ConsumerState<BlockedScreen> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                     child: Text(
-                      "You and they can't see each other anywhere in MyRadius. They aren't told.",
+                      "You and they can't see each other anywhere in Hoodora. They aren't told.",
                       style: text.bodySmall,
                     ),
                   ),

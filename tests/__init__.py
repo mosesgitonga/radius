@@ -1,1 +1,1 @@
-"""Test suite for the MyRadius backend."""
+"""Test suite for the Hoodora backend."""

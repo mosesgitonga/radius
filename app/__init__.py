@@ -1,1 +1,1 @@
-"""MyRadius backend application package."""
+"""Hoodora backend application package."""

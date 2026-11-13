@@ -45,7 +45,7 @@ class Wordmark extends StatelessWidget {
       children: [
         const RadiusMark(),
         const SizedBox(width: 10),
-        Text('MyRadius', style: Theme.of(context).textTheme.titleLarge),
+        Text('Hoodora', style: Theme.of(context).textTheme.titleLarge),
       ],
     );
   }

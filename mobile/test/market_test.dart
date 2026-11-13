@@ -173,7 +173,7 @@ void main() {
           ? FakeReply(400, {
               'error': {
                 'code': 'bad_request',
-                'message': 'This item cannot be listed on MyRadius',
+                'message': 'This item cannot be listed on Hoodora',
                 'details': {'reason': 'prohibited_item', 'term': 'rifle'},
               },
             })

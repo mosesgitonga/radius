@@ -22,7 +22,7 @@ Future<bool> mayContactStrangers(BuildContext context, WidgetRef ref) async {
         "To keep neighbourhoods safe, you can start conversations with people once you've been at home "
         'in your area on $needed of the last $window days. So far: $soFar of $needed.\n\n'
         'Until then you can post, comment and mark posts helpful, and reply to anyone who writes to you. '
-        'MyRadius checks once a day while the app is open.',
+        'Hoodora checks once a day while the app is open.',
       ),
       actions: [TextButton(onPressed: () => Navigator.of(dialog).pop(), child: const Text('OK'))],
     ),

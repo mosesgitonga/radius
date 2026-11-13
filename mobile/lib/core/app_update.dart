@@ -132,7 +132,7 @@ class UpdateRequiredScreen extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 update.message ??
-                    'This version of MyRadius is no longer supported. Get the new one to carry on; '
+                    'This version of Hoodora is no longer supported. Get the new one to carry on; '
                         'your account and everything in it stay as they are.',
                 textAlign: TextAlign.center,
                 style: text.bodyLarge?.copyWith(color: Palette.muted),
@@ -170,7 +170,7 @@ class UpdateBanner extends ConsumerWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  update.message ?? 'A new version of MyRadius is available.',
+                  update.message ?? 'A new version of Hoodora is available.',
                   style: text.bodyMedium?.copyWith(color: Palette.primaryDark),
                 ),
               ),

@@ -141,7 +141,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           context: context,
           builder: (dialog) => AlertDialog(
             title: Text('Block ${profile.displayName}?'),
-            content: const Text("You won't see each other anywhere in MyRadius, and they can't message you."),
+            content: const Text("You won't see each other anywhere in Hoodora, and they can't message you."),
             actions: [
               TextButton(onPressed: () => Navigator.of(dialog).pop(false), child: const Text('Cancel')),
               TextButton(
