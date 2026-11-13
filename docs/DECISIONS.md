@@ -2300,6 +2300,42 @@ storage. Keeping more (all chats, 200 messages each): more to read offline,
 more on a phone that may be lost.
 
 
+### M.12 Updates over the air: Shorebird for code, our own check for builds
+
+**Choice.**
+- **Code push: Shorebird.** It patches the app's Dart code (screens and logic)
+  over the air.
+  - **Silent:** a patch downloads in the background and applies the next time
+    the app opens.
+  - **Limits:** it can't change native code, new plugins, or images and fonts.
+    Those still need a new build.
+  - **Cost:** free up to 5,000 patch installs a month.
+- **Builds: our own check.** `GET /v1/app/version` gives the latest build, the
+  oldest still supported, and a download link. The app compares its own build
+  number, which is set at build time.
+  - Older than supported: a blocking "Update required" screen.
+  - Older than latest: a banner that can be closed for that build.
+  - Unset: nobody is told anything.
+- **`url_launcher`** opens the download link.
+
+**Reasoning.** Most changes are Dart, so code push covers most updates with no
+download and no prompt. The version check covers what code push can't: a new
+plugin, new native code, or an API change old builds can't follow.
+
+The check sends no build number and no identity, and nothing about it is kept.
+Shorebird sees only patch checks, which carry the phone's IP but nothing from
+MyRadius.
+
+Code push is described as within Play policy for normal fixes and features.
+That is Shorebird's claim, not a ruling from Google. Large changes to what the
+app does should still go out as a store release.
+
+**Alternatives.**
+- **Our own APK updater:** no third party, but it's still a full download the
+  person approves, and Play forbids it.
+- **Server-driven screens:** too limited for feature work.
+- **The version check alone:** every change would still need a reinstall.
+
 ## Circle and follows
 
 From the "Circle (mutual connections) and Follows" brief of 2026-11-01. The

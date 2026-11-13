@@ -798,6 +798,17 @@ The app keeps no copy of the feed, messages or the account's details on disk
 (DECISIONS M.2). A message still sending is held in memory only, so closing the app
 drops an unsent message.
 
+### Updates over the air (2026-11-13)
+
+| What | Who sees it | Why | Kept |
+| --- | --- | --- | --- |
+| Patch checks: the Shorebird app ID, the release version, platform and CPU type, and the phone's IP address | **Shorebird** (code-push service), as a processor | Downloading code patches (DECISIONS M.12) | By Shorebird, under its terms. MyRadius sends it nothing of its own: no account, phone number or location |
+| A downloaded patch | The app's private folder | Applying it at the next launch | Until the next patch or release replaces it |
+| `GET /v1/app/version?platform=…` | MyRadius's API | Whether this build should update | Nothing stored: no sign-in and no build number sent; only the usual access log line and an IP rate-limit counter |
+
+Shorebird belongs in the privacy notice's list of processors, beside Google
+(Firebase Cloud Messaging), before launch.
+
 ---
 
 ## Data subject rights — implementation status

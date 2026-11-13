@@ -14,13 +14,15 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../mobile"
+# On PATH once the terminal has restarted after installing; else its usual home.
+shorebird="$(command -v shorebird || echo "${HOME}/.shorebird/bin/shorebird")"
 api="${API_BASE_URL:-https://myradius.chatara.co}"
 version="$(grep -E '^version:' pubspec.yaml | awk '{print $2}')"
 build="${version##*+}"
 
 echo "Releasing ${version} (build ${build}) against ${api}"
-shorebird release android --artifact apk --target-platform android-arm64 \
-  -- --dart-define=API_BASE_URL="${api}" --dart-define=APP_BUILD="${build}"
+"${shorebird}" release android --artifact apk --target-platform android-arm64 \
+  --dart-define=API_BASE_URL="${api}" --dart-define=APP_BUILD="${build}"
 
 echo
 echo "APK: mobile/build/app/outputs/flutter-apk/app-release.apk"

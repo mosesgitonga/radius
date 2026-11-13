@@ -14,10 +14,13 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../mobile"
+# On PATH once the terminal has restarted after installing; else its usual home.
+shorebird="$(command -v shorebird || echo "${HOME}/.shorebird/bin/shorebird")"
 api="${API_BASE_URL:-https://myradius.chatara.co}"
 version="$(grep -E '^version:' pubspec.yaml | awk '{print $2}')"
 build="${version##*+}"
 
 echo "Patching release ${version} against ${api}"
-shorebird patch android --release-version="${version}" \
-  -- --dart-define=API_BASE_URL="${api}" --dart-define=APP_BUILD="${build}"
+# The same defines as the release: Shorebird refuses a patch whose differ.
+"${shorebird}" patch android --release-version="${version}" \
+  --dart-define=API_BASE_URL="${api}" --dart-define=APP_BUILD="${build}"
