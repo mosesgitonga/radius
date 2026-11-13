@@ -175,7 +175,7 @@ def create_staff_token(
         "iat": int(datetime.now(UTC).timestamp()),
         "exp": int(expires_at.timestamp()),
         "jti": uuid.uuid4().hex,
-        "iss": settings.app_name,
+        "iss": settings.token_issuer,
     }
     return jwt.encode(
         payload, settings.secret_key.get_secret_value(), algorithm=settings.jwt_algorithm
@@ -188,7 +188,7 @@ def decode_staff_token(token: str, settings: Settings) -> StaffTokenClaims:
             token,
             settings.secret_key.get_secret_value(),
             algorithms=[settings.jwt_algorithm],
-            issuer=settings.app_name,
+            issuer=settings.token_issuer,
             audience=STAFF_AUDIENCE,
             options={"require": ["exp", "iat", "sub", "sid", "typ", "aud"]},
         )

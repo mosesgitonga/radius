@@ -117,7 +117,7 @@ def create_access_token(
         "iat": int(issued_at.timestamp()),
         "exp": int(expires_at.timestamp()),
         "jti": uuid.uuid4().hex,
-        "iss": settings.app_name,
+        "iss": settings.token_issuer,
     }
     token = jwt.encode(
         payload,
@@ -139,7 +139,7 @@ def decode_access_token(token: str, settings: Settings) -> AccessTokenClaims:
             token,
             settings.secret_key.get_secret_value(),
             algorithms=[settings.jwt_algorithm],
-            issuer=settings.app_name,
+            issuer=settings.token_issuer,
             options={"require": ["exp", "iat", "sub", "sid", "typ"]},
         )
     except jwt.ExpiredSignatureError as exc:

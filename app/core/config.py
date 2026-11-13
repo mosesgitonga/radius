@@ -77,7 +77,12 @@ class Settings(BaseSettings):
     )
 
     # -- Application ---------------------------------------------------------
-    app_name: str = "MyRadius"
+    app_name: str = "Hoodora"
+    """The product's name, as people see it: SMS, notifications, the API title."""
+    token_issuer: str = "MyRadius"  # noqa: S105 — a public issuer name, not a secret
+    """The `iss` of every sign-in token. Not the brand: tokens are checked against
+    it, so changing it signs every user and staff member out. It kept the app's
+    first name when the app became Hoodora."""
     app_env: Environment = "local"
     debug: bool = False
     api_prefix: str = "/v1"
