@@ -3576,3 +3576,61 @@ are among the commonest services.
   it before.
 - **Staging:** its `.env.production` was copied from `.env.example`, so it sets
   `SERVICE_CATEGORIES` itself and needs the same line changed on the server.
+
+## Mobile app — slice 19: updates over the air
+
+### Plan
+
+Asked for on 2026-11-13: update the app without a new install from the Play
+Store or a fresh download.
+
+**Decided with the product owner:**
+- **Code push: Shorebird.** It patches the app's Dart code (screens and logic)
+  over the air, and a patch applies silently the next time the app opens.
+  - It can't change native code, new plugins, or images and fonts. Those still
+    need a full release.
+  - Free up to 5,000 patch installs a month.
+  - The product owner owns the Shorebird account.
+- **Our own version check,** for what code push can't reach.
+  - `GET /v1/app/version` tells the app the latest build, the oldest build still
+    supported, and where to get a new one.
+  - Older than supported: a blocking "Update required" screen.
+  - Older than latest: a dismissible "A new version is available" banner.
+- **`url_launcher`** (Flutter team) is approved, so the update screen opens the
+  download page.
+
+**Server:**
+- **`GET /v1/app/version?platform=android`:** no sign-in needed, so guests and
+  stuck old builds get it too.
+- **Settings:** `APP_LATEST_BUILD`, `APP_MIN_SUPPORTED_BUILD`,
+  `APP_UPDATE_URL_ANDROID`, and an optional `APP_UPDATE_MESSAGE`. When unset,
+  nobody is told to update.
+- **Rate-limited** like other public endpoints.
+- **Keeps nothing.** The request carries no identity, and the server stores
+  nothing about it.
+
+**App:**
+- **Build number:** passed in at build time (`--dart-define=APP_BUILD=…`, read
+  from `pubspec.yaml` by the build scripts). Development builds have none and
+  skip the check.
+- **The check:** at launch and on return to the app, at most once an hour.
+  Failures are ignored.
+- **Screens:** "Update required" sits in front of everything when the build is
+  too old. The update banner can be dismissed for that version.
+
+**Shorebird:**
+- **Setup:** `shorebird init` adds `shorebird.yaml`. Its app ID is not a secret.
+  Patches apply on the next launch, with no prompt.
+- **`scripts/app_release.sh`:** a full release. It bumps nothing itself and uses
+  the version in `pubspec.yaml`.
+- **`scripts/app_patch.sh`:** a patch for the release already on phones.
+- **Both scripts** point the app at staging, or wherever `API_BASE_URL` says.
+- **Phones on a plain `flutter build` APK can't receive patches.** The phone
+  gets one more install, from the first Shorebird release.
+
+**Privacy:** Shorebird's servers see each phone's patch checks: the app ID, the
+release, the platform, and the phone's IP address. Nothing from MyRadius's own
+data goes to them. Recorded in DATA_MAP as a processor, and in decision M.12.
+
+**Tests:** server tests for the version endpoint, and widget tests for the
+banner and the blocking screen.
