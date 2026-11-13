@@ -33,7 +33,7 @@ void main() {
     if (path == '/me') return FakeReply(200, account);
     if (path == '/me/location' && request.method == 'PUT') {
       final away = (request.data as Map)['at_home'] == false;
-      account = me(hasHome: true, provisional: away, confirmBy: away ? '2026-11-10T08:00:00Z' : null);
+      account = me(hasHome: true, provisional: away, confirmBy: away ? DateTime.now().toUtc().add(const Duration(days: 5)).toIso8601String() : null);
       return const FakeReply(200, {
         'area_label': {'label': 'Rware', 'precision': 'area'},
         'is_first_time': true,
